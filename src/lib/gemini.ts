@@ -76,13 +76,13 @@ For each page, detect all speech bubbles, narrative text, and sound effects (SFX
 1. Identify the original Japanese text.
 2. Translate it accurately and naturally to Arabic. Prioritize smooth, colloquial or literary flow depending on context (do not use rigid literal translation). Ensure natural phrasing for Arabic readers.
 3. Determine the bounding box coordinates [ymin, xmin, ymax, xmax] scaled to 0-1000.
-4. Categorize as 'bubble' or 'sfx'.
+4. Categorize as 'bubble' (for standard conversation/speech bubbles and thought bubbles) or 'sfx' (for sound effects, ambient noises drawn as art, floating text outside bubbles). Be very strict about this distinction! SFX should only be text that represents sound.
 5. typesetter decisions: 
     - angle: suggested text rotation in degrees (e.g., 0 for normal, angled for SFX).
     - textColor: hex color code.
     - strokeColor: hex color code for the text outline (critical for SFX or hiding original text).
     - strokeWidth: outline thickness (e.g. 0 to 10).
-    - fontFamily: choose exactly from: "Cairo", "Tajawal", "Marhey", "Aref Ruqaa". (e.g. Marhey for bubbles, Aref Ruqaa for SFX, Cairo for narration).
+    - fontFamily: choose exactly from: "Cairo", "Tajawal", "Marhey", "Aref Ruqaa", "El Messiri", "Amiri", "Changa", "Harmattan", "Katibeh", "Lalezar", "Lemonada", "Mada", "Markazi Text", "Reem Kufi", "Rakkas", "Almarai". (e.g. Marhey/Katibeh/Changa for bubbles, Aref Ruqaa/Lalezar/Rakkas for SFX, Cairo/Almarai for narration).
     - fontSize: suggest a base size (e.g. 24-72).
     - fontWeight: 'normal', 'bold', '800', etc.
     - fontStyle: 'normal' or 'italic'.

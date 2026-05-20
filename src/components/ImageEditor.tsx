@@ -25,6 +25,65 @@ const AIInpaintPatch = ({ base64, rect }: { base64: string, rect: {x: number, y:
   return <KonvaImage image={img} x={rect.x} y={rect.y} width={rect.w} height={rect.h} />;
 };
 
+const AutoFitText = ({ region }: { region: Region }) => {
+  const textRef = useRef<any>(null);
+
+  useEffect(() => {
+    const node = textRef.current;
+    if (!node) return;
+
+    if (!region.autoFitText) {
+      node.fontSize(region.fontSize);
+      return;
+    }
+
+    // Binary search for best font size
+    let minFontSize = 8;
+    let maxFontSize = 100;
+    let bestFontSize = region.fontSize;
+
+    // Reset properties for accurate measurement
+    node.fontSize(maxFontSize);
+
+    while (minFontSize <= maxFontSize) {
+      const mid = Math.floor((minFontSize + maxFontSize) / 2);
+      node.fontSize(mid);
+      
+      const textHeight = node.textHeight();
+      if (textHeight > region.height) {
+        maxFontSize = mid - 1;
+      } else {
+        bestFontSize = mid;
+        minFontSize = mid + 1;
+      }
+    }
+    
+    node.fontSize(bestFontSize);
+  }, [region.translatedText, region.width, region.height, region.fontSize, region.fontFamily, region.autoFitText, region.lineHeight, region.fontWeight, region.fontStyle]);
+
+  return (
+    <Text
+      ref={textRef}
+      text={region.translatedText ? region.translatedText.split('\n').map(line => '\u202B' + line + '\u200F').join('\n') : ''}
+      width={region.width}
+      height={region.height}
+      fill={region.textColor}
+      stroke={region.strokeColor !== 'transparent' ? region.strokeColor : undefined}
+      strokeWidth={region.strokeColor !== 'transparent' ? region.strokeWidth : 0}
+      fontFamily={region.fontFamily}
+      fontSize={region.fontSize}
+      fontStyle={`${region.fontStyle} ${region.fontWeight === 'normal' ? '' : region.fontWeight}`}
+      align={region.textAlign}
+      verticalAlign="middle"
+      wrap="word"
+      lineHeight={region.lineHeight}
+      fillAfterStrokeEnabled={true}
+      shadowColor={region.shadowColor !== 'transparent' ? region.shadowColor : undefined}
+      shadowBlur={region.shadowBlur}
+    />
+  );
+};
+
 export function ImageEditor({ 
   image, 
   selectedRegionId, 
@@ -399,22 +458,7 @@ export function ImageEditor({
                     }}
                   >
                     <Rect width={region.width} height={region.height} fill="transparent" />
-                    <Text
-                      text={region.translatedText ? region.translatedText.split('\n').map(line => '\u202B' + line + '\u200F').join('\n') : ''}
-                      width={region.width}
-                      height={region.height}
-                      fill={region.textColor}
-                      stroke={region.strokeColor !== 'transparent' ? region.strokeColor : undefined}
-                      strokeWidth={region.strokeColor !== 'transparent' ? region.strokeWidth : 0}
-                      fontFamily={region.fontFamily}
-                      fontSize={region.fontSize}
-                      fontStyle={`${region.fontStyle} ${region.fontWeight === 'normal' ? '' : region.fontWeight}`}
-                      align={region.textAlign}
-                      verticalAlign="middle"
-                      wrap="word"
-                      lineHeight={region.lineHeight}
-                      fillAfterStrokeEnabled={true}
-                    />
+                    <AutoFitText region={region} />
                   </Group>
                 ))}
                 

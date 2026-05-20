@@ -18,6 +18,9 @@ export interface Region {
   fontStyle: string;
   textAlign: string;
   lineHeight: number;
+  autoFitText?: boolean;
+  shadowColor?: string;
+  shadowBlur?: number;
 }
 
 export interface PaintStroke {

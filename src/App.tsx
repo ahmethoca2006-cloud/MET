@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, Suspense } from 'react
 import { Upload, Download, Play, Save, Loader2, Image as ImageIcon, Type as TypeIcon, MousePointer2, Brush, Eraser, PenTool, ZoomIn, ZoomOut, Maximize, Palette, Plus, Pipette, Trash2, ChevronUp, ChevronDown, ImagePlus, Key, Sparkles, Scissors, Undo, Wand2 } from 'lucide-react';
 import { extractImagesFromZip, downloadProcessedZip, downloadPdf, downloadSingleImage } from './lib/zip';
 import { processMangaPages, generateInpaint, RawRegion } from './lib/gemini';
+import { floodFillBubble } from './lib/bubbleDetect';
 import { ProcessedImage, Region, PaintStroke } from './types';
 import { get, set } from 'idb-keyval';
 
@@ -229,6 +230,85 @@ export default function App() {
     }));
   };
 
+  const handleSmartBubbleFill = async (imgId: string, region: Region) => {
+    const img = images.find(i => i.id === imgId);
+    if (!img) return;
+
+    const imgSrc = img.originalDataUrl || img.dataUrl;
+    const imageObj = new Image();
+    imageObj.src = imgSrc;
+    await new Promise(resolve => imageObj.onload = resolve);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = imageObj.width;
+    canvas.height = imageObj.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.drawImage(imageObj, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    
+    // Center of the current region text box
+    const startX = Math.floor(region.x + region.width / 2);
+    const startY = Math.floor(region.y + region.height / 2);
+    
+    const newBounds = floodFillBubble(imageData, startX, startY);
+    
+    if (newBounds) {
+      saveHistory(img.id);
+      updateRegion(region.id, newBounds);
+    } else {
+      alert("Could not detect bubble boundaries automatically.");
+    }
+  };
+
+  const handleCenterText = (regionId: string) => {
+    saveHistory(selectedImageId!);
+    updateRegion(regionId, { textAlign: 'center' }); // usually already handled, but we can also snap to center of parent bubble if preferred
+  };
+
+  const handleSmartBubbleFillAll = async (imgId: string) => {
+    const img = images.find(i => i.id === imgId);
+    if (!img) return;
+
+    const imgSrc = img.originalDataUrl || img.dataUrl;
+    const imageObj = new Image();
+    imageObj.src = imgSrc;
+    await new Promise(resolve => imageObj.onload = resolve);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = imageObj.width;
+    canvas.height = imageObj.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    ctx.drawImage(imageObj, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    
+    const newRegions = [...img.regions];
+    let changed = false;
+
+    for (let i = 0; i < newRegions.length; i++) {
+       const region = newRegions[i];
+       if (region.type === 'bubble') {
+         const startX = Math.floor(region.x + region.width / 2);
+         const startY = Math.floor(region.y + region.height / 2);
+         const newBounds = floodFillBubble(imageData, startX, startY);
+         if (newBounds) {
+           newRegions[i] = { ...region, ...newBounds };
+           changed = true;
+         }
+       }
+    }
+    
+    if (changed) {
+      saveHistory(img.id);
+      updateImage(img.id, { regions: newRegions });
+    } else {
+      alert("No bubbles could be optimized automatically.");
+    }
+  };
+
   const toggleSelectForProcess = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const newSet = new Set(selectedForProcess);
@@ -286,7 +366,8 @@ export default function App() {
              fontWeight: raw.fontWeight || 'normal',
              fontStyle: raw.fontStyle || 'normal',
              textAlign: raw.textAlign || 'center',
-             lineHeight: raw.lineHeight || 1.2
+             lineHeight: raw.lineHeight || 1.2,
+             autoFitText: true
            };
          });
          
@@ -339,7 +420,8 @@ export default function App() {
                fontWeight: raw.fontWeight || 'normal',
                fontStyle: raw.fontStyle || 'normal',
                textAlign: raw.textAlign || 'center',
-               lineHeight: raw.lineHeight || 1.2
+               lineHeight: raw.lineHeight || 1.2,
+               autoFitText: true
              };
            });
            
@@ -387,7 +469,8 @@ export default function App() {
           fontWeight: raw.fontWeight || 'normal',
           fontStyle: raw.fontStyle || 'normal',
           textAlign: raw.textAlign || 'center',
-          lineHeight: raw.lineHeight || 1.2
+          lineHeight: raw.lineHeight || 1.2,
+          autoFitText: true
         };
       });
 
@@ -495,7 +578,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-slate-200 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-black text-slate-200 overflow-hidden font-sans">
       {exportProgress && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-700 rounded-xl p-8 flex flex-col items-center gap-4 max-w-md w-full shadow-2xl">
@@ -821,6 +904,13 @@ export default function App() {
                   {selectedImage.status !== 'processing' && (
                     <div className="flex items-center gap-2 ml-4">
                       <button 
+                        onClick={() => handleSmartBubbleFillAll(selectedImage.id)}
+                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-xs font-medium transition-colors text-white"
+                        title="Smart Center All Text Bubbles"
+                      >
+                        <Wand2 size={14} /> Center All Bubbles
+                      </button>
+                      <button 
                         onClick={handleDownloadCurrentPage}
                         className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded text-xs font-medium transition-colors"
                         title="Download this page as PNG"
@@ -862,7 +952,8 @@ export default function App() {
                             fontWeight: 'normal',
                             fontStyle: 'normal',
                             textAlign: 'center',
-                            lineHeight: 1.2
+                            lineHeight: 1.2,
+                            autoFitText: true
                           };
                           updateImage(selectedImage.id, { regions: [...selectedImage.regions, newRegion] });
                           setSelectedRegionId(newRegion.id);
@@ -957,7 +1048,7 @@ export default function App() {
                     <select
                       value={selectedRegion.fontFamily}
                       onChange={(e) => updateRegion(selectedRegion.id, { fontFamily: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-md p-2 text-sm outline-none"
+                      className="w-full bg-black border border-slate-700 rounded-md p-2 text-sm outline-none"
                     >
                       <option value="Cairo">Cairo</option>
                       <option value="Tajawal">Tajawal</option>
@@ -967,6 +1058,14 @@ export default function App() {
                       <option value="El Messiri">El Messiri</option>
                       <option value="Amiri">Amiri</option>
                       <option value="Changa">Changa</option>
+                      <option value="Harmattan">Harmattan</option>
+                      <option value="Katibeh">Katibeh</option>
+                      <option value="Lalezar">Lalezar</option>
+                      <option value="Lemonada">Lemonada</option>
+                      <option value="Mada">Mada</option>
+                      <option value="Markazi Text">Markazi Text</option>
+                      <option value="Reem Kufi">Reem Kufi</option>
+                      <option value="Rakkas">Rakkas</option>
                     </select>
                   </div>
                   <div className="space-y-1.5">
@@ -1096,7 +1195,81 @@ export default function App() {
                   </div>
                 </div>
                 
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                  <div className="space-y-1.5 flex flex-col justify-end">
+                    <label className="flex items-center gap-2 text-xs font-medium text-slate-300 cursor-pointer mb-2">
+                      <input 
+                        type="checkbox" 
+                        checked={!!selectedRegion.autoFitText} 
+                        onChange={(e) => updateRegion(selectedRegion.id, { autoFitText: e.target.checked })}
+                        className="rounded border-slate-700 bg-slate-900 accent-indigo-500"
+                      />
+                      Auto-fit Text
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-medium text-slate-400">Shadow Color</label>
+                      <input
+                        type="color"
+                        value={selectedRegion.shadowColor === 'transparent' ? '#000000' : (selectedRegion.shadowColor || '#000000')}
+                        onChange={(e) => updateRegion(selectedRegion.id, { shadowColor: e.target.value })}
+                        className="w-6 h-6 rounded shrink-0 bg-transparent border-0 p-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-400">Shadow Blur ({selectedRegion.shadowBlur || 0})</label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="20"
+                      value={selectedRegion.shadowBlur || 0}
+                      onChange={(e) => updateRegion(selectedRegion.id, { shadowBlur: Number(e.target.value) })}
+                      className="w-full accent-indigo-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 mt-2">
+                  <label className="text-xs font-medium text-slate-400">Layer Order</label>
+                  <div className="flex gap-2">
+                    <button 
+                      className="flex-1 bg-slate-800 hover:bg-slate-700 py-1 rounded text-xs text-slate-300 flex items-center justify-center gap-1"
+                      onClick={() => {
+                        saveHistory(selectedImage.id);
+                        const arr = [...selectedImage.regions];
+                        const idx = arr.findIndex(r => r.id === selectedRegion.id);
+                        if (idx < arr.length - 1) {
+                          [arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+                          updateImage(selectedImage.id, { regions: arr });
+                        }
+                      }}
+                    >
+                      <ChevronUp size={14} /> Bring Forward
+                    </button>
+                    <button 
+                      className="flex-1 bg-slate-800 hover:bg-slate-700 py-1 rounded text-xs text-slate-300 flex items-center justify-center gap-1"
+                      onClick={() => {
+                        saveHistory(selectedImage.id);
+                        const arr = [...selectedImage.regions];
+                        const idx = arr.findIndex(r => r.id === selectedRegion.id);
+                        if (idx > 0) {
+                          [arr[idx], arr[idx - 1]] = [arr[idx - 1], arr[idx]];
+                          updateImage(selectedImage.id, { regions: arr });
+                        }
+                      }}
+                    >
+                      <ChevronDown size={14} /> Send Backward
+                    </button>
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t border-slate-800 space-y-2 mt-4">
+                   <button 
+                     className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded transition-colors flex items-center justify-center gap-2 font-medium"
+                     onClick={() => handleSmartBubbleFill(selectedImage.id, selectedRegion)}
+                   >
+                     <Wand2 size={14} /> Smart Detect Bubble Bounds
+                   </button>
                    <button 
                      className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
                      onClick={() => {
