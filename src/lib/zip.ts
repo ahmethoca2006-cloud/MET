@@ -93,8 +93,9 @@ async function renderImageToDataUrl(img: ProcessedImage, format: 'jpeg' | 'png' 
   }
 
   img.regions.forEach(region => {
+    const fontStyleStr = `${region.fontStyle === 'normal' ? '' : region.fontStyle} ${region.fontWeight === 'normal' ? '' : region.fontWeight}`.trim() || 'normal';
     const group = new Konva.Group({ x: region.x, y: region.y, width: region.width, height: region.height, rotation: region.angle });
-    group.add(new Konva.Text({ text: region.translatedText ? region.translatedText.split('\n').map(line => '\u202B' + line + '\u200F').join('\n') : '', width: region.width, height: region.height, fill: region.textColor, stroke: region.strokeColor !== 'transparent' ? region.strokeColor : undefined, strokeWidth: region.strokeColor !== 'transparent' ? region.strokeWidth : 0, fontFamily: region.fontFamily, fontSize: region.fontSize, fontStyle: `${region.fontStyle} ${region.fontWeight === 'normal' ? '' : region.fontWeight}`, align: region.textAlign, verticalAlign: 'middle', wrap: 'word', lineHeight: region.lineHeight, fillAfterStrokeEnabled: true }));
+    group.add(new Konva.Text({ text: region.translatedText ? region.translatedText.split('\n').map(line => '\u202B' + line + '\u200F').join('\n') : '', width: region.width, height: region.height, fill: region.textColor, stroke: region.strokeColor !== 'transparent' ? region.strokeColor : undefined, strokeWidth: region.strokeColor !== 'transparent' ? region.strokeWidth : 0, fontFamily: region.fontFamily, fontSize: region.fontSize, fontStyle: fontStyleStr, align: region.textAlign, verticalAlign: 'middle', wrap: 'word', lineHeight: region.lineHeight, fillAfterStrokeEnabled: true }));
     layer3.add(group);
   });
   

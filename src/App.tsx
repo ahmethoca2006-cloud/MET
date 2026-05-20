@@ -614,7 +614,7 @@ export default function App() {
     <div className="flex flex-col h-screen bg-black text-slate-200 overflow-hidden font-sans">
       {exportProgress && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-slate-900 border border-slate-700 rounded-xl p-8 flex flex-col items-center gap-4 max-w-md w-full shadow-2xl">
+          <div className="bg-black border border-[#444] rounded-xl p-8 flex flex-col items-center gap-4 max-w-md w-full shadow-2xl">
             <Loader2 size={48} className="animate-spin text-emerald-500" />
             <h2 className="text-xl font-bold text-white tracking-tight">Exporting High Quality ZIP</h2>
             <p className="text-sm text-slate-400 text-center">{exportProgress}</p>
@@ -622,7 +622,7 @@ export default function App() {
         </div>
       )}
       {/* Topbar */}
-      <header className="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-slate-900 shrink-0">
+      <header className="h-16 border-b border-[#333] flex items-center justify-between px-6 bg-black shrink-0">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-3">
             <TypeIcon className="text-emerald-400" />
@@ -632,21 +632,21 @@ export default function App() {
           <div className="relative">
              <button 
                onClick={() => setShowApiKeyInput(!showApiKeyInput)}
-               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${customApiKey ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400' : 'bg-slate-800 border-slate-700 text-slate-300'}`}
+               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${customApiKey ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400' : 'bg-[#111] border-[#444] text-slate-300'}`}
              >
                <Key size={14} />
                API Key
              </button>
              
              {showApiKeyInput && (
-               <div className="absolute top-full left-0 mt-2 p-3 bg-slate-800 border border-slate-700 rounded-lg shadow-xl w-72 z-50">
+               <div className="absolute top-full left-0 mt-2 p-3 bg-[#111] border border-[#444] rounded-lg shadow-xl w-72 z-50">
                  <label className="block text-xs font-medium text-slate-300 mb-1.5">Gemini API Key</label>
                  <input 
                    type="password" 
                    value={customApiKey}
                    onChange={handleApiKeyChange}
                    placeholder="Enter your API Key..."
-                   className="w-full bg-slate-950 border border-slate-700 rounded-md p-2 text-sm outline-none focus:border-indigo-500"
+                   className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none focus:border-indigo-500"
                  />
                  <p className="text-[10px] text-slate-500 mt-2">Required for using gemini-2.5-flash. Key is saved locally in your browser.</p>
                </div>
@@ -655,7 +655,7 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-4">
-          <div className="flex bg-slate-800 rounded-md p-1">
+          <div className="flex bg-[#111] rounded-md p-1">
             <input 
               type="file" 
               accept=".zip" 
@@ -665,7 +665,7 @@ export default function App() {
             />
             <button 
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 hover:bg-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-2 hover:bg-[#222] px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
               title="Import ZIP"
             >
               <Upload size={16} /> Import ZIP
@@ -682,7 +682,7 @@ export default function App() {
             />
             <button 
               onClick={() => cleanZipInputRef.current?.click()}
-              className="flex items-center gap-2 hover:bg-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-2 hover:bg-[#222] px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
               title="Upload Cleaned ZIP"
             >
               <Sparkles size={16} /> Cleaned ZIP
@@ -700,7 +700,7 @@ export default function App() {
             />
             <button 
               onClick={() => appendImagesInputRef.current?.click()}
-              className="flex items-center gap-2 hover:bg-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-2 hover:bg-[#222] px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
               title="Add Images"
             >
               <ImagePlus size={16} /> Add Images
@@ -717,7 +717,7 @@ export default function App() {
             />
             <button 
               onClick={() => projectInputRef.current?.click()}
-              className="flex items-center gap-1.5 hover:bg-slate-700 px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-1.5 hover:bg-[#222] px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
               title="Load Project"
             >
               Load State
@@ -725,7 +725,7 @@ export default function App() {
             <button 
               onClick={handleSaveProject}
               disabled={images.length === 0}
-              className="flex items-center gap-1.5 hover:bg-slate-700 disabled:opacity-50 px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-1.5 hover:bg-[#222] disabled:opacity-50 px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
               title="Save Project"
             >
               <Save size={16} /> Save State
@@ -743,14 +743,14 @@ export default function App() {
           
           <button 
             onClick={() => setShowOriginal(!showOriginal)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors border ${showOriginal ? 'bg-amber-600 border-amber-600 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors border ${showOriginal ? 'bg-amber-600 border-amber-600 text-white' : 'bg-[#111] border-[#444] text-slate-300 hover:bg-[#222]'}`}
           >
             {showOriginal ? 'Showing Original' : 'View Original'}
           </button>
           
           <button 
             onClick={() => setShowText(!showText)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors border ${!showText ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors border ${!showText ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#111] border-[#444] text-slate-300 hover:bg-[#222]'}`}
           >
             <TypeIcon size={16} />
             {showText ? 'Hide Texts' : 'Show Texts'}
@@ -776,7 +776,7 @@ export default function App() {
             <button 
               onClick={handleExportTranslation}
               disabled={images.length === 0}
-              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-slate-600"
+              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-[#111] disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-slate-600"
               title="Export text document for external translation"
             >
               Export Docs
@@ -784,7 +784,7 @@ export default function App() {
             <button 
               onClick={() => importTranslationRef.current?.click()}
               disabled={images.length === 0}
-              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors"
+              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-[#111] disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors"
               title="Import translated text document"
             >
               Import Docs
@@ -803,7 +803,7 @@ export default function App() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left Sidebar (Thumbnails) */}
-        <aside className="w-64 border-r border-slate-800 bg-slate-900/50 flex flex-col overflow-y-auto">
+        <aside className="w-64 border-r border-[#333] bg-black flex flex-col overflow-y-auto">
           {images.length === 0 && (
             <div className="p-8 text-center text-slate-500 text-sm">
               Upload a ZIP file to get started.
@@ -812,16 +812,16 @@ export default function App() {
           {images.map((img, i) => (
             <div
               key={img.id}
-              className={`relative flex flex-col gap-2 p-3 border-b border-slate-800/50 text-left transition-colors cursor-pointer group ${selectedImageId === img.id ? 'bg-slate-800' : 'hover:bg-slate-800/50'}`}
+              className={`relative flex flex-col gap-2 p-3 border-b border-[#333]/50 text-left transition-colors cursor-pointer group ${selectedImageId === img.id ? 'bg-[#111]' : 'hover:bg-[#111]/50'}`}
               onClick={() => setSelectedImageId(img.id)}
             >
-              <div className="relative aspect-[3/4] w-full bg-slate-950 rounded overflow-hidden flex">
+              <div className="relative aspect-[3/4] w-full bg-black rounded overflow-hidden flex">
                 {img.originalDataUrl && (
-                  <img src={img.originalDataUrl} alt={`${img.filename} original`} className="w-1/2 h-full object-cover opacity-80 border-r border-slate-700" />
+                  <img src={img.originalDataUrl} alt={`${img.filename} original`} className="w-1/2 h-full object-cover opacity-80 border-r border-[#444]" />
                 )}
                 <img src={img.dataUrl} alt={img.filename} className={`${img.originalDataUrl ? 'w-1/2' : 'w-full'} h-full object-cover opacity-80`} />
                 {img.status === 'processing' && (
-                  <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                     <Loader2 className="animate-spin text-indigo-400" />
                   </div>
                 )}
@@ -837,7 +837,7 @@ export default function App() {
                       type="checkbox"
                       checked={selectedForProcess.has(img.id)}
                       onChange={(e) => toggleSelectForProcess(img.id, e as any)}
-                      className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                      className="w-4 h-4 rounded border-[#444] bg-[#111] text-indigo-600 focus:ring-indigo-500"
                       title="Select for batch processing (Max 5)"
                     />
                   </div>
@@ -847,14 +847,14 @@ export default function App() {
                 <div className="absolute top-2 left-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                    <button 
                      onClick={(e) => { e.stopPropagation(); moveImageUp(i); }}
-                     className="bg-slate-900/80 hover:bg-slate-800 text-white p-1 rounded"
+                     className="bg-black/80 hover:bg-[#111] text-white p-1 rounded"
                      title="Move Up"
                    >
                      <ChevronUp size={14} />
                    </button>
                    <button 
                      onClick={(e) => { e.stopPropagation(); moveImageDown(i); }}
-                     className="bg-slate-900/80 hover:bg-slate-800 text-white p-1 rounded"
+                     className="bg-black/80 hover:bg-[#111] text-white p-1 rounded"
                      title="Move Down"
                    >
                      <ChevronDown size={14} />
@@ -883,7 +883,7 @@ export default function App() {
                   <h2 className="font-medium text-slate-300">{selectedImage.filename}</h2>
                   
                   {/* Tool selection */}
-                  <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 ml-4">
+                  <div className="flex bg-black rounded-lg p-1 border border-[#333] ml-4">
                     <button 
                       onClick={() => setActiveTool('select')}
                       className={`p-1.5 rounded-md ${activeTool === 'select' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
@@ -945,7 +945,7 @@ export default function App() {
                   </div>
 
                   {/* Zoom controls */}
-                  <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800">
+                  <div className="flex bg-black rounded-lg p-1 border border-[#333]">
                     <button onClick={() => setZoom(z => Math.max(0.2, z - 0.2))} className="p-1.5 text-slate-400 hover:text-slate-200">
                       <ZoomOut size={16} />
                     </button>
@@ -968,7 +968,7 @@ export default function App() {
                       </button>
                       <button 
                         onClick={handleDownloadCurrentPage}
-                        className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                        className="flex items-center gap-1.5 bg-[#111] hover:bg-[#222] px-3 py-1.5 rounded text-xs font-medium transition-colors"
                         title="Download this page as PNG"
                       >
                         <Download size={14} /> Download Page
@@ -1014,7 +1014,7 @@ export default function App() {
                           updateImage(selectedImage.id, { regions: [...selectedImage.regions, newRegion] });
                           setSelectedRegionId(newRegion.id);
                         }}
-                        className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                        className="flex items-center gap-1.5 bg-[#111] hover:bg-[#222] px-3 py-1.5 rounded text-xs font-medium transition-colors"
                       >
                         <Plus size={14} /> Add Text
                       </button>
@@ -1066,13 +1066,13 @@ export default function App() {
         </main>
 
         {/* Right Sidebar (Properties) */}
-        <aside className="w-80 border-l border-slate-800 bg-slate-900/50 flex flex-col overflow-y-auto">
+        <aside className="w-80 border-l border-[#333] bg-black flex flex-col overflow-y-auto">
           {selectedImage && selectedRegion ? (
             <div className="p-5 flex flex-col gap-6">
               <div>
                 <div className="flex justify-between items-center mb-1">
                   <h3 className="font-semibold text-slate-300 flex items-center gap-2">
-                    Edit Text <span className="text-[10px] bg-slate-800 px-1.5 py-0.5 rounded uppercase tracking-wider text-slate-400">{selectedRegion.type}</span>
+                    Edit Text <span className="text-[10px] bg-[#111] px-1.5 py-0.5 rounded uppercase tracking-wider text-slate-400">{selectedRegion.type}</span>
                   </h3>
                   <button
                     onClick={() => {
@@ -1092,7 +1092,7 @@ export default function App() {
                 <textarea
                   value={selectedRegion.translatedText}
                   onChange={(e) => updateRegion(selectedRegion.id, { translatedText: e.target.value })}
-                  className="w-full h-24 bg-slate-950 border border-slate-700 rounded-md p-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
+                  className="w-full h-24 bg-black border border-[#444] rounded-md p-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
                   dir="rtl"
                 />
               </div>
@@ -1104,7 +1104,7 @@ export default function App() {
                     <select
                       value={selectedRegion.fontFamily}
                       onChange={(e) => updateRegion(selectedRegion.id, { fontFamily: e.target.value })}
-                      className="w-full bg-black border border-slate-700 rounded-md p-2 text-sm outline-none"
+                      className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none"
                     >
                       <option value="Cairo">Cairo</option>
                       <option value="Tajawal">Tajawal</option>
@@ -1130,7 +1130,7 @@ export default function App() {
                       type="number"
                       value={Math.round(selectedRegion.fontSize)}
                       onChange={(e) => updateRegion(selectedRegion.id, { fontSize: Number(e.target.value) })}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-md p-2 text-sm outline-none"
+                      className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none"
                     />
                   </div>
                 </div>
@@ -1141,7 +1141,7 @@ export default function App() {
                     <select
                       value={selectedRegion.textAlign}
                       onChange={(e) => updateRegion(selectedRegion.id, { textAlign: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-md p-2 text-sm outline-none"
+                      className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none"
                     >
                       <option value="center">Center</option>
                       <option value="right">Right</option>
@@ -1151,8 +1151,8 @@ export default function App() {
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-400">Style</label>
                     <div className="flex gap-2">
-                       <button onClick={() => updateRegion(selectedRegion.id, { fontWeight: selectedRegion.fontWeight === 'bold' ? 'normal' : 'bold' })} className={`flex-1 p-2 border rounded-md text-sm font-bold ${selectedRegion.fontWeight === 'bold' ? 'bg-indigo-600 border-indigo-600' : 'bg-slate-950 border-slate-700'}`}>B</button>
-                       <button onClick={() => updateRegion(selectedRegion.id, { fontStyle: selectedRegion.fontStyle === 'italic' ? 'normal' : 'italic' })} className={`flex-1 p-2 border rounded-md text-sm italic ${selectedRegion.fontStyle === 'italic' ? 'bg-indigo-600 border-indigo-600' : 'bg-slate-950 border-slate-700'}`}>I</button>
+                       <button onClick={() => updateRegion(selectedRegion.id, { fontWeight: selectedRegion.fontWeight === 'bold' ? 'normal' : 'bold' })} className={`flex-1 p-2 border rounded-md text-sm font-bold ${selectedRegion.fontWeight === 'bold' ? 'bg-indigo-600 border-indigo-600' : 'bg-black border-[#444]'}`}>B</button>
+                       <button onClick={() => updateRegion(selectedRegion.id, { fontStyle: selectedRegion.fontStyle === 'italic' ? 'normal' : 'italic' })} className={`flex-1 p-2 border rounded-md text-sm italic ${selectedRegion.fontStyle === 'italic' ? 'bg-indigo-600 border-indigo-600' : 'bg-black border-[#444]'}`}>I</button>
                     </div>
                   </div>
                 </div>
@@ -1171,7 +1171,7 @@ export default function App() {
                         type="text"
                         value={selectedRegion.textColor}
                         onChange={(e) => updateRegion(selectedRegion.id, { textColor: e.target.value })}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-md p-1.5 text-xs outline-none uppercase"
+                        className="w-full bg-black border border-[#444] rounded-md p-1.5 text-xs outline-none uppercase"
                       />
                     </div>
                   </div>
@@ -1217,7 +1217,7 @@ export default function App() {
                     />
                     <button 
                       onClick={() => updateRegion(selectedRegion.id, { bgColor: selectedRegion.bgColor === 'transparent' ? '#ffffff' : 'transparent' })}
-                      className="text-[10px] bg-slate-800 px-2 py-1.5 rounded text-slate-300 w-full"
+                      className="text-[10px] bg-[#111] px-2 py-1.5 rounded text-slate-300 w-full"
                     >
                       {selectedRegion.bgColor === 'transparent' ? 'No BG' : 'Clear BG'}
                     </button>
@@ -1230,7 +1230,7 @@ export default function App() {
                             updateRegion(selectedRegion.id, { bgColor: result.sRGBHex });
                           } catch (e) {}
                         }}
-                        className="p-1 px-2 bg-slate-800 hover:bg-slate-700 rounded-md text-slate-300 shrink-0 h-[28px]"
+                        className="p-1 px-2 bg-[#111] hover:bg-[#222] rounded-md text-slate-300 shrink-0 h-[28px]"
                         title="Pick Color from Screen"
                       >
                         <Pipette size={14} />
@@ -1294,7 +1294,7 @@ export default function App() {
                         type="checkbox" 
                         checked={!!selectedRegion.autoFitText} 
                         onChange={(e) => updateRegion(selectedRegion.id, { autoFitText: e.target.checked })}
-                        className="rounded border-slate-700 bg-slate-900 accent-indigo-500"
+                        className="rounded border-[#444] bg-black accent-indigo-500"
                       />
                       Auto-fit Text
                     </label>
@@ -1325,7 +1325,7 @@ export default function App() {
                   <label className="text-xs font-medium text-slate-400">Layer Order</label>
                   <div className="flex gap-2">
                     <button 
-                      className="flex-1 bg-slate-800 hover:bg-slate-700 py-1 rounded text-xs text-slate-300 flex items-center justify-center gap-1"
+                      className="flex-1 bg-[#111] hover:bg-[#222] py-1 rounded text-xs text-slate-300 flex items-center justify-center gap-1"
                       onClick={() => {
                         saveHistory(selectedImage.id);
                         const arr = [...selectedImage.regions];
@@ -1339,7 +1339,7 @@ export default function App() {
                       <ChevronUp size={14} /> Bring Forward
                     </button>
                     <button 
-                      className="flex-1 bg-slate-800 hover:bg-slate-700 py-1 rounded text-xs text-slate-300 flex items-center justify-center gap-1"
+                      className="flex-1 bg-[#111] hover:bg-[#222] py-1 rounded text-xs text-slate-300 flex items-center justify-center gap-1"
                       onClick={() => {
                         saveHistory(selectedImage.id);
                         const arr = [...selectedImage.regions];
@@ -1355,7 +1355,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-800 space-y-2 mt-4">
+                <div className="pt-4 border-t border-[#333] space-y-2 mt-4">
                    <button 
                      className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded transition-colors flex items-center justify-center gap-2 font-medium"
                      onClick={() => handleSmartBubbleFill(selectedImage.id, selectedRegion)}
@@ -1363,7 +1363,7 @@ export default function App() {
                      <Wand2 size={14} /> Smart Detect Bubble Bounds
                    </button>
                    <button 
-                     className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
+                     className="w-full bg-[#111] hover:bg-[#222] text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
                      onClick={() => {
                        saveHistory(selectedImage.id);
                        updateImage(selectedImage.id, {
@@ -1378,7 +1378,7 @@ export default function App() {
                      <Plus size={14} /> Duplicate text region
                    </button>
                    <button 
-                     className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
+                     className="w-full bg-[#111] hover:bg-[#222] text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
                      onClick={() => {
                        saveHistory(selectedImage.id);
                        updateImage(selectedImage.id, {
@@ -1399,7 +1399,7 @@ export default function App() {
                      <TypeIcon size={14} /> Apply text styles to this page
                    </button>
                    <button 
-                     className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
+                     className="w-full bg-[#111] hover:bg-[#222] text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
                      onClick={() => {
                        if (confirm('Apply these font settings to all text regions across ALL pages?')) {
                          setImages(prev => prev.map(img => ({
@@ -1461,7 +1461,7 @@ export default function App() {
                             type="text"
                             value={brushColor}
                             onChange={(e) => setBrushColor(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-md p-2 text-sm outline-none uppercase"
+                            className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none uppercase"
                            />
                            {('EyeDropper' in window) && (
                              <button
@@ -1472,7 +1472,7 @@ export default function App() {
                                    setBrushColor(result.sRGBHex);
                                  } catch (e) {}
                                }}
-                               className="p-2 bg-slate-800 hover:bg-slate-700 rounded-md text-slate-300 shrink-0"
+                               className="p-2 bg-[#111] hover:bg-[#222] rounded-md text-slate-300 shrink-0"
                                title="Pick Color from Screen"
                              >
                                <Pipette size={16} />
@@ -1483,17 +1483,17 @@ export default function App() {
                     )}
                     
                     {activeTool === 'erase' && (
-                      <div className="p-3 bg-slate-950 rounded border border-slate-800 text-xs text-slate-400 text-center">
+                      <div className="p-3 bg-black rounded border border-[#333] text-xs text-slate-400 text-center">
                         Eraser paints with white color to match manga background.
                       </div>
                     )}
                     {activeTool === 'bg_erase' && (
-                      <div className="p-3 bg-slate-950 rounded border border-slate-800 text-xs text-slate-400 text-center">
+                      <div className="p-3 bg-black rounded border border-[#333] text-xs text-slate-400 text-center">
                         Erase parts of a Text's Background square without affecting the text or background image.
                       </div>
                     )}
                     {activeTool === 'smart_sfx' && (
-                      <div className="p-3 bg-slate-950 rounded border border-slate-800 text-xs text-slate-400 text-center">
+                      <div className="p-3 bg-black rounded border border-[#333] text-xs text-slate-400 text-center">
                         Click on the image. It will automatically pick the background color below the cursor and paint with it! Great for whitening SFX.
                       </div>
                     )}

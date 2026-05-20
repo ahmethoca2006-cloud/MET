@@ -42,8 +42,8 @@ const AutoFitText = ({ region }: { region: Region }) => {
     let maxFontSize = 100;
     let bestFontSize = region.fontSize;
 
-    // Temporarily remove fixed height to let Konva measure the natural text height
-    node.height(undefined);
+    // Temporarily clear fixed height to let Konva measure the natural text height
+    node.height(null);
 
     while (minFontSize <= maxFontSize) {
       const mid = Math.floor((minFontSize + maxFontSize) / 2);
@@ -62,6 +62,8 @@ const AutoFitText = ({ region }: { region: Region }) => {
     node.height(region.height); // restore fixed height for vertical centering
   }, [region.translatedText, region.width, region.height, region.fontSize, region.fontFamily, region.autoFitText, region.lineHeight, region.fontWeight, region.fontStyle]);
 
+  const fontStyleStr = `${region.fontStyle === 'normal' ? '' : region.fontStyle} ${region.fontWeight === 'normal' ? '' : region.fontWeight}`.trim() || 'normal';
+
   return (
     <Text
       ref={textRef}
@@ -73,13 +75,13 @@ const AutoFitText = ({ region }: { region: Region }) => {
       strokeWidth={region.strokeColor !== 'transparent' ? region.strokeWidth : 0}
       fontFamily={region.fontFamily}
       fontSize={region.fontSize}
-      fontStyle={`${region.fontStyle} ${region.fontWeight === 'normal' ? '' : region.fontWeight}`}
+      fontStyle={fontStyleStr}
       align={region.textAlign}
       verticalAlign="middle"
       wrap="word"
       lineHeight={region.lineHeight}
       fillAfterStrokeEnabled={true}
-      shadowColor={region.shadowColor !== 'transparent' ? region.shadowColor : undefined}
+      shadowColor={region.shadowColor !== 'transparent' && !!region.shadowColor ? region.shadowColor : undefined}
       shadowBlur={region.shadowBlur}
       letterSpacing={region.letterSpacing || 0}
     />
