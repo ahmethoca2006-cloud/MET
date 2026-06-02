@@ -27,7 +27,7 @@ export interface Region {
 }
 
 export interface PaintStroke {
-  tool: "erase" | "draw" | "fill_poly" | "bg_erase" | "smart_sfx" | "gen_erase";
+  tool: "erase" | "draw" | "fill_poly" | "bg_erase" | "smart_sfx" | "gen_erase" | "scribble_bubble";
   points: number[];
   color: string;
   size: number;

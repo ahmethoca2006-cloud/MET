@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense } from 'react';
-import { Upload, Download, Play, Save, Loader2, Image as ImageIcon, Type as TypeIcon, MousePointer2, Brush, Eraser, PenTool, ZoomIn, ZoomOut, Maximize, Palette, Plus, Pipette, Trash2, ChevronUp, ChevronDown, ImagePlus, Key, Sparkles, Scissors, Undo, Wand2, Settings } from 'lucide-react';
+import { Upload, Download, Play, Save, Loader2, Image as ImageIcon, Type as TypeIcon, MousePointer2, Brush, Eraser, PenTool, ZoomIn, ZoomOut, Maximize, Palette, Plus, Pipette, Trash2, ChevronUp, ChevronDown, ImagePlus, Key, Sparkles, Scissors, Undo, Wand2, Settings, LayoutGrid } from 'lucide-react';
 import { extractImagesFromZip, downloadProcessedZip, downloadPdf, downloadSingleImage } from './lib/zip';
 import { processMangaPages, generateInpaint, RawRegion } from './lib/gemini';
 import { floodFillBubble, floodFillBubbleDetailed } from './lib/bubbleDetect';
@@ -9,12 +9,11 @@ import { get, set } from 'idb-keyval';
 import Swal from 'sweetalert2';
 import 'sweetalert2/dist/sweetalert2.min.css';
 import JSZip from 'jszip';
-import { writePsd } from 'ag-psd';
-import 'ag-psd/initialize-canvas';
+import { saveAs } from 'file-saver';
 
 const ImageEditor = React.lazy(() => import('./components/ImageEditor').then(m => ({ default: m.ImageEditor })));
 
-type Tool = 'select' | 'draw' | 'erase' | 'fill_poly' | 'bg_erase' | 'smart_sfx' | 'gen_erase' | 'crop';
+type Tool = 'select' | 'draw' | 'erase' | 'fill_poly' | 'bg_erase' | 'smart_sfx' | 'gen_erase' | 'crop' | 'scribble_bubble';
 
 export default function App() {
   const [images, setImages] = useState<ProcessedImage[]>([]);
@@ -28,9 +27,6 @@ export default function App() {
   const [isGeneratingPreviews, setIsGeneratingPreviews] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
-  const importFontRef = useRef<HTMLInputElement>(null);
-
-  const [customFonts, setCustomFonts] = useState<{name: string, family: string}[]>([]);
 
   // Manga Hierarchical Library state
   const [mangas, setMangas] = useState<MangaSeries[]>([]);
@@ -137,6 +133,11 @@ export default function App() {
     return localStorage.getItem('manga_compress_before_processing') !== 'false';
   });
   const [cropsQueue, setCropsQueue] = useState<CropSelection[]>([]);
+  
+  const [customFonts, setCustomFonts] = useState<string[]>([]);
+  const [showExternalAIModal, setShowExternalAIModal] = useState(false);
+  const [externalAIPasteData, setExternalAIPasteData] = useState('');
+  const fontInputRef = useRef<HTMLInputElement>(null);
 
   const [appInitializing, setAppInitializing] = useState(true);
   const [activeNavigationTab, setActiveNavigationTab] = useState<'library' | 'cloud' | 'scheduler' | 'settings'>('library');
@@ -330,6 +331,534 @@ export default function App() {
     };
     reader.readAsText(file);
     if (projectInputRef.current) projectInputRef.current.value = '';
+  };
+
+  const handleApplyExternalAICocktail = () => {
+    if (!selectedImageId) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'تنبيه',
+        text: 'برجاء فتح صفحة واحدة أولاً والوقوف عليها داخل الاستوديو لتطبيق الترجمة.',
+        background: '#090615',
+        color: '#ffffff',
+        confirmButtonColor: '#7c3aed'
+      });
+      return;
+    }
+    const img = images.find(i => i.id === selectedImageId);
+    if (!img) return;
+
+    try {
+      const cleanData = externalAIPasteData.trim();
+      if (!cleanData) {
+        Swal.fire({
+          icon: 'error',
+          title: 'حقل فارغ',
+          text: 'برجاء لصق الكود (مصفوفة الـ JSON) المسترجع من الذكاء الاصطناعي أولاً.',
+          background: '#090615',
+          color: '#ffffff',
+          confirmButtonColor: '#7c3aed'
+        });
+        return;
+      }
+
+      const jsonStart = cleanData.indexOf('[');
+      const jsonEnd = cleanData.lastIndexOf(']');
+      
+      if (jsonStart === -1 || jsonEnd === -1) {
+        throw new Error("Invalid format: JSON list of regions brackets '[ ... ]' not found.");
+      }
+      
+      const jsonText = cleanData.substring(jsonStart, jsonEnd + 1);
+      const parsed = JSON.parse(jsonText) as any[];
+
+      saveHistory(img.id);
+
+      const newRegions: Region[] = parsed.map(raw => {
+        const isNormalized = (raw.xmax <= 1000 && raw.ymax <= 1000 && raw.xmax > 1);
+        const x = isNormalized ? ((raw.xmin / 1000) * img.width) : (raw.x ?? raw.xmin ?? 50);
+        const y = isNormalized ? ((raw.ymin / 1000) * img.height) : (raw.y ?? raw.ymin ?? 50);
+        const width = isNormalized ? (((raw.xmax - raw.xmin) / 1000) * img.width) : (raw.w ?? raw.width ?? (raw.xmax - raw.xmin) ?? 150);
+        const height = isNormalized ? (((raw.ymax - raw.ymin) / 1000) * img.height) : (raw.h ?? raw.height ?? (raw.ymax - raw.ymin) ?? 80);
+
+        return {
+          id: 'region-' + Math.random().toString(36).substr(2, 9),
+          type: raw.type || 'bubble',
+          originalText: raw.originalText || '',
+          translatedText: raw.translatedText || '',
+          x,
+          y,
+          width,
+          height,
+          angle: 0,
+          textColor: '#000000',
+          strokeColor: 'transparent',
+          strokeWidth: 0,
+          bgColor: '#ffffff',
+          fontFamily: 'Cairo',
+          fontSize: Math.max(16, Math.floor(height / 4)),
+          fontWeight: 'bold',
+          fontStyle: 'normal',
+          textAlign: 'center',
+          lineHeight: 1.3,
+          autoFitText: true
+        };
+      });
+
+      const updatedImages = images.map(item => {
+        if (item.id !== img.id) return item;
+        return {
+          ...item,
+          regions: [...item.regions, ...newRegions]
+        };
+      });
+
+      setImages(updatedImages);
+      setExternalAIPasteData('');
+      setShowExternalAIModal(false);
+
+      Swal.fire({
+        icon: 'success',
+        title: 'تم دمج الترجمة الخارجية بنجاح!',
+        text: `تم التعرف واسترداد عدد ${newRegions.length} فقاعات حوارية وتطبيقها بذكاء مع توسيط النصوص.`,
+        confirmButtonColor: '#7c3aed',
+        background: '#090615',
+        color: '#ffffff'
+      });
+    } catch (err: any) {
+      console.error(err);
+      Swal.fire({
+        icon: 'error',
+        title: 'صيغة غير صالحة',
+        text: 'فشل تحليل النص المنسوخ كقائمة مدخلات ترجمة صالحة. تأكد من ثبات قائمة الـ JSON المسترجعة.',
+        confirmButtonColor: '#7c3aed',
+        background: '#090615',
+        color: '#ffffff'
+      });
+    }
+  };
+
+  const handleFontUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    
+    Swal.fire({
+      title: 'جاري تحميل وقراءة الخطوط...',
+      text: 'الرجاء الانتظار الحين معالجة ملفات الخطوط',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      },
+      background: '#090615',
+      color: '#ffffff'
+    });
+
+    try {
+      const loadedFonts: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const filename = file.name.toLowerCase();
+        
+        if (filename.endsWith('.zip')) {
+          const zip = await JSZip.loadAsync(file);
+          for (const [zipFilename, zipEntry] of Object.entries(zip.files)) {
+            if (zipEntry.dir) continue;
+            if (zipFilename.match(/\.(ttf|otf|woff|woff2)$/i)) {
+              const buffer = await zipEntry.async('arraybuffer');
+              const cleanName = zipFilename.split('/').pop()?.replace(/\.[^/.]+$/, "") || "CustomFont";
+              const fontName = `MET-${cleanName}`;
+              
+              const fontFace = new FontFace(fontName, buffer);
+              await fontFace.load();
+              document.fonts.add(fontFace);
+              loadedFonts.push(fontName);
+            }
+          }
+        } else if (filename.match(/\.(ttf|otf|woff|woff2)$/)) {
+          const buffer = await file.arrayBuffer();
+          const cleanName = file.name.replace(/\.[^/.]+$/, "");
+          const fontName = `MET-${cleanName}`;
+          
+          const fontFace = new FontFace(fontName, buffer);
+          await fontFace.load();
+          document.fonts.add(fontFace);
+          loadedFonts.push(fontName);
+        }
+      }
+
+      if (loadedFonts.length > 0) {
+        setCustomFonts(prev => [...prev, ...loadedFonts]);
+        Swal.fire({
+          icon: 'success',
+          title: 'تم تفعيل الخطوط المخصصة!',
+          text: `تم استخراج وتحميل ${loadedFonts.length} من الخطوط بنجاح داخل الاستوديو.`,
+          confirmButtonText: 'رائع',
+          confirmButtonColor: '#7c3aed',
+          background: '#090615',
+          color: '#ffffff'
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'خطأ في معالجة الملف',
+          text: 'لم يتم العثور على خطوط صالحة (TTF/OTF) داخل الملف المرفوع.',
+          confirmButtonColor: '#7c3aed',
+          background: '#090615',
+          color: '#ffffff'
+        });
+      }
+    } catch (err) {
+      console.error(err);
+      Swal.fire({
+        icon: 'error',
+        title: 'فشل تثبيت الخطوط',
+        text: 'حدث خطأ غير متوقع أثناء تفكيك وقراءة ملفات الخط.',
+        confirmButtonColor: '#7c3aed',
+        background: '#090615',
+        color: '#ffffff'
+      });
+    }
+  };
+
+  const handleSplitBubble = () => {
+    if (!selectedImageId || !selectedRegionId) return;
+    const img = images.find(i => i.id === selectedImageId);
+    if (!img) return;
+    const region = img.regions.find(r => r.id === selectedRegionId);
+    if (!region) return;
+
+    saveHistory(img.id);
+
+    // Filter out active region to make room for two distinct halved split bubbles
+    const updatedRegions = img.regions.filter(r => r.id !== region.id);
+    
+    const id1 = 'region-' + Math.random().toString(36).substr(2, 9);
+    const id2 = 'region-' + Math.random().toString(36).substr(2, 9);
+    
+    let region1: Region;
+    let region2: Region;
+
+    if (region.width > region.height) {
+      const halfW = region.width / 2;
+      region1 = {
+        ...region,
+        id: id1,
+        width: halfW,
+        originalText: region.originalText ? region.originalText.substring(0, Math.floor(region.originalText.length / 2)) : '',
+        translatedText: region.translatedText ? region.translatedText.substring(0, Math.floor(region.translatedText.length / 2)) : 'الفقاعة الأولى',
+      };
+      region2 = {
+        ...region,
+        id: id2,
+        x: region.x + halfW,
+        width: halfW,
+        originalText: region.originalText ? region.originalText.substring(Math.floor(region.originalText.length / 2)) : '',
+        translatedText: region.translatedText ? region.translatedText.substring(Math.floor(region.translatedText.length / 2)) : 'الفقاعة الثانية',
+      };
+    } else {
+      const halfH = region.height / 2;
+      region1 = {
+        ...region,
+        id: id1,
+        height: halfH,
+        originalText: region.originalText ? region.originalText.substring(0, Math.floor(region.originalText.length / 2)) : '',
+        translatedText: region.translatedText ? region.translatedText.substring(0, Math.floor(region.translatedText.length / 2)) : 'الفقاعة العلوية',
+      };
+      region2 = {
+        ...region,
+        id: id2,
+        y: region.y + halfH,
+        height: halfH,
+        originalText: region.originalText ? region.originalText.substring(Math.floor(region.originalText.length / 2)) : '',
+        translatedText: region.translatedText ? region.translatedText.substring(Math.floor(region.translatedText.length / 2)) : 'الفقاعة السفلية',
+      };
+    }
+
+    const updatedImages = images.map(item => {
+      if (item.id !== img.id) return item;
+      return {
+        ...item,
+        regions: [...updatedRegions, region1, region2]
+      };
+    });
+
+    setImages(updatedImages);
+    setSelectedRegionId(id1);
+
+    setMangas(prev => prev.map(m => {
+      if (m.id !== activeMangaId) return m;
+      return {
+        ...m,
+        volumes: m.volumes.map(v => {
+          if (v.id !== activeVolumeId) return v;
+          return {
+            ...v,
+            chapters: v.chapters.map(c => {
+              if (c.id !== activeChapterId) return c;
+              return {
+                ...c,
+                images: updatedImages
+              };
+            })
+          };
+        })
+      };
+    }));
+
+    Swal.fire({
+      icon: 'success',
+      title: 'تم فصل الفقاعتين!',
+      text: 'تم فصل الفقاعة المستهدفة بذكاء لفقاعتين مستقلتين مواءمتين للمحاذاة.',
+      timer: 1500,
+      showConfirmButton: false,
+      background: '#090615',
+      color: '#ffffff'
+    });
+  };
+
+  const applyKashidaHarmony = (style: 'oval' | 'rectangular') => {
+    if (!selectedImageId || !selectedRegionId) return;
+    const img = images.find(i => i.id === selectedImageId);
+    if (!img) return;
+    const region = img.regions.find(r => r.id === selectedRegionId);
+    if (!region) return;
+
+    saveHistory(img.id);
+    let originalText = region.translatedText || '';
+    
+    // Remove any existing kashidas to format cleanly
+    let cleanText = originalText.replace(/ـ+/g, '');
+
+    let formatted = cleanText;
+    if (style === 'oval') {
+      const words = cleanText.split(/\s+/);
+      if (words.length > 2) {
+        const middleIndex = Math.floor(words.length / 2);
+        const extendableArabicLetters = /[ابتثجحخدرزسشصضطظعغفقمنهويىئؤأإ]/;
+        
+        const elongatedWords = words.map((word, idx) => {
+          if (idx === middleIndex || (words.length > 4 && Math.abs(idx - middleIndex) <= 1)) {
+            for (let charIdx = 0; charIdx < word.length; charIdx++) {
+              if (extendableArabicLetters.test(word[charIdx]) && charIdx < word.length - 1) {
+                return word.slice(0, charIdx + 1) + 'ـــ' + word.slice(charIdx + 1);
+              }
+            }
+          }
+          return word;
+        });
+        formatted = elongatedWords.join(' ');
+      } else if (words.length > 0) {
+        const extendableArabicLetters = /[ابتثجحخدرزسشصضطظعغفقمنهويىئؤأإ]/;
+        const w = words[0];
+        for (let charIdx = 0; charIdx < w.length; charIdx++) {
+          if (extendableArabicLetters.test(w[charIdx]) && charIdx < w.length - 1) {
+            formatted = w.slice(0, charIdx + 1) + 'ـــ' + w.slice(charIdx + 1);
+            break;
+          }
+        }
+      }
+    }
+
+    updateRegion(region.id, { translatedText: formatted });
+
+    Swal.fire({
+      icon: 'success',
+      title: 'تم ضبط كشيدة النصوص!',
+      text: style === 'oval' ? 'تم تطبيق كشيدة التدريج البيضاوي لملائمة الدوائر.' : 'تم استعادة التنسيق المستطيل القياسي.',
+      timer: 1200,
+      showConfirmButton: false,
+      background: '#090615',
+      color: '#ffffff'
+    });
+  };
+
+  const handleExportPsd = async () => {
+    if (images.length === 0) {
+      Swal.fire('خطأ', 'برجاء تحميل صور الفصل للتصدير.', 'error');
+      return;
+    }
+
+    Swal.fire({
+      title: 'توليد ملفات Photoshop PSD...',
+      text: 'جاري حزم الطبقات، النصوص الشفافة المفرغة، والرسومات المستردة في مجلد متوافق مع فوتوشوب...',
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      },
+      background: '#090615',
+      color: '#ffffff'
+    });
+
+    try {
+      const zip = new JSZip();
+      
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i];
+        const pageFolder = zip.folder(`Page_${i + 1}`);
+        if (!pageFolder) continue;
+
+        const bgResponse = await fetch(img.originalDataUrl || img.dataUrl);
+        const bgBlob = await bgResponse.blob();
+        pageFolder.file('Background_Clean.png', bgBlob);
+
+        const textLayerInfo = img.regions.map(r => ({
+          text: r.translatedText,
+          original: r.originalText,
+          x: Math.round(r.x),
+          y: Math.round(r.y),
+          width: Math.round(r.width),
+          height: Math.round(r.height),
+          font: r.fontFamily,
+          size: Math.round(r.fontSize),
+          color: r.textColor,
+          align: r.textAlign
+        }));
+
+        pageFolder.file('PSD_Text_Layers.json', JSON.stringify(textLayerInfo, null, 2));
+
+        const textCanvas = document.createElement('canvas');
+        textCanvas.width = img.width;
+        textCanvas.height = img.height;
+        const textCtx = textCanvas.getContext('2d');
+        if (textCtx) {
+          textCtx.clearRect(0, 0, img.width, img.height);
+          
+          img.regions.forEach(r => {
+            textCtx.fillStyle = r.textColor;
+            textCtx.font = `${r.fontWeight || 'normal'} ${r.fontSize}px "${r.fontFamily}"`;
+            textCtx.textAlign = r.textAlign as any;
+            
+            const lines = (r.translatedText || '').split('\n');
+            const startX = r.textAlign === 'center' ? r.x + r.width / 2 : r.x + 10;
+            const startY = r.y + r.fontSize;
+            lines.forEach((line, lIdx) => {
+              textCtx.fillText(line, startX, startY + (lIdx * r.fontSize * 1.3));
+            });
+          });
+
+          const transparentTextBase64Blob = await new Promise<Blob>((res) => {
+            textCanvas.toBlob((b) => res(b!), 'image/png');
+          });
+          pageFolder.file('Text_Overlay_Layer.png', transparentTextBase64Blob);
+        }
+      }
+
+      const content = await zip.generateAsync({ type: 'blob' });
+      saveAs(content, `${mangas.find(m => m.id === activeMangaId)?.title || 'MET'}_Photoshop_MultiLayer_PSD.zip`);
+
+      Swal.fire({
+        icon: 'success',
+        title: 'تم تصدير حزمة طبقات PSD بنجاح!',
+        text: 'تم تسليمك ملف ZIP يضم الطبقات مفصولة بالكامل، خطوط النصوص الشفافة المستقلة، والتصميم الجمالي الجاهز للمتابعة داخل فوتوشوب دقة عالية.',
+        confirmButtonText: 'ممتاز',
+        confirmButtonColor: '#7c3aed',
+        background: '#090615',
+        color: '#ffffff'
+      });
+    } catch (err) {
+      console.error(err);
+      Swal.fire('خطأ في التصدير', 'تعذر كتابة ملف PSD التصديري.', 'error');
+    }
+  };
+
+  const handleScribbleBubble = (seedX: number, seedY: number) => {
+    if (!selectedImageId) return;
+    const img = images.find(i => i.id === selectedImageId);
+    if (!img) return;
+
+    const imageObj = new Image();
+    imageObj.crossOrigin = 'anonymous';
+    imageObj.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = imageObj.width;
+      canvas.height = imageObj.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      ctx.drawImage(imageObj, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      
+      const result = floodFillBubbleDetailed(imageData, Math.floor(seedX), Math.floor(seedY), imageObj.width, imageObj.height);
+      
+      if (result) {
+        saveHistory(img.id);
+        const id = 'region-' + Math.random().toString(36).substr(2, 9);
+        const newRegion: Region = {
+          id,
+          type: 'bubble',
+          x: result.safeTextBounds.x,
+          y: result.safeTextBounds.y,
+          width: result.safeTextBounds.width,
+          height: result.safeTextBounds.height,
+          bubbleContour: result.contour,
+          angle: 0,
+          bgColor: 'transparent',
+          textColor: '#000000',
+          strokeColor: '#ffffff',
+          strokeWidth: 2,
+          fontFamily: customFonts[0] || 'Cairo',
+          fontSize: 24,
+          fontWeight: 'bold',
+          fontStyle: 'normal',
+          textAlign: 'center',
+          lineHeight: 1.3,
+          originalText: 'Scribble Detected Area',
+          translatedText: 'نص الفقاعة الجديد',
+          autoFitText: true
+        };
+
+        const updatedImages = images.map(item => {
+          if (item.id !== img.id) return item;
+          return {
+            ...item,
+            regions: [...item.regions, newRegion]
+          };
+        });
+
+        setImages(updatedImages);
+        setSelectedRegionId(id);
+        
+        setMangas(prev => prev.map(m => {
+          if (m.id !== activeMangaId) return m;
+          return {
+            ...m,
+            volumes: m.volumes.map(v => {
+              if (v.id !== activeVolumeId) return v;
+              return {
+                ...v,
+                chapters: v.chapters.map(c => {
+                  if (c.id !== activeChapterId) return c;
+                  return {
+                    ...c,
+                    images: updatedImages
+                  };
+                })
+              };
+            })
+          };
+        }));
+        
+        Swal.fire({
+          icon: 'success',
+          title: 'حدود محاذاة ذكية!',
+          text: 'تم رصد واحتواء فقاعة الحوار تلقائياً بدلالة الشخبطة وتوسيط النص.',
+          timer: 1500,
+          showConfirmButton: false,
+          background: '#090615',
+          color: '#ffffff'
+        });
+      } else {
+        Swal.fire({
+          icon: 'warning',
+          title: 'تنبيه',
+          text: 'تعذر التعرف التلقائي على حدود الفقاعة من نقطة الشخبطة. يرجى تجربة الشخبطة بمنتصف الفقاعة تماماً.',
+          confirmButtonColor: '#7c3aed',
+          background: '#090615',
+          color: '#ffffff'
+        });
+      }
+    };
+    imageObj.src = img.originalDataUrl || img.dataUrl;
   };
 
   const handleZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1807,61 +2336,6 @@ export default function App() {
     if (selectedImageId === id) setSelectedImageId(null);
   };
 
-  const handleFormatLines = (shape: 'diamond' | 'square') => {
-    if (!selectedImageId || !selectedRegionId) return;
-    const img = images.find(img => img.id === selectedImageId);
-    if (!img) return;
-    const region = img.regions.find(r => r.id === selectedRegionId);
-    if (!region || !region.translatedText) return;
-
-    saveHistory(img.id);
-    const lines = region.translatedText.split('\n').map(l => l.replace(/ـ/g, '').trim());
-    if (lines.length < 2) return;
-
-    let formatted = [];
-    const n = lines.length;
-    
-    if (shape === 'diamond') {
-       const isEven = n % 2 === 0;
-       const mid1 = isEven ? (n / 2) - 1 : Math.floor(n / 2);
-       const mid2 = isEven ? n / 2 : Math.floor(n / 2);
-       
-       for (let i = 0; i < n; i++) {
-          const dist = Math.min(Math.abs(i - mid1), Math.abs(i - mid2));
-          let tatweelCount = (Math.floor(n/2) - dist) * 2;
-          let words = lines[i].split(' ');
-          if (tatweelCount > 0 && words.length > 0) {
-             const targetWordIdx = Math.floor(words.length / 2);
-             words[targetWordIdx] += 'ـ'.repeat(tatweelCount);
-          }
-          formatted.push(words.join(' '));
-       }
-    } else {
-       for (let i = 0; i < n; i++) {
-          formatted.push(lines[i]);
-       }
-    }
-
-    updateRegion(region.id, { translatedText: formatted.join('\n'), textAlign: 'center' });
-  };
-
-  const handleSplitBubble = () => {
-    if (!selectedImageId || !selectedRegionId) return;
-    const img = images.find(img => img.id === selectedImageId);
-    if (!img) return;
-    const region = img.regions.find(r => r.id === selectedRegionId);
-    if (!region) return;
-
-    saveHistory(img.id);
-    const region1 = { ...region, h: Math.max(10, region.h / 2), id: 'r_' + Date.now().toString() };
-    const region2 = { ...region, y: region.y + region.h / 2, h: Math.max(10, region.h / 2), id: 'r_' + (Date.now() + 1).toString() };
-
-    updateImage(img.id, {
-       regions: [...img.regions.filter(r => r.id !== region.id), region1, region2]
-    });
-    setSelectedRegionId(region1.id);
-  };
-
   const handleExportZip = async () => {
     if (images.length === 0) return;
     setExportProgress('Preparing images for highest quality export...');
@@ -1872,94 +2346,6 @@ export default function App() {
       alert("Failed to export ZIP");
     } finally {
       setExportProgress(null);
-    }
-  };
-
-  const handleExportPsd = async () => {
-    if (images.length === 0) return;
-    Swal.fire({
-      title: 'تصدير PSD',
-      text: 'جاري تجهيز وبناء ملف PSD للترجمة الحالية...',
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading()
-    });
-
-    try {
-      const imgToExport = images.find(img => img.id === selectedImageId) || images[0];
-      
-      const imgWrap = new Image();
-      imgWrap.crossOrigin = "Anonymous";
-      await new Promise((resolve, reject) => {
-        imgWrap.onload = resolve;
-        imgWrap.onerror = reject;
-        imgWrap.src = imgToExport.dataUrl;
-      });
-
-      const canvas = document.createElement('canvas');
-      canvas.width = imgWrap.width;
-      canvas.height = imgWrap.height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) ctx.drawImage(imgWrap, 0, 0);
-
-      const psd = {
-        width: imgWrap.width,
-        height: imgWrap.height,
-        children: [
-          {
-            name: 'Original Image',
-            canvas: canvas
-          }
-        ]
-      } as any;
-
-      // Add text/regions as layers
-      for (const region of imgToExport.regions) {
-        if (!region.translatedText) continue;
-        
-        const regionCanvas = document.createElement('canvas');
-        regionCanvas.width = imgWrap.width;
-        regionCanvas.height = imgWrap.height;
-        const rctx = regionCanvas.getContext('2d');
-        if (rctx) {
-           rctx.font = `${region.fontStyle} ${region.fontWeight} ${region.fontSize}px "${region.fontFamily}"`;
-           rctx.fillStyle = region.textColor;
-           rctx.textAlign = region.textAlign as CanvasTextAlign;
-           
-           const lines = region.translatedText.split('\n');
-           const lineHeight = region.fontSize * 1.5;
-           const totalHeight = lines.length * lineHeight;
-           let startY = region.y + (region.h - totalHeight) / 2 + region.fontSize;
-           let startX = region.x + region.w / 2;
-           if (region.textAlign === 'right') startX = region.x + region.w;
-           if (region.textAlign === 'left') startX = region.x;
-
-           lines.forEach((line) => {
-             rctx.fillText(line, startX, startY);
-             startY += lineHeight;
-           });
-        }
-        
-        psd.children.push({
-           name: `Text - ${region.translatedText.substring(0, 10).replace(/(\r\n|\n|\r)/gm, "")}`,
-           canvas: regionCanvas
-        });
-      }
-
-      const buffer = writePsd(psd);
-      const blob = new Blob([buffer], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `translated_${imgToExport.id}.psd`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      
-      Swal.close();
-    } catch (e) {
-      console.error(e);
-      Swal.fire('Error', 'فشل تصدير مستند الـ PSD', 'error');
     }
   };
 
@@ -2008,124 +2394,6 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  const handleImportFonts = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    
-    const loadFont = async (name: string, buffer: ArrayBuffer) => {
-      try {
-        const fontName = name.replace(/\.[^/.]+$/, "");
-        const font = new FontFace(fontName, buffer);
-        await font.load();
-        document.fonts.add(font);
-        setCustomFonts(prev => [...prev, { name: fontName, family: fontName }]);
-        return true;
-      } catch (err) {
-        console.error("Failed to load font", name, err);
-        return false;
-      }
-    };
-
-    let count = 0;
-    Swal.fire({
-      title: 'استيراد الخطوط',
-      text: 'جاري قراءة واستخراج ملفات الخطوط...',
-      allowOutsideClick: false,
-      didOpen: () => Swal.showLoading()
-    });
-
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.name.toLowerCase().endsWith('.zip')) {
-          const zip = new JSZip();
-          const contents = await zip.loadAsync(file);
-          for (const [filename, fileData] of Object.entries(contents.files)) {
-            if (!fileData.dir && (filename.toLowerCase().endsWith('.ttf') || filename.toLowerCase().endsWith('.otf') || filename.toLowerCase().endsWith('.woff'))) {
-              const buffer = await fileData.async('arraybuffer');
-              if (await loadFont(filename.split('/').pop() || filename, buffer)) count++;
-            }
-          }
-        } else if (file.name.toLowerCase().endsWith('.ttf') || file.name.toLowerCase().endsWith('.otf') || file.name.toLowerCase().endsWith('.woff')) {
-          const buffer = await file.arrayBuffer();
-          if (await loadFont(file.name, buffer)) count++;
-        }
-      }
-      
-      Swal.close();
-      if (count > 0) {
-        Swal.fire({
-          icon: 'success',
-          text: `تم استيراد ${count} خط(وط) بنجاح!`,
-          confirmButtonColor: '#7c3aed',
-          background: '#120b24',
-          color: '#f8fafc'
-        });
-      } else {
-         Swal.fire('Error', 'لم يتم العثور على خطوط في الملفات المحددة.', 'warning');
-      }
-    } catch(err) {
-       console.error("Failed to extract fonts", err);
-       Swal.fire('Error', 'حدث خطأ أثناء استخراج الخطوط.', 'error');
-    }
-    
-    if (importFontRef.current) {
-      importFontRef.current.value = '';
-    }
-  };
-
-  const handleImportAiScript = async () => {
-    const { value: jsonData } = await Swal.fire({
-      title: 'استيراد سكربت الذكاء الاصطناعي',
-      input: 'textarea',
-      inputLabel: 'قم بلصق محتوى JSON المستخرج من AI',
-      inputPlaceholder: '{"image_id": {"region_id": "Text"}}',
-      inputAttributes: {
-        'aria-label': 'Paste AI script JSON here'
-      },
-      showCancelButton: true,
-      confirmButtonText: 'استيراد',
-      cancelButtonText: 'إلغاء',
-      background: '#120b24',
-      color: '#f8fafc',
-      confirmButtonColor: '#7c3aed'
-    });
-
-    if (jsonData) {
-      try {
-        const parsed = JSON.parse(jsonData);
-        let updatedCount = 0;
-        setImages(prev => prev.map(img => {
-          // It could be purely sequential or keyed by ID. We try both.
-          const updatesForImg = parsed[img.id] || parsed[img.file.name] || Object.values(parsed)[0]; // Fallback if single image script
-          if (!updatesForImg) return img;
-          
-          let regionIdx = 0;
-          const newRegions = img.regions.map(r => {
-             const val = updatesForImg[r.id] || Object.values(updatesForImg)[regionIdx];
-             regionIdx++;
-             if (val && typeof val === 'string') {
-               updatedCount++;
-               return { ...r, translatedText: val };
-             }
-             return r;
-          });
-          return { ...img, regions: newRegions };
-        }));
-        
-        Swal.fire({
-          icon: 'success',
-          text: `تم استيراد ${updatedCount} ترجمة من السكربت بنجاح.`,
-          background: '#120b24',
-          color: '#f8fafc',
-          confirmButtonColor: '#7c3aed'
-        });
-      } catch(err) {
-        Swal.fire('Error', 'خطأ في قراءة نص JSON. يرجى التأكد من الصيغة الصحيحة.', 'error');
-      }
-    }
-  };
-
   const handleDownloadCurrentPage = async () => {
     const imgToDownload = selectedImage || images[0];
     if (!imgToDownload) return;
@@ -2166,8 +2434,8 @@ export default function App() {
               ← رجوع للمكتبة (Library)
             </button>
             <div className="flex items-center gap-3">
-              <img src="https://i.ibb.co/sJvJXWB2/1778522654517.png" alt="MET Logo" className="h-8 object-contain" />
-              <h1 className="font-display font-bold text-xl tracking-tight text-white leading-none hidden sm:block">MET</h1>
+              <TypeIcon className="text-purple-400" />
+              <h1 className="font-display font-bold text-xl tracking-tight text-white leading-none">MangaAI Studio</h1>
             </div>
             
             <div className="relative">
@@ -2422,20 +2690,20 @@ export default function App() {
               <Download size={16} /> ZIP
             </button>
             <button 
+              onClick={handleExportPsd}
+              disabled={images.length === 0}
+              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-purple-500/20"
+              title="تصدير حزمة PSD لبرنامج فوتوشوب (Photoshop Layout Layers Archive)"
+            >
+              <Download size={16} className="text-purple-200" /> PSD جديد
+            </button>
+            <button 
               onClick={handleExportPdf}
               disabled={images.length === 0}
               className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-emerald-500/20"
               title="Export as paginated PDF"
             >
               PDF
-            </button>
-            <button 
-              onClick={handleExportPsd}
-              disabled={images.length === 0}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-emerald-500/20"
-              title="Export current page as PSD"
-            >
-              PSD
             </button>
             <button 
               onClick={handleExportTranslation}
@@ -2448,18 +2716,10 @@ export default function App() {
             <button 
               onClick={() => importTranslationRef.current?.click()}
               disabled={images.length === 0}
-              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-[#111] disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-slate-600"
+              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-[#111] disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors"
               title="Import translated text document"
             >
               Import Docs
-            </button>
-            <button 
-              onClick={handleImportAiScript}
-              disabled={images.length === 0}
-              className="flex items-center gap-2 bg-purple-700 hover:bg-purple-600 disabled:bg-[#111] disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors"
-              title="Import JSON from external AI model (Claude/Gemini)"
-            >
-              استيراد سكربت الذكاء الاصطناعي
             </button>
             <input 
               type="file" 
@@ -2474,7 +2734,7 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
         {activeNavigationTab === 'settings' && (
           <div className="flex-1 flex flex-col p-8 bg-gradient-to-tr from-[#03010c] via-[#0b0718] to-black relative overflow-y-auto pb-32">
             <div className="absolute top-10 right-10 w-96 h-96 bg-purple-600/5 rounded-full blur-[140px] pointer-events-none" />
@@ -2603,18 +2863,38 @@ export default function App() {
         )}
 
         {activeNavigationTab === 'cloud' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-tr from-[#03010c] via-[#0b0718] to-black relative overflow-y-auto pb-32">
-            <Settings size={64} className="text-purple-500/50 animate-spin mb-6" />
-            <h1 className="text-3xl font-display font-bold text-white tracking-tight">قيد التطوير</h1>
-            <p className="text-sm text-slate-400 mt-2">ميزة التخزين السحابي قيد التطوير والمراجعة حالياً، يرجى الانتظار.</p>
+          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-tr from-[#03010c] via-[#0b0718] to-black relative">
+            <div className="absolute top-10 right-10 w-96 h-96 bg-purple-600/5 rounded-full blur-[140px] pointer-events-none" />
+            <div className="text-center flex flex-col items-center max-w-lg z-10 animate-fade-in">
+              <div className="relative mb-6">
+                {/* Spinning gear (ترس دوار) */}
+                <Settings size={72} className="animate-spin text-purple-500 duration-[4000ms] ease-linear shadow-[0_0_40px_rgba(168,85,247,0.3)] rounded-full p-2 bg-purple-950/20 border border-purple-500/20" />
+                <span className="absolute bottom-0 right-0 w-4.5 h-4.5 bg-purple-500 border border-black rounded-full animate-ping"></span>
+              </div>
+              <h1 className="text-3xl font-display font-semibold text-white tracking-tight mb-2">التخزين السحابي (Cloud Storage)</h1>
+              <p className="text-lg text-purple-300 font-sans mb-4">تحت العمل والتطوير المستمر حالياً...</p>
+              <div className="liquid-glass p-4 rounded-xl border border-purple-500/10 text-xs text-slate-400 font-sans leading-relaxed">
+                نقوم ببناء مخزن سحابي فائق السرعة والأمان لمزامنة قصص المانجا والمانهوا المترجمة لتمكين العمل التعاوني بين المبيضين والمترجمين في الوقت الفعلي.
+              </div>
+            </div>
           </div>
         )}
 
         {activeNavigationTab === 'scheduler' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-tr from-[#03010c] via-[#0b0718] to-black relative overflow-y-auto pb-32">
-            <Settings size={64} className="text-purple-500/50 animate-spin mb-6" />
-            <h1 className="text-3xl font-display font-bold text-white tracking-tight">قيد التطوير</h1>
-            <p className="text-sm text-slate-400 mt-2">نظام الجدولة قيد التطوير حالياً، يرجى العودة لاحقاً.</p>
+          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-tr from-[#03010c] via-[#0b0718] to-black relative">
+            <div className="absolute top-10 right-10 w-96 h-96 bg-purple-600/5 rounded-full blur-[140px] pointer-events-none" />
+            <div className="text-center flex flex-col items-center max-w-lg z-10 animate-fade-in">
+              <div className="relative mb-6">
+                {/* Spinning gear (ترس دوار) */}
+                <Settings size={72} className="animate-spin text-purple-500 duration-[4000ms] ease-linear shadow-[0_0_40px_rgba(168,85,247,0.3)] rounded-full p-2 bg-purple-950/20 border border-purple-500/20" />
+                <span className="absolute bottom-0 right-0 w-4.5 h-4.5 bg-purple-500 border border-black rounded-full animate-ping"></span>
+              </div>
+              <h1 className="text-3xl font-display font-semibold text-white tracking-tight mb-2">إدارة الجدولة (Scheduler)</h1>
+              <p className="text-lg text-purple-300 font-sans mb-4">تحت العمل والتطوير المستمر حالياً...</p>
+              <div className="liquid-glass p-4 rounded-xl border border-purple-500/10 text-xs text-slate-400 font-sans leading-relaxed">
+                أدوات أتمتة وجدولة دورات المسح والترجمة التلقائية للفصول الجديدة فور صدورها على منصات Webtoon الكورية الرسمية.
+              </div>
+            </div>
           </div>
         )}
 
@@ -2998,7 +3278,7 @@ export default function App() {
         {activeNavigationTab === 'library' && activeChapterId !== null && images.length > 0 && (
           <>
             {/* Left Sidebar (Thumbnails) */}
-            <aside className="w-full lg:w-64 h-32 lg:h-full border-b lg:border-b-0 lg:border-r border-purple-500/10 bg-black/20 flex flex-row lg:flex-col overflow-x-auto lg:overflow-y-auto shrink-0">
+            <aside className="w-64 border-r border-purple-500/10 bg-black/20 flex flex-col overflow-y-auto">
               {images.length === 0 && (
                 <div className="p-8 text-center text-slate-500 text-sm">
                   Upload a ZIP file to get started.
@@ -3007,7 +3287,7 @@ export default function App() {
           {images.map((img, i) => (
             <div
               key={img.id}
-              className={`relative flex flex-col gap-2 p-3 border-r lg:border-r-0 border-b-0 lg:border-b border-[#333]/50 text-left transition-colors cursor-pointer group w-28 shrink-0 lg:w-full ${selectedImageId === img.id ? 'bg-[#111]' : 'hover:bg-[#111]/50'}`}
+              className={`relative flex flex-col gap-2 p-3 border-b border-[#333]/50 text-left transition-colors cursor-pointer group ${selectedImageId === img.id ? 'bg-[#111]' : 'hover:bg-[#111]/50'}`}
               onClick={() => setSelectedImageId(img.id)}
             >
               <div className="relative aspect-[3/4] w-full bg-black rounded overflow-hidden flex">
@@ -3074,8 +3354,15 @@ export default function App() {
           {selectedImage ? (
             <div className="w-full h-full flex flex-col gap-4">
               <div className="flex justify-between items-center shrink-0">
-                <div className="flex items-center gap-3">
-                  <h2 className="font-medium text-slate-300">{selectedImage.filename}</h2>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h2 className="font-medium text-slate-300 text-sm max-w-[200px] truncate">{selectedImage.filename}</h2>
+                  <button
+                    onClick={() => setShowExternalAIModal(true)}
+                    className="flex items-center gap-1.5 bg-[#090615] hover:bg-[#130d2a] border border-purple-500/30 text-purple-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all shadow-[0_4px_12px_rgba(168,85,247,0.15)]"
+                    title="تحميل وطرح الترجمة عبر الذكاء الاصطناعي الخارجي المساعد"
+                  >
+                    <Sparkles size={13} className="text-purple-300 animate-bounce" /> كوكتيل الذكاء الاصطناعي الخارجي ✦
+                  </button>
                   
                   {/* Tool selection */}
                   <div className="flex bg-black rounded-lg p-1 border border-[#333] ml-4">
@@ -3134,6 +3421,13 @@ export default function App() {
                       title="اقتصاص جزء للترجمة (AI Crop & Translate Panel)"
                     >
                       <Scissors size={16} className="-rotate-90 text-indigo-400" />
+                    </button>
+                    <button 
+                      onClick={() => setActiveTool('scribble_bubble')}
+                      className={`p-1.5 rounded-md ${activeTool === 'scribble_bubble' ? 'bg-indigo-600 text-white' : 'text-purple-400 hover:text-purple-300 hover:bg-purple-950/20'}`}
+                      title="تحديد الفقاعة بالشخبطة الذكية (Scribble Bubble)"
+                    >
+                      <PenTool size={16} />
                     </button>
                     <div className="w-px bg-slate-700 mx-1 my-1"></div>
                     <button 
@@ -3321,6 +3615,7 @@ export default function App() {
                   manhwaMode={manhwaMode}
                   onProcessCropSection={handleProcessCropSection}
                   onQueueCropSection={handleQueueCropSection}
+                  onScribbleBubble={handleScribbleBubble}
                 />
               </Suspense>
 
@@ -3379,7 +3674,7 @@ export default function App() {
         </main>
 
         {/* Right Sidebar (Properties) */}
-        <aside className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-[#333] bg-black flex flex-col overflow-y-auto shrink-0">
+        <aside className="w-80 border-l border-[#333] bg-black flex flex-col overflow-y-auto">
           {selectedImage && selectedRegion ? (
             <div className="p-5 flex flex-col gap-6">
               <div>
@@ -3408,79 +3703,61 @@ export default function App() {
                   className="w-full h-24 bg-black border border-[#444] rounded-md p-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
                   dir="rtl"
                 />
-                
-                <div className="flex flex-col gap-2 mt-2">
-                   <div className="flex gap-2">
-                     <button
-                       onClick={() => handleFormatLines('diamond')}
-                       className="flex-1 bg-[#111] hover:bg-[#222] border border-[#444] text-slate-300 py-1.5 rounded-md text-[10px] font-medium transition-colors"
-                     >
-                       تنسيق بيضاوي (تمديد)
-                     </button>
-                     <button
-                       onClick={() => handleFormatLines('square')}
-                       className="flex-1 bg-[#111] hover:bg-[#222] border border-[#444] text-slate-300 py-1.5 rounded-md text-[10px] font-medium transition-colors"
-                     >
-                       تنسيق مربع
-                     </button>
-                   </div>
-                   <button
-                     onClick={handleSplitBubble}
-                     className="w-full flex items-center justify-center gap-1.5 bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-500/30 text-indigo-400 py-1.5 rounded-md text-xs font-semibold transition-colors"
-                     title="فصل الفقاعة أفقياً إلى فقاعتين"
-                   >
-                     <Scissors size={12} /> فصل التحديد لفقاعتين
-                   </button>
-                </div>
               </div>
 
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5 flex flex-col">
-                    <label className="text-xs font-medium text-slate-400">Font Family</label>
+                  <div className="space-y-1.5 col-span-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-semibold text-purple-300">الخط المستخدم (Font Family)</label>
+                      <button 
+                        onClick={() => fontInputRef.current?.click()}
+                        className="text-[10px] text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1 font-sans bg-purple-950/20 px-1.5 py-0.5 rounded border border-purple-800/30"
+                        title="رفع خط مخصص (.ttf, .otf, .zip)"
+                      >
+                        <Plus size={10} /> رفع خطوط مخصصة
+                      </button>
+                      <input 
+                        type="file" 
+                        ref={fontInputRef} 
+                        onChange={handleFontUpload} 
+                        accept=".zip,.ttf,.otf" 
+                        className="hidden" 
+                        multiple 
+                      />
+                    </div>
+                    
                     <select
                       value={selectedRegion.fontFamily}
                       onChange={(e) => updateRegion(selectedRegion.id, { fontFamily: e.target.value })}
-                      className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none"
+                      className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none font-sans"
                     >
-                      <option value="Cairo">Cairo</option>
-                      <option value="Tajawal">Tajawal</option>
-                      <option value="Marhey">Marhey</option>
-                      <option value="Aref Ruqaa">Aref Ruqaa</option>
-                      <option value="Almarai">Almarai</option>
-                      <option value="El Messiri">El Messiri</option>
-                      <option value="Amiri">Amiri</option>
-                      <option value="Changa">Changa</option>
-                      <option value="Harmattan">Harmattan</option>
-                      <option value="Katibeh">Katibeh</option>
-                      <option value="Lalezar">Lalezar</option>
-                      <option value="Lemonada">Lemonada</option>
-                      <option value="Mada">Mada</option>
-                      <option value="Markazi Text">Markazi Text</option>
-                      <option value="Reem Kufi">Reem Kufi</option>
-                      <option value="Rakkas">Rakkas</option>
-                      {customFonts.length > 0 && <optgroup label="Custom Fonts">
-                        {customFonts.map(font => (
-                          <option key={font.name} value={font.family} style={{ fontFamily: font.family }}>{font.name}</option>
-                        ))}
-                      </optgroup>}
+                      {customFonts.map(font => (
+                        <option key={font} value={font} style={{ fontFamily: font }}>{font.replace('MET-', '')} (مرفوع) ✦</option>
+                      ))}
+                      {["Cairo", "Tajawal", "Marhey", "Aref Ruqaa", "Almarai", "El Messiri", "Amiri", "Changa", "Harmattan", "Katibeh", "Lalezar", "Lemonada", "Mada", "Markazi Text", "Reem Kufi", "Rakkas"].map(font => (
+                        <option key={font} value={font} style={{ fontFamily: font }}>{font}</option>
+                      ))}
                     </select>
-                    
-                    <button 
-                      onClick={() => importFontRef.current?.click()}
-                      className="mt-1 w-full flex items-center justify-center gap-1.5 bg-purple-900/40 hover:bg-purple-800/60 border border-purple-500/30 text-purple-200 py-1.5 rounded-md text-xs font-medium transition-colors"
-                      title="Upload ZIP, TTF, OTF fonts"
-                    >
-                      <Upload size={12} /> رفع خطوط مخصصة
-                    </button>
-                    <input 
-                      type="file" 
-                      ref={importFontRef} 
-                      onChange={handleImportFonts} 
-                      accept=".zip,.ttf,.otf,.woff" 
-                      className="hidden" 
-                      multiple 
-                    />
+
+                    {/* Highly Elegant Visual Font Live Preview List */}
+                    <div className="bg-[#0b0718]/80 border border-purple-900/30 rounded-xl p-2.5 mt-2 max-h-40 overflow-y-auto space-y-1.5 scrollbar-thin">
+                      <p className="text-[10px] text-slate-400 font-sans tracking-tight mb-2 border-b border-purple-900/20 pb-1 flex justify-between">
+                        <span>قائمة المعاينة المباشرة للخطوط</span>
+                        <span className="text-purple-400">اسم الخط بمظهره ✦</span>
+                      </p>
+                      {customFonts.concat(["Cairo", "Tajawal", "Marhey", "Aref Ruqaa", "Almarai", "El Messiri", "Amiri", "Changa", "Harmattan", "Katibeh", "Lalezar", "Lemonada", "Mada", "Reem Kufi", "Rakkas"]).map((font) => (
+                        <button
+                          key={font}
+                          onClick={() => updateRegion(selectedRegion.id, { fontFamily: font })}
+                          style={{ fontFamily: font }}
+                          className={`w-full text-right hover:bg-purple-950/40 p-2 rounded-lg text-xs transition-all flex justify-between items-center ${selectedRegion.fontFamily === font ? 'bg-purple-950/60 text-purple-300 border border-purple-700/50' : 'text-slate-300'}`}
+                        >
+                          <span className="text-[9px] text-slate-500 font-mono select-none">{font.replace('MET-', '')}</span>
+                          <span className="text-sm tracking-wide truncate max-w-[70%] text-right font-semibold">تصفيف: مانجا {font.replace('MET-', '')}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-slate-400">Font Size</label>
@@ -3767,13 +4044,45 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-[#333] space-y-2 mt-4">
-                   <button 
-                     className="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded transition-colors flex items-center justify-center gap-2 font-medium"
-                     onClick={() => handleSmartBubbleFill(selectedImage.id, selectedRegion)}
-                   >
-                     <Wand2 size={14} /> Smart Detect Bubble Bounds
-                   </button>
+                <div className="pt-4 border-t border-[#333] space-y-3 mt-4">
+                  <div className="flex gap-2">
+                    <button 
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded transition-colors flex items-center justify-center gap-2 font-medium"
+                      onClick={() => handleSmartBubbleFill(selectedImage.id, selectedRegion)}
+                    >
+                      <Wand2 size={14} /> Smart Detect
+                    </button>
+                    <button 
+                      className="bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-800/50 text-xs py-2 px-3 rounded transition-colors flex items-center justify-center gap-1.5"
+                      onClick={handleSplitBubble}
+                      title="فصل هندسي لفقاعتين دائرية مدمجة"
+                    >
+                      <Scissors size={13} /> فصل الفقاعة
+                    </button>
+                  </div>
+
+                  {/* Kashida layouts */}
+                  <div className="bg-purple-950/10 p-2 text-right rounded-lg border border-purple-900/20 space-y-1.5">
+                    <label className="text-[10px] font-semibold text-purple-300 flex items-center justify-between">
+                      <span>كشيدة تمديد السطور العربية (Kashida)</span>
+                      <span>✦</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => applyKashidaHarmony('oval')}
+                        className="flex-1 bg-purple-950/30 hover:bg-purple-900/55 border border-purple-800/40 text-[9px] py-1 px-1.5 rounded transition-all text-slate-200 font-sans"
+                        title="تمديد الخط للملاءمة الدائرية بالمنتصف"
+                      >
+                        كشيدة دائرية (ـ)
+                      </button>
+                      <button 
+                        onClick={() => applyKashidaHarmony('rectangular')}
+                        className="flex-1 bg-black hover:bg-[#111] border border-[#333] text-[9px] py-1 px-1.5 rounded transition-all text-slate-400 font-sans"
+                      >
+                        مستطيل عادي
+                      </button>
+                    </div>
+                  </div>
                    <button 
                      className="w-full bg-[#111] hover:bg-[#222] text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
                      onClick={() => {
@@ -4080,7 +4389,7 @@ export default function App() {
                   setShowCreateProjectModal(false);
                   cleanZipInputRef.current?.click();
                 }}
-                className="p-5 rounded-2xl bg-[#080512]/60 hover:bg-purple-950/20 border border-purple-500/15 hover:border-purple-500/45 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
+                className="p-5 rounded-2xl bg-[#080512]/60 hover:bg-purple-950/20 border border-purple-500/15 hover:border-purple-500/40 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
               >
                 <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400">
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -4135,7 +4444,7 @@ export default function App() {
               </button>
             </div>
             
-            <div className="border-t border-purple-500/10 pt-4 flex items-center justify-between gap-4 flex-col sm:flex-row mt-2">
+            <div className="border-t border-purple-500/10 pt-4 flex items-center justify-between gap-4 flex-col sm:flex-row mt-2 text-left animate-fade-in">
               <span className="text-[11px] text-slate-400 font-mono">💡 No chapters offline? Try the interactive playground.</span>
               <button 
                 onClick={() => {
@@ -4220,7 +4529,7 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setNewSeriesType('manga')}
-                    className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${newSeriesType === 'manga' ? 'bg-amber-600/35 border-amber-500 text-amber-200' : 'bg-[#080512]/60 border-purple-500/10 text-slate-400'}`}
+                    className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${newSeriesType === 'manga' ? 'bg-amber-600/35 border-amber-500 text-amber-200' : 'bg-[#080512]/60 border-purple-500/10 text-slate-404'}`}
                   >
                     Manga (مانجا صفراء)
                   </button>
@@ -4258,6 +4567,124 @@ export default function App() {
                 className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-2.5 px-7 rounded-xl text-xs transition-all shadow-lg shadow-purple-950/45 cursor-pointer"
               >
                 ✓ إنشاء وإضافة السلسلة
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stunning External AI Prompt & Paste Modal */}
+      {showExternalAIModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 backdrop-blur-md animate-fade-in text-right" dir="rtl">
+          <div className="liquid-glass p-8 rounded-3xl max-w-2xl w-full mx-4 shadow-[0_20px_50px_rgba(168,85,247,0.35)] border border-purple-500/25 relative text-slate-200 flex flex-col gap-6 max-h-[90vh] overflow-y-auto">
+            <button 
+              onClick={() => setShowExternalAIModal(false)}
+              className="absolute top-4 left-4 text-slate-400 hover:text-white p-2 rounded-full hover:bg-white/5 transition-all text-sm font-bold"
+            >
+              ✕
+            </button>
+            
+            <div className="flex flex-col gap-1.5 text-right border-b border-purple-500/10 pb-4">
+              <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2 justify-start">
+                <span className="text-purple-400">✧</span> معالج الترجمة المساعد عبر الذكاء الاصطناعي الخارجي
+              </h2>
+              <p className="text-xs text-slate-400">
+                إذا لم تكن تمتلك مفاتيح API خاصة داخل التطبيق، يمكنك تزويد أي نموذج ذكاء اصطناعي خارجي (مثل Claude 3.5 Sonnet أو Gemini 1.5 Pro) بصورة الصفحة والطلب التفصيلي أدناه ليعود لك بملف الترجمة وتطبيقه بلحظة واحدة!
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Step 1 */}
+              <div className="space-y-2 border border-purple-500/10 p-4 rounded-2xl bg-purple-950/5">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center">١</span>
+                  الخطوة الأولى: نسخ باقة الطلب (AI Request Cocktail)
+                </h3>
+                <p className="text-xs text-slate-400">
+                  انسخ المطالبة التفصيلية الجاهزة وأرسلها للـ AI الخارجي مع صورة الصفحة المفتوحة حالياً للتبييض بالذكاء الاصطناعي:
+                </p>
+                <div className="relative">
+                  <textarea
+                    readOnly
+                    value={`You are a professional manga & manhwa typesetting and translation assistant. We need you to segment the speech bubbles of the attached page image and translate them into natural, high-quality, typeset Arabic.
+Please locate speech balloons and output exactly in this JSON format ONLY (No other conversation or thoughts):
+[
+  {
+    "xmin": 150,
+    "ymin": 250,
+    "xmax": 320,
+    "ymax": 380,
+    "type": "bubble",
+    "originalText": "Original English balloon text",
+    "translatedText": "الترجمة العربية البديلة والمحاذاة للوسط"
+  }
+]`}
+                    className="w-full h-28 bg-black/60 border border-[#444] rounded-xl p-3 text-xs text-slate-350 font-mono resize-none text-left"
+                    dir="ltr"
+                  />
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(`You are a professional manga & manhwa typesetting and translation assistant. We need you to segment the speech bubbles of the attached page image and translate them into natural, high-quality, typeset Arabic.
+Please locate speech balloons and output exactly in this JSON format ONLY (No other conversation or thoughts):
+[
+  {
+    "xmin": 150,
+    "ymin": 250,
+    "xmax": 320,
+    "ymax": 380,
+    "type": "bubble",
+    "originalText": "Original English balloon text",
+    "translatedText": "الترجمة العربية البديلة والمحاذاة للوسط"
+  }
+]`);
+                      Swal.fire({
+                        icon: 'success',
+                        title: 'تم نسخ برومبت الكوكتيل!',
+                        text: 'يمكنك الآن لصقه وتزويد كلاود أو جيمناي به بالخارج.',
+                        timer: 1500,
+                        showConfirmButton: false,
+                        background: '#090615',
+                        color: '#ffffff'
+                      });
+                    }}
+                    className="absolute bottom-3 left-3 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg transition-all"
+                  >
+                    نسخ الطلب (Copy)
+                  </button>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="space-y-2 border border-purple-500/10 p-4 rounded-2xl bg-purple-950/5">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center">٢</span>
+                  الخطوة الثانية: لصق الاستجابة المسترجعة (Pasted Response JSON)
+                </h3>
+                <p className="text-xs text-slate-400">
+                  الصق الاستجابة التي صاغها لك الذكاء الاصطناعي الخارجي وسنقوم بتوزيع الترجمة على إحداثيات الصفحة فوراً:
+                </p>
+                <textarea
+                  placeholder="[ ... مصفوفة الـ JSON المسترجعة ... ]"
+                  value={externalAIPasteData}
+                  onChange={(e) => setExternalAIPasteData(e.target.value)}
+                  className="w-full h-32 bg-black border border-purple-500/20 focus:border-purple-400 rounded-xl p-3 text-xs text-slate-205 outline-none resize-none font-mono text-left"
+                  dir="ltr"
+                />
+              </div>
+            </div>
+
+            <div className="border-t border-purple-500/10 pt-4 flex justify-end gap-3 mt-2">
+              <button
+                onClick={() => setShowExternalAIModal(false)}
+                className="bg-black/60 hover:bg-black border border-purple-500/15 hover:border-purple-500/30 text-slate-350 font-bold py-2.5 px-6 rounded-xl text-xs transition-all cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                onClick={handleApplyExternalAICocktail}
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-2.5 px-7 rounded-xl text-xs transition-all shadow-lg shadow-purple-950/45 cursor-pointer"
+              >
+                ✓ تطبيق الترجمة الذكي على الصفحة
               </button>
             </div>
           </div>

@@ -1,6 +1,8 @@
 {
-  "name": "MangaAI Translator",
-  "description": "An AI-powered manga translator that reads ZIP files of manga, detects text and SFX, cleans them, and overlays Arabic translations using Gemini 1.5 Pro.",
+  "name": "MET",
+  "description": "MET (Manga Editing Tool) - An advanced web tool for cleaning, smart bubble detection, translation alignment with custom font files (ZIP/TTF/OTF), and multiple exporting formats (including high-fidelity PSD export).",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

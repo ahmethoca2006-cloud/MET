@@ -12,7 +12,7 @@ interface ImageEditorProps {
   onSelectRegion: (id: string | null) => void;
   onUpdateRegion: (id: string, updates: Partial<Region>) => void;
   stageRef: React.RefObject<any>;
-  activeTool: 'select' | 'draw' | 'erase' | 'fill_poly' | 'bg_erase' | 'smart_sfx' | 'gen_erase' | 'crop';
+  activeTool: 'select' | 'draw' | 'erase' | 'fill_poly' | 'bg_erase' | 'smart_sfx' | 'gen_erase' | 'crop' | 'scribble_bubble';
   brushSize: number;
   brushColor: string;
   zoom: number;
@@ -25,6 +25,7 @@ interface ImageEditorProps {
   manhwaMode?: boolean;
   onProcessCropSection?: (rect: { x: number, y: number, w: number, h: number }) => void;
   onQueueCropSection?: (rect: { x: number, y: number, w: number, h: number }) => void;
+  onScribbleBubble?: (x: number, y: number) => void;
 }
 
 const AIInpaintPatch = ({ base64, rect }: { base64: string, rect: {x: number, y: number, w: number, h: number} }) => {
@@ -104,7 +105,8 @@ export function ImageEditor({
   showBubblePreviews = false,
   manhwaMode = false,
   onProcessCropSection,
-  onQueueCropSection
+  onQueueCropSection,
+  onScribbleBubble
 }: ImageEditorProps) {
   const bgToUse = showOriginal && image.originalDataUrl ? image.originalDataUrl : image.dataUrl;
   const [img] = useImage(bgToUse);
@@ -191,6 +193,7 @@ export function ImageEditor({
     else if (activeTool === 'erase') initialColor = '#ffffff';
     else if (activeTool === 'bg_erase') initialColor = '#000000';
     else if (activeTool === 'gen_erase') initialColor = 'rgba(236, 72, 153, 0.5)'; // Pink translucent for masking
+    else if (activeTool === 'scribble_bubble') initialColor = '#38bdf8'; // Sky blue neon for scribble
     else if (activeTool === 'smart_sfx') initialColor = getPixelColor(x, y);
 
     if (activeTool === 'fill_poly') {
@@ -331,6 +334,22 @@ export function ImageEditor({
         }
       }
 
+      if (activeTool === 'scribble_bubble') {
+        if (finalStroke.points.length >= 2 && onScribbleBubble) {
+          let sumX = 0, sumY = 0, count = 0;
+          for (let i = 0; i < finalStroke.points.length; i += 2) {
+            sumX += finalStroke.points[i];
+            sumY += finalStroke.points[i+1];
+            count++;
+          }
+          const seedX = sumX / count;
+          const seedY = sumY / count;
+          onScribbleBubble(seedX, seedY);
+        }
+        setCurrentStroke(null);
+        return;
+      }
+
       onAddStroke(finalStroke);
       setCurrentStroke(null);
     }
@@ -425,14 +444,15 @@ export function ImageEditor({
 
                   const contour = (region as any).bubbleContour;
                   if (region.type === 'bubble' && contour && contour.length > 0) {
+                    const isSelected = region.id === selectedRegionId;
                     return (
                       <Line
                         key={region.id}
                         points={contour}
                         closed={true}
-                        fill={region.bgColor}
-                        stroke={region.bgColor}
-                        strokeWidth={1.5}
+                        fill={isSelected ? 'rgba(59, 130, 246, 0.4)' : region.bgColor}
+                        stroke={isSelected ? '#3b82f6' : region.bgColor}
+                        strokeWidth={isSelected ? 3.0 : 1.5}
                         lineJoin="round"
                         lineCap="round"
                         opacity={region.opacity ?? 1}
