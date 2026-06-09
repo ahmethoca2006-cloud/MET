@@ -11,6 +11,8 @@ import 'sweetalert2/dist/sweetalert2.min.css';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { CloudStorage } from './components/CloudStorage';
+import { TopBar } from './components/TopBar';
+import { FloatingMusicPlayer } from './components/FloatingMusicPlayer';
 
 const ImageEditor = React.lazy(() => import('./components/ImageEditor').then(m => ({ default: m.ImageEditor })));
 
@@ -2410,7 +2412,10 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-tr from-black via-[#0d091a] to-black text-slate-200 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-gradient-to-tr from-[#02000a] via-[#0d091a] to-[#0a0514] dynamic-bg text-slate-200 overflow-hidden font-sans">
+      <TopBar />
+      <FloatingMusicPlayer />
+      
       {exportProgress && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm">
           <div className="liquid-glass rounded-3xl p-8 flex flex-col items-center gap-4 max-w-md w-full shadow-[0_20px_50px_rgba(168,85,247,0.35)] border border-purple-500/35 animate-fade-in">
@@ -3105,6 +3110,22 @@ export default function App() {
                               />
                             )}
 
+                            {/* Vol Download top-left */}
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const allImages = vol.chapters.flatMap(c => c.images);
+                                if (allImages.length === 0) return Swal.fire('فارغ', 'لا توجد صور في هذا المجلد لتحميلها', 'info');
+                                Swal.fire({ title: 'جاري الضغط...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                await downloadProcessedZip(allImages, `${vol.name}.zip`);
+                                Swal.close();
+                              }}
+                              className="absolute top-4 left-4 bg-purple-950/80 hover:bg-purple-700 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-purple-500/20"
+                              title="تحميل كل فصول المجلد كـ ZIP"
+                            >
+                              <Download size={13} />
+                            </button>
+
                             {/* Vol delete top-right */}
                             <button
                               onClick={(e) => {
@@ -3189,6 +3210,21 @@ export default function App() {
                                 </div>
                               )}
 
+                              {/* Chapter Download top-left */}
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (chap.images.length === 0) return Swal.fire('فارغ', 'لا توجد صور في هذا الشابتر لتحميلها', 'info');
+                                  Swal.fire({ title: 'جاري الضغط...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                  await downloadProcessedZip(chap.images, `${chap.name}.zip`);
+                                  Swal.close();
+                                }}
+                                className="absolute top-4 left-4 bg-purple-950/85 hover:bg-purple-750 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-purple-500/20"
+                                title="تحميل كل صور الشابتر كـ ZIP"
+                              >
+                                <Download size={13} />
+                              </button>
+
                               {/* Chapter Delete top-right */}
                               <button
                                 onClick={(e) => {
@@ -3265,7 +3301,7 @@ export default function App() {
         {activeNavigationTab === 'library' && activeChapterId !== null && images.length > 0 && (
           <>
             {/* Left Sidebar (Thumbnails) */}
-            <aside className="w-64 border-r border-purple-500/10 bg-black/20 flex flex-col overflow-y-auto">
+            <aside className="w-64 border-r border-purple-500/10 bg-black/30 backdrop-blur-md flex flex-col overflow-y-auto glass-noise">
               {images.length === 0 && (
                 <div className="p-8 text-center text-slate-500 text-sm">
                   Upload a ZIP file to get started.

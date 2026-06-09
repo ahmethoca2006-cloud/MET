@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Cloud, Upload as UploadIcon, File, Link2, RefreshCw, Key, MessageSquare, Download, CheckCircle, Smartphone, Lock, HardDrive, HelpCircle } from 'lucide-react';
+import { Settings, Cloud, Upload as UploadIcon, File, Link2, RefreshCw, Key, MessageSquare, Download, CheckCircle, Smartphone, Lock, HardDrive, HelpCircle, User, Plus } from 'lucide-react';
 import { Api, TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import Swal from 'sweetalert2';
@@ -32,6 +32,7 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadName, setUploadName] = useState('');
   const [uploadStatus, setUploadStatus] = useState('');
+  const [uploadDesc, setUploadDesc] = useState('');
   const [uploadCover, setUploadCover] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -199,10 +200,13 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
   const sendChatMessage = async () => {
     if (!client || !chatId || !chatMessage.trim()) return;
     try {
+      const p = JSON.parse(localStorage.getItem('team_profile') || '{}');
+      const senderName = p.name || 'عضو مجهول';
+      
       const payload = {
         type: 'chat',
         text: chatMessage,
-        sender: 'عضو الفريق',
+        sender: senderName,
         timestamp: Date.now()
       };
       await client.sendMessage(chatId, { message: JSON.stringify(payload) });
@@ -230,17 +234,25 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
     setUploadProgress(0);
     
     try {
+      // 1) Read the real browser File into a Node Buffer
+      const arrayBuffer = await uploadFile.arrayBuffer();
+      const fileBuffer: any = Buffer.from(arrayBuffer);
+      fileBuffer.name = uploadFile.name; // Polyfill name property so Telegram parses it
+
       const metadata = {
         type: "manga_project",
         name: uploadName || uploadFile.name,
         status: uploadStatus || "New",
-        cover: uploadCover || "",
+        description: uploadDesc || "", // Custom description
+        cover: uploadCover || "",      // Base64 cover
         date: new Date().toISOString()
       };
 
       await client.sendFile(chatId, {
-        file: uploadFile as any, // Vite polyfills File type to browser File but node File might differ
+        file: fileBuffer,
         caption: JSON.stringify(metadata, null, 2),
+        forceDocument: true,
+        fileSize: uploadFile.size,
         progressCallback: (progress) => {
           // progress is a float between 0 and 1
           const percent = Math.round(progress * 100);
@@ -416,32 +428,60 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                 )}
               </div>
 
-              <div className="liquid-glass p-6 rounded-2xl border border-blue-500/20 shadow-[0_8px_30px_rgb(0,0,0,0.4)] backdrop-blur-xl opacity-80 hover:opacity-100 transition-opacity">
+              <div className="liquid-glass p-6 rounded-2xl border border-blue-500/20 shadow-[0_8px_30px_rgb(0,0,0,0.4)] backdrop-blur-xl transition-opacity">
                  <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                  <HardDrive className="text-blue-400" /> ربط Google Drive
+                  <User className="text-blue-400" /> الملف الشخصي للفريق
                 </h2>
                 <div className="space-y-4">
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    للتخزين على المساحة السحابية الخاصة بـ Google Drive، يرجى إدخال Access Token المستخرج من حسابك، حيث لا يتم إرسال أي بيانات لخوادمنا وتتم كل العمليات عبر المتصفح.
+                    قم بإعداد اسمك وصورتك الشخصية التي ستظهر لباقي أعضاء الفريق عند رفع الملفات أو النقاش في الشات. لا توجد خوادم خارجية، كل شيء مفلتر عبر رسائل تيليجرام.
                   </p>
                   
                   <div className="space-y-1">
-                    <label className="text-xs text-blue-300 font-semibold">Google Auth Token (Access Token)</label>
+                    <label className="text-xs text-blue-300 font-semibold">اسم المستخدم</label>
                     <input 
-                      type="password" 
-                      placeholder="ya29.a0A..."
-                      className="w-full bg-black/40 border border-blue-500/30 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-blue-400 font-mono" dir="ltr"
+                      type="text" 
+                      placeholder="مثال: أحمد (مبيض)"
+                      className="w-full bg-black/40 border border-blue-500/30 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-blue-400"
+                      onChange={(e) => {
+                        try {
+                           const p = JSON.parse(localStorage.getItem('team_profile') || '{}');
+                           p.name = e.target.value;
+                           localStorage.setItem('team_profile', JSON.stringify(p));
+                        } catch {}
+                      }}
+                      defaultValue={() => {
+                        try { return JSON.parse(localStorage.getItem('team_profile') || '{}').name || ''; } catch { return ''; }
+                      }}
                     />
                   </div>
-                  <button 
-                    onClick={() => Swal.fire('تحذير', 'ميزة رفع ملفات ZIP لجوجل درايف ستتوفر في التحديث القادم بمجرد تفعيل OAuth2 بالكامل.', 'info')}
-                    className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2"
-                  >
-                    <UploadIcon size={16} /> رفع مؤقت إلى Google Drive
-                  </button>
-                  <p className="text-[10px] text-blue-300 bg-blue-500/10 border border-blue-500/20 p-2 rounded-lg text-center font-mono">
-                    سيتم تفعيل المصادقة التلقائية (OAuth Firebase) في الإصدار القادم.
-                  </p>
+                  
+                  <div className="space-y-1">
+                    <label className="text-xs text-blue-300 font-semibold block">الصورة الشخصية (محلياً)</label>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      id="profile-upload"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            try {
+                               const p = JSON.parse(localStorage.getItem('team_profile') || '{}');
+                               p.avatar = ev.target?.result;
+                               localStorage.setItem('team_profile', JSON.stringify(p));
+                               Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, icon: 'success', title: 'تم حفظ الصورة الشخصية', background: '#090615', color: '#fff'});
+                            } catch {}
+                          };
+                          reader.readAsDataURL(e.target.files[0]);
+                        }
+                      }}
+                    />
+                    <label htmlFor="profile-upload" className="w-full bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 text-blue-300 cursor-pointer font-bold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2">
+                      <UploadIcon size={16} /> اختيار صورة من الجهاز
+                    </label>
+                  </div>
                 </div>
               </div>
               
@@ -490,13 +530,34 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                       <option value="قيد الترجمة">قيد الترجمة (Translating)</option>
                       <option value="مكتمل (للنشر)">مكتمل (Ready to Publish)</option>
                     </select>
+
                     <input 
                       type="text" 
-                      placeholder="رابط صورة الغلاف (اختياري URL)"
-                      value={uploadCover} onChange={e => setUploadCover(e.target.value)}
+                      placeholder="وصف مخصص للعمل أو ملاحظات للمترجمين..."
+                      value={uploadDesc} onChange={e => setUploadDesc(e.target.value)}
                       className="w-full bg-black/40 border border-purple-500/30 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-purple-400"
-                      dir="ltr"
                     />
+
+                    <div className="flex gap-2">
+                       <input 
+                         type="file" 
+                         accept="image/*"
+                         id="cover-upload-local"
+                         className="hidden"
+                         onChange={(e) => {
+                           if (e.target.files && e.target.files[0]) {
+                             const reader = new FileReader();
+                             reader.onload = (ev) => {
+                               if (ev.target?.result) setUploadCover(ev.target.result as string);
+                             };
+                             reader.readAsDataURL(e.target.files[0]);
+                           }
+                         }}
+                       />
+                       <label htmlFor="cover-upload-local" className="w-full bg-purple-900/40 hover:bg-purple-900/60 border border-purple-500/30 text-purple-300 cursor-pointer font-bold py-2.5 rounded-xl transition-all text-xs flex items-center justify-center gap-2">
+                         <UploadIcon size={14} /> {uploadCover ? 'تم اختيار صورة الغلاف ✓' : 'اختيار صورة غلاف محلية'}
+                       </label>
+                    </div>
                   </div>
                   <div 
                     onClick={() => fileInputRef.current?.click()}
