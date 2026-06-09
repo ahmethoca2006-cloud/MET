@@ -33,9 +33,9 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
   const [uploadName, setUploadName] = useState('');
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadDesc, setUploadDesc] = useState('');
-  const [uploadCover, setUploadCover] = useState('');
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -161,6 +161,26 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
       }).filter(Boolean);
       
       setFiles(cloudFiles);
+
+      // Async fetch covers
+      cloudFiles.forEach(async (f: any) => {
+        if (f.coverMsgId && !coverUrls[f.id]) {
+          try {
+            const coverMsgs = await client.getMessages(chatId, { ids: [f.coverMsgId] });
+            if (coverMsgs.length > 0 && coverMsgs[0]) {
+               const buffer = await client.downloadMedia(coverMsgs[0]);
+               if (buffer) {
+                 const blob = new Blob([buffer], { type: 'image/jpeg' });
+                 const url = URL.createObjectURL(blob);
+                 setCoverUrls(prev => ({ ...prev, [f.id]: url }));
+               }
+            }
+          } catch (e) {
+            console.error("Failed to load cover", e);
+          }
+        }
+      });
+      
     } catch (err) {
       console.error(err);
       Swal.fire('خطأ', 'تأكد من صحة معرف القناة (Chat ID)', 'error');
@@ -246,14 +266,44 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
       let p = { name: '', avatar: '' };
       try { p = JSON.parse(localStorage.getItem('team_profile') || '{}'); } catch {}
 
+      // Innovative solution: No Base64. Extract cover from zip and upload it as a photo first!
+      let coverMsgId = 0;
+      if (uploadFile.name.toLowerCase().endsWith('.zip')) {
+        try {
+          const jszip = new (await import('jszip')).default();
+          const zip = await jszip.loadAsync(uploadFile);
+          const imageFiles = Object.keys(zip.files).filter(name => !zip.files[name].dir && name.match(/\.(png|jpe?g|webp)$/i));
+          
+          if (imageFiles.length > 0) {
+            // Sort to get the first one consistently
+            imageFiles.sort((a, b) => a.localeCompare(b, undefined, {numeric: true}));
+            const firstImg = zip.files[imageFiles[0]];
+            const imgBuffer = await firstImg.async('nodebuffer');
+            (imgBuffer as any).name = 'cover.jpg'; // fake name
+            
+            // Upload the cover as a simple photo
+            const coverMsg = await client.sendFile(chatId, {
+              file: imgBuffer,
+              forceDocument: false,
+              caption: `[COVER_IMAGE_FOR_PROJECT]`
+            });
+            if (coverMsg && coverMsg.id) {
+              coverMsgId = coverMsg.id;
+            }
+          }
+        } catch (err) {
+          console.error("Cover extraction failed", err);
+        }
+      }
+
       const metadata = {
         type: "manga_project",
         name: uploadName || uploadFile.name,
         status: uploadStatus || "New",
-        description: uploadDesc || "", // Custom description
-        cover: uploadCover || "",      // Base64 cover
-        sender: p.name || 'مستخدم مجهول',
+        description: uploadDesc || "", 
+        sender: p.name || 'Anonymous User',
         avatar: p.avatar || '',
+        coverMsgId: coverMsgId,
         date: new Date().toISOString()
       };
 
@@ -459,9 +509,9 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                            localStorage.setItem('team_profile', JSON.stringify(p));
                         } catch {}
                       }}
-                      defaultValue={() => {
+                      defaultValue={(() => {
                         try { return JSON.parse(localStorage.getItem('team_profile') || '{}').name || ''; } catch { return ''; }
-                      }}
+                      })()}
                     />
                   </div>
                   
@@ -534,39 +584,18 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                       value={uploadStatus} onChange={e => setUploadStatus(e.target.value)}
                       className="w-full bg-black/40 border border-purple-500/30 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-purple-400"
                     >
-                      <option value="">حدد حالة الترجمة/العمل...</option>
-                      <option value="قيد التبييض">قيد التبييض (Cleaning)</option>
-                      <option value="قيد الترجمة">قيد الترجمة (Translating)</option>
-                      <option value="مكتمل (للنشر)">مكتمل (Ready to Publish)</option>
+                      <option value="">Status (Optional)</option>
+                      <option value="Cleaning">Cleaning</option>
+                      <option value="Translating">Translating</option>
+                      <option value="Ready to Publish">Ready</option>
                     </select>
 
                     <input 
                       type="text" 
-                      placeholder="وصف مخصص للعمل أو ملاحظات للمترجمين..."
+                      placeholder="Notes for translators or description..."
                       value={uploadDesc} onChange={e => setUploadDesc(e.target.value)}
                       className="w-full bg-black/40 border border-purple-500/30 rounded-xl px-4 py-2.5 text-white text-sm outline-none focus:border-purple-400"
                     />
-
-                    <div className="flex gap-2">
-                       <input 
-                         type="file" 
-                         accept="image/*"
-                         id="cover-upload-local"
-                         className="hidden"
-                         onChange={(e) => {
-                           if (e.target.files && e.target.files[0]) {
-                             const reader = new FileReader();
-                             reader.onload = (ev) => {
-                               if (ev.target?.result) setUploadCover(ev.target.result as string);
-                             };
-                             reader.readAsDataURL(e.target.files[0]);
-                           }
-                         }}
-                       />
-                       <label htmlFor="cover-upload-local" className="w-full bg-purple-900/40 hover:bg-purple-900/60 border border-purple-500/30 text-purple-300 cursor-pointer font-bold py-2.5 rounded-xl transition-all text-xs flex items-center justify-center gap-2">
-                         <UploadIcon size={14} /> {uploadCover ? 'تم اختيار صورة الغلاف ✓' : 'اختيار صورة غلاف محلية'}
-                       </label>
-                    </div>
                   </div>
                   <div 
                     onClick={() => fileInputRef.current?.click()}
@@ -588,9 +617,7 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                               const zip = await jszip.loadAsync(file);
                               const imageFiles = Object.keys(zip.files).filter(name => !zip.files[name].dir && name.match(/\.(png|jpe?g|webp)$/i));
                               if (imageFiles.length > 0) {
-                                const fileData = await zip.files[imageFiles[0]].async('base64');
-                                setUploadCover(`data:image/jpeg;base64,${fileData}`);
-                                Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, icon: 'success', title: 'تم استخراج الغلاف تلقائياً', background: '#090615', color: '#fff' });
+                                Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, icon: 'success', title: 'Cover extracted automatically', background: '#090615', color: '#fff' });
                               }
                             } catch (err) {
                               console.error(err);
@@ -657,13 +684,14 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     {files.map((file, idx) => (
                       <div key={idx} className="liquid-glass rounded-xl overflow-hidden border border-purple-500/20 hover:border-purple-400/50 transition-colors group relative">
-                        {file.cover ? (
+                        {coverUrls[file.id] ? (
                            <div className="h-40 w-full bg-black/60 relative">
-                             <img src={file.cover} alt="Cover" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                             <img src={coverUrls[file.id]} alt="Cover" className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity blur-up-loading loaded" />
                              <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
                            </div>
                         ) : (
-                          <div className="h-24 w-full bg-gradient-to-tr from-purple-900/30 to-indigo-900/30 flex items-center justify-center border-b border-purple-500/20">
+                          <div className="h-40 w-full bg-gradient-to-tr from-purple-900/30 to-indigo-900/30 flex flex-col items-center justify-center border-b border-purple-500/20">
+                            {file.coverMsgId ? <span className="text-[10px] text-purple-400 font-mono mb-2 animate-pulse">Loading Cover...</span> : null}
                             <File size={32} className="text-purple-400/50" />
                           </div>
                         )}

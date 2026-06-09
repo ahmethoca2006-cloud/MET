@@ -160,12 +160,12 @@ async function renderImageToDataUrl(img: ProcessedImage, format: 'jpeg' | 'png' 
   return dataUrl;
 }
 
-export async function downloadProcessedZip(processedImages: ProcessedImage[], setProgress?: (msg: string) => void) {
+export async function downloadProcessedZip(processedImages: ProcessedImage[], setProgress?: (msg: string) => void, zipFileName = 'translated_manga.zip') {
   const zip = new JSZip();
 
   for (let idx = 0; idx < processedImages.length; idx++) {
     const img = processedImages[idx];
-    if (setProgress) setProgress(`Processing page ${idx + 1} of ${processedImages.length}...`);
+    if (typeof setProgress === 'function') setProgress(`Processing page ${idx + 1} of ${processedImages.length}...`);
     
     // Rename sequentially
     const ext = img.filename.split('.').pop() || 'png';
@@ -180,9 +180,9 @@ export async function downloadProcessedZip(processedImages: ProcessedImage[], se
     zip.file(newFilename, dataUrl.split(',')[1], { base64: true });
   }
 
-  if (setProgress) setProgress('Zipping files...');
+  if (typeof setProgress === 'function') setProgress('Zipping files...');
   const content = await zip.generateAsync({ type: 'blob' });
-  saveAs(content, 'translated_manga.zip');
+  saveAs(content, typeof setProgress === 'string' ? setProgress : zipFileName);
 }
 
 export async function downloadSingleImage(img: ProcessedImage) {

@@ -341,7 +341,7 @@ export default function App() {
       Swal.fire({
         icon: 'warning',
         title: 'تنبيه',
-        text: 'برجاء فتح صفحة واحدة أولاً والوقوف عليها داخل الاستوديو لتطبيق الترجمة.',
+        text: 'برجاء فتح صفحة واحدة أولاً والوقوف عليها داخل الاستوديو لتطبيق الTranslation.',
         background: '#090615',
         color: '#ffffff',
         confirmButtonColor: '#7c3aed'
@@ -356,7 +356,7 @@ export default function App() {
       if (!cleanData) {
         Swal.fire({
           icon: 'error',
-          title: 'حقل فارغ',
+          title: 'حقل Empty',
           text: 'برجاء لصق الكود (مصفوفة الـ JSON) المسترجع من الذكاء الاصطناعي أولاً.',
           background: '#090615',
           color: '#ffffff',
@@ -422,8 +422,8 @@ export default function App() {
 
       Swal.fire({
         icon: 'success',
-        title: 'تم دمج الترجمة الخارجية بنجاح!',
-        text: `تم التعرف واسترداد عدد ${newRegions.length} فقاعات حوارية وتطبيقها بذكاء مع توسيط النصوص.`,
+        title: 'تم دمج الTranslation الخارجية بSuccess!',
+        text: `تم التعرف واسترداد عدد ${newRegions.length} فقاعات حوارية وتطبيقها بذكاء مع توسيط الTextوص.`,
         confirmButtonColor: '#7c3aed',
         background: '#090615',
         color: '#ffffff'
@@ -433,7 +433,7 @@ export default function App() {
       Swal.fire({
         icon: 'error',
         title: 'صيغة غير صالحة',
-        text: 'فشل تحليل النص المنسوخ كقائمة مدخلات ترجمة صالحة. تأكد من ثبات قائمة الـ JSON المسترجعة.',
+        text: 'فشل تحليل الText المنسوخ كقائمة مدخلات Translation صالحة. تأكد من ثبات قائمة الـ JSON المسترجعة.',
         confirmButtonColor: '#7c3aed',
         background: '#090615',
         color: '#ffffff'
@@ -446,7 +446,7 @@ export default function App() {
     if (!files || files.length === 0) return;
     
     Swal.fire({
-      title: 'جاري تحميل وقراءة الخطوط...',
+      title: 'Loading and parsing fonts...',
       text: 'الرجاء الانتظار الحين معالجة ملفات الخطوط',
       allowOutsideClick: false,
       didOpen: () => {
@@ -494,7 +494,7 @@ export default function App() {
         Swal.fire({
           icon: 'success',
           title: 'تم تفعيل الخطوط المخصصة!',
-          text: `تم استخراج وتحميل ${loadedFonts.length} من الخطوط بنجاح داخل الاستوديو.`,
+          text: `تم استخراج وLoading ${loadedFonts.length} من الخطوط بSuccess داخل الاستوديو.`,
           confirmButtonText: 'رائع',
           confirmButtonColor: '#7c3aed',
           background: '#090615',
@@ -503,7 +503,7 @@ export default function App() {
       } else {
         Swal.fire({
           icon: 'error',
-          title: 'خطأ في معالجة الملف',
+          title: 'Error في معالجة الملف',
           text: 'لم يتم العثور على خطوط صالحة (TTF/OTF) داخل الملف المرفوع.',
           confirmButtonColor: '#7c3aed',
           background: '#090615',
@@ -515,7 +515,7 @@ export default function App() {
       Swal.fire({
         icon: 'error',
         title: 'فشل تثبيت الخطوط',
-        text: 'حدث خطأ غير متوقع أثناء تفكيك وقراءة ملفات الخط.',
+        text: 'حدث Error غير متوقع أثناء تفكيك وقراءة ملفات الخط.',
         confirmButtonColor: '#7c3aed',
         background: '#090615',
         color: '#ffffff'
@@ -666,7 +666,7 @@ export default function App() {
 
     Swal.fire({
       icon: 'success',
-      title: 'تم ضبط كشيدة النصوص!',
+      title: 'تم ضبط كشيدة الTextوص!',
       text: style === 'oval' ? 'تم تطبيق كشيدة التدريج البيضاوي لملائمة الدوائر.' : 'تم استعادة التنسيق المستطيل القياسي.',
       timer: 1200,
       showConfirmButton: false,
@@ -677,13 +677,13 @@ export default function App() {
 
   const handleExportPsd = async () => {
     if (images.length === 0) {
-      Swal.fire('خطأ', 'برجاء تحميل صور الفصل للتصدير.', 'error');
+      Swal.fire('Error', 'برجاء Loading Images الفصل للExport.', 'error');
       return;
     }
 
     Swal.fire({
       title: 'توليد ملفات Photoshop PSD...',
-      text: 'جاري حزم الطبقات، النصوص الشفافة المفرغة، والرسومات المستردة في مجلد متوافق مع فوتوشوب...',
+      text: 'Packing layers, transparent texts, and repainted art into a PSD-compatible workspace...',
       allowOutsideClick: false,
       didOpen: () => {
         Swal.showLoading();
@@ -751,8 +751,8 @@ export default function App() {
 
       Swal.fire({
         icon: 'success',
-        title: 'تم تصدير حزمة طبقات PSD بنجاح!',
-        text: 'تم تسليمك ملف ZIP يضم الطبقات مفصولة بالكامل، خطوط النصوص الشفافة المستقلة، والتصميم الجمالي الجاهز للمتابعة داخل فوتوشوب دقة عالية.',
+        title: 'تم Export حزمة طبقات PSD بSuccess!',
+        text: 'تم تسليمك ملف ZIP يضم الطبقات مفصولة بالكامل، خطوط الTextوص الشفافة المستقلة، والتصميم الجمالي الجاهز للمتابعة داخل فوتوشوب دقة عالية.',
         confirmButtonText: 'ممتاز',
         confirmButtonColor: '#7c3aed',
         background: '#090615',
@@ -760,7 +760,7 @@ export default function App() {
       });
     } catch (err) {
       console.error(err);
-      Swal.fire('خطأ في التصدير', 'تعذر كتابة ملف PSD التصديري.', 'error');
+      Swal.fire('Error في الExport', 'تعذر كتابة ملف PSD الExportي.', 'error');
     }
   };
 
@@ -806,7 +806,7 @@ export default function App() {
           textAlign: 'center',
           lineHeight: 1.3,
           originalText: 'Scribble Detected Area',
-          translatedText: 'نص الفقاعة الجديد',
+          translatedText: 'Text الفقاعة الجديد',
           autoFitText: true
         };
 
@@ -844,7 +844,7 @@ export default function App() {
         Swal.fire({
           icon: 'success',
           title: 'حدود محاذاة ذكية!',
-          text: 'تم رصد واحتواء فقاعة الحوار تلقائياً بدلالة الشخبطة وتوسيط النص.',
+          text: 'تم رصد واحتواء فقاعة الحوار تلقائياً بدلالة الشخبطة وتوسيط الText.',
           timer: 1500,
           showConfirmButton: false,
           background: '#090615',
@@ -1844,12 +1844,12 @@ export default function App() {
 
   const handleDeleteManga = (mangaId: string) => {
     Swal.fire({
-      title: 'هل ترغب بحذف هذه المانجا كلياً من المكتبة؟',
-      text: "سيؤدي هذا الإجراء لحذف كافة المجلدات والفصول والصفحات المترجمة نهائياً ولا يمكن الرجوع فيه!",
+      title: 'هل ترغب بDelete هذه المانجا كلياً من Library؟',
+      text: "سيؤدي هذا الإجراء لDelete كافة الVolumeات والفصول والصفحات المTranslation نهائياً ولا يمكن الBack فيه!",
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'نعم، احذف السلسلة',
-      cancelButtonText: 'إلغاء',
+      confirmButtonText: 'نعم، اDelete السلسلة',
+      cancelButtonText: 'Cancel',
       confirmButtonColor: '#dc2626',
       cancelButtonColor: '#374151',
       background: '#120b24',
@@ -1864,7 +1864,7 @@ export default function App() {
         }
         Swal.fire({
           icon: 'success',
-          text: 'تم حذف سلسلة المانجا بنجاح!',
+          text: 'تم Delete سلسلة المانجا بSuccess!',
           confirmButtonColor: '#7c3aed',
           background: '#120b24',
           color: '#f8fafc'
@@ -1875,12 +1875,12 @@ export default function App() {
 
   const handleDeleteVolume = (volId: string) => {
     Swal.fire({
-      title: 'هل تريد حذف هذا المجلد وجسد فصوله؟',
-      text: "سيتم حذف المجلد بكافة الفصول الموجودة بداخله نهائياً!",
+      title: 'هل تريد Delete هذا الVolume وجسد فصوله؟',
+      text: "سيتم Delete الVolume بكافة الفصول الموجودة بداخله نهائياً!",
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'نعم، احذفه',
-      cancelButtonText: 'إلغاء',
+      confirmButtonText: 'نعم، اDeleteه',
+      cancelButtonText: 'Cancel',
       confirmButtonColor: '#dc2626',
       cancelButtonColor: '#374151',
       background: '#120b24',
@@ -1900,7 +1900,7 @@ export default function App() {
         }
         Swal.fire({
           icon: 'success',
-          text: 'تم حذف المجلد بنجاح!',
+          text: 'تم Delete الVolume بSuccess!',
           confirmButtonColor: '#7c3aed',
           background: '#120b24',
           color: '#f8fafc'
@@ -1911,12 +1911,12 @@ export default function App() {
 
   const handleDeleteChapter = (chapId: string) => {
     Swal.fire({
-      title: 'هل تريد حذف هذا الشابتر كلياً؟',
-      text: "سيؤدي هذا لحذف كافة الصور المغروسة والتعديلات المطبقة نهائياً!",
+      title: 'هل تريد Delete هذا الChapter كلياً؟',
+      text: "سيؤدي هذا لDelete كافة الImages المغروسة والEditات المطبقة نهائياً!",
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonText: 'نعم، احذفه',
-      cancelButtonText: 'إلغاء',
+      confirmButtonText: 'نعم، اDeleteه',
+      cancelButtonText: 'Cancel',
       confirmButtonColor: '#dc2626',
       cancelButtonColor: '#374151',
       background: '#120b24',
@@ -1942,7 +1942,7 @@ export default function App() {
         }
         Swal.fire({
           icon: 'success',
-          text: 'تم حذف الشابتر المترجم بنجاح!',
+          text: 'تم Delete الChapter المترجم بSuccess!',
           confirmButtonColor: '#7c3aed',
           background: '#120b24',
           color: '#f8fafc'
@@ -1953,19 +1953,19 @@ export default function App() {
 
   const handleAddVolumePrompt = () => {
     Swal.fire({
-      title: 'إضافة مجلد جديد (New Volume)',
-      text: 'أدخل اسم المجلد أو رقمه الترتيبي للتصنيف:',
+      title: 'Add Volume جديد (New Volume)',
+      text: 'أدخل اسم الVolume أو رقمه الترتيبي للتصنيف:',
       input: 'text',
-      inputPlaceholder: 'مثلا: Volume 20 أو مجلد 1...',
+      inputPlaceholder: 'مثلا: Volume 20 أو Volume 1...',
       showCancelButton: true,
-      confirmButtonText: 'إضافة المجلد',
-      cancelButtonText: 'إلغاء',
+      confirmButtonText: 'Add الVolume',
+      cancelButtonText: 'Cancel',
       confirmButtonColor: '#7c3aed',
       background: '#120b24',
       color: '#f8fafc',
       inputValidator: (value) => {
         if (!value) {
-          return 'يجب كتابة اسم المجلد!';
+          return 'يجب كتابة اسم الVolume!';
         }
         return null;
       }
@@ -1986,7 +1986,7 @@ export default function App() {
         }));
         Swal.fire({
           icon: 'success',
-          text: `تمت إضافة المجلد ${value} بنجاح!`,
+          text: `تمت Add الVolume ${value} بSuccess!`,
           confirmButtonColor: '#7c3aed',
           background: '#120b24',
           color: '#f8fafc'
@@ -1997,13 +1997,13 @@ export default function App() {
 
   const handleAddChapterPrompt = () => {
     Swal.fire({
-      title: 'إضافة شابتر جديد (New Chapter)',
-      text: 'أدخل رقم الفصل أو اسم الجزء لحساب الترجمة:',
+      title: 'Add Chapter جديد (New Chapter)',
+      text: 'أدخل رقم الفصل أو اسم الجزء لحساب الTranslation:',
       input: 'text',
       inputPlaceholder: 'مثلا: Chapter 150 أو الفصل الأول...',
       showCancelButton: true,
       confirmButtonText: 'إنشاء الفصل',
-      cancelButtonText: 'إلغاء',
+      cancelButtonText: 'Cancel',
       confirmButtonColor: '#7c3aed',
       background: '#120b24',
       color: '#f8fafc',
@@ -2047,7 +2047,7 @@ export default function App() {
       if (file.size > 2 * 1024 * 1024) {
         Swal.fire({
           icon: 'warning',
-          text: 'يرجى اختيار صورة بحجم أصغر من 2 ميجابايت لضمان سرعة الأداء.',
+          text: 'يرجى اختيار Imagesة بحجم أصغر من 2 ميجابايت لضمان سرعة الأداء.',
           confirmButtonColor: '#7c3aed',
           background: '#120b24',
           color: '#f8fafc'
@@ -2096,7 +2096,7 @@ export default function App() {
 
     Swal.fire({
       icon: 'success',
-      text: 'تمت إضافة السلسلة الجديدة لمكتبتك بنجاح! انقر عليها الآن لإنشاء المجلدات والفصول.',
+      text: 'تمت Add السلسلة الجديدة لمكتبتك بSuccess! انقر عليها الآن لإنشاء الVolumeات والفصول.',
       confirmButtonColor: '#7c3aed',
       background: '#120b24',
       color: '#f8fafc'
@@ -2437,7 +2437,7 @@ export default function App() {
               }}
               className="flex items-center gap-2 bg-purple-950/45 hover:bg-purple-900 border border-purple-500/35 text-purple-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold font-display transition-all"
             >
-              ← رجوع للمكتبة (Library)
+              ← Back للمكتبة (Library)
             </button>
             <div className="flex items-center gap-3">
               <TypeIcon className="text-purple-400" />
@@ -2699,7 +2699,7 @@ export default function App() {
               onClick={handleExportPsd}
               disabled={images.length === 0}
               className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-purple-500/20"
-              title="تصدير حزمة PSD لبرنامج فوتوشوب (Photoshop Layout Layers Archive)"
+              title="Export حزمة PSD لبرنامج فوتوشوب (Photoshop Layout Layers Archive)"
             >
               <Download size={16} className="text-purple-200" /> PSD جديد
             </button>
@@ -2884,7 +2884,7 @@ export default function App() {
               <h1 className="text-3xl font-display font-semibold text-white tracking-tight mb-2">إدارة الجدولة (Scheduler)</h1>
               <p className="text-lg text-purple-300 font-sans mb-4">تحت العمل والتطوير المستمر حالياً...</p>
               <div className="liquid-glass p-4 rounded-xl border border-purple-500/10 text-xs text-slate-400 font-sans leading-relaxed">
-                أدوات أتمتة وجدولة دورات المسح والترجمة التلقائية للفصول الجديدة فور صدورها على منصات Webtoon الكورية الرسمية.
+                Tools أتمتة وجدولة دورات المسح والTranslation التلقائية للفصول الجديدة فور صدورها على مTextات Webtoon الكورية الرسمية.
               </div>
             </div>
           </div>
@@ -2901,7 +2901,7 @@ export default function App() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-purple-500/10 pb-6">
                 <div>
                   <div className="flex items-center gap-2 text-xs font-mono text-purple-350 mb-2">
-                    <span className="font-semibold select-none">المكتبة (Library)</span>
+                    <span className="font-semibold select-none">Library (Library)</span>
                     {activeMangaId && (
                       <>
                         <span>/</span>
@@ -2930,15 +2930,15 @@ export default function App() {
                     {!activeMangaId 
                       ? 'قسم مكتبتي - السلاسل (Series Library)' 
                       : !activeVolumeId 
-                        ? 'إدارة المجلدات (Volumes List)' 
-                        : 'فصول الترجمة (Chapter Workspace)'}
+                        ? 'إدارة الVolumeات (Volumes List)' 
+                        : 'فصول الTranslation (Chapter Workspace)'}
                   </h1>
                   <p className="text-xs text-slate-400 mt-1.5 font-sans leading-relaxed">
                     {!activeMangaId 
-                      ? 'تصفح قصص المانجا والمانهوا الحالية، أو أنشئ سلسلة ترجمة جديدة بضغطة زر.' 
+                      ? 'تصفح قصص المانجا والمانهوا الحالية، أو أنشئ سلسلة Translation جديدة بضغطة زر.' 
                       : !activeVolumeId 
-                        ? 'اختر مجلداً محدداً لتقسيم وإدارة فصول الترجمة التابعة له.' 
-                        : 'افتح فصل الترجمة للدخول إلى الاستوديو وبدء المسح الآلي وملاءمة الفقاعات وسحب النتائج.'}
+                        ? 'اختر Volumeاً محدداً لتقسيم وإدارة فصول الTranslation التابعة له.' 
+                        : 'افتح فصل الTranslation للدخول إلى الاستوديو وبدء المسح الآلي وملاءمة الفقاعات وسحب النتائج.'}
                   </p>
                 </div>
 
@@ -2949,7 +2949,7 @@ export default function App() {
                         onClick={loadDemoProject}
                         className="bg-black/60 hover:bg-black border border-purple-500/25 text-purple-300 font-bold py-2.5 px-5 rounded-xl transition-all cursor-pointer text-xs"
                       >
-                        ⚡ تحميل عينة مانهوا (Load Demo)
+                        ⚡ Loading عينة مانهوا (Load Demo)
                       </button>
                       <button 
                         onClick={() => setShowCreateSeriesModal(true)}
@@ -2965,13 +2965,13 @@ export default function App() {
                         onClick={() => { setActiveMangaId(null); }}
                         className="bg-black/60 border border-purple-500/15 hover:border-purple-500/40 text-slate-350 font-bold py-2.5 px-4 rounded-xl transition-all text-xs"
                       >
-                        ← رجوع للكل (Back)
+                        ← Back للكل (Back)
                       </button>
                       <button 
                         onClick={handleAddVolumePrompt}
                         className="bg-purple-600 hover:bg-purple-550 text-white font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer shadow-md shadow-purple-950/45"
                       >
-                        + إضافة مجلد جديد (Add Volume)
+                        + Add Volume جديد (Add Volume)
                       </button>
                     </>
                   )}
@@ -2981,12 +2981,12 @@ export default function App() {
                         onClick={() => { setActiveVolumeId(null); }}
                         className="bg-black/60 border border-purple-500/15 hover:border-purple-500/40 text-slate-350 font-bold py-2.5 px-4 rounded-xl transition-all text-xs"
                       >
-                        ← المجلدات (Volumes)
+                        ← الVolumeات (Volumes)
                       </button>
                       <label 
                         className="bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 text-purple-300 font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer flex items-center justify-center gap-2"
                       >
-                        <UploadIcon size={14} /> رفع مجلد كـ شابتر
+                        <Upload size={14} /> Upload Volume as Chapter
                         <input 
                           type="file" 
                           // @ts-ignore
@@ -2998,13 +2998,13 @@ export default function App() {
                              const files = e.target.files;
                              if (!files || files.length === 0) return;
                              
-                             Swal.fire({ title: 'جاري معالجة صور المجلد...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                             Swal.fire({ title: 'Processing folder images...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                              
                              // filter images only and sort them by name naturally
                              const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
                              
                              if (imageFiles.length === 0) {
-                               return Swal.fire('فارغ', 'لا توجد صور في هذا المجلد', 'error');
+                               return Swal.fire('Empty', 'لا توجد Images في هذا الVolume', 'error');
                              }
                              
                              const newImages: ProcessedImage[] = [];
@@ -3034,7 +3034,7 @@ export default function App() {
                              }
                              
                              const folderPathParts = imageFiles[0].webkitRelativePath.split('/');
-                             const chapterName = folderPathParts.length > 1 ? folderPathParts[0] : 'شابتر جديد (من مجلد)';
+                             const chapterName = folderPathParts.length > 1 ? folderPathParts[0] : 'Chapter جديد (من Volume)';
                              
                              const newChapter: Chapter = {
                                id: Math.random().toString(36).substr(2, 9),
@@ -3064,7 +3064,7 @@ export default function App() {
                         onClick={handleAddChapterPrompt}
                         className="bg-indigo-600 hover:bg-indigo-550 text-white font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer shadow-md shadow-indigo-950/45"
                       >
-                        + إضافة شابتر فارغ
+                        + Add Chapter Empty
                       </button>
                     </>
                   )}
@@ -3081,7 +3081,7 @@ export default function App() {
                       </div>
                       <h3 className="text-lg font-bold text-slate-200">لا توجد سلاسل مانجا حالياً</h3>
                       <p className="text-xs text-slate-400 max-w-sm mx-auto mt-2 leading-relaxed font-sans">
-                        قم بالبدء بإنشاء سلسلة مانجا/مانهوا جديدة لتسجيل فصولها وترجمتها بشكل منظم، أو اضغط زر "تحميل عينة مانهوا" للحصول على مانهوا سولو ليفنج تجريبية.
+                        قم بالبدء بإنشاء سلسلة مانجا/مانهوا جديدة لتسجيل فصولها وترجمتها بشكل منظم، أو اضغط زر "Loading عينة مانهوا" للحصول على مانهوا سولو ليفنج تجريبية.
                       </p>
                       <button
                         onClick={() => setShowCreateSeriesModal(true)}
@@ -3126,7 +3126,7 @@ export default function App() {
                               handleDeleteManga(manga.id);
                             }}
                             className="absolute top-4 right-4 bg-red-950/80 hover:bg-red-700 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-red-500/20"
-                            title="حذف السلسلة من المكتبة"
+                            title="Delete السلسلة من Library"
                           >
                             <Trash2 size={13} />
                           </button>
@@ -3137,7 +3137,7 @@ export default function App() {
                             <h3 className="text-base font-display font-bold text-white tracking-tight truncate leading-tight">{manga.title}</h3>
                             <p className="text-[11px] text-slate-350 leading-normal line-clamp-2 h-8 font-sans">{manga.description || 'لم يتم كتابة وصف مخصص لهذه السلسلة بعد.'}</p>
                             <div className="flex items-center justify-between text-[10px] text-purple-300 font-mono mt-1 w-full pt-2 border-t border-purple-500/10">
-                              <span>📚 المجلدات: {manga.volumes.length}</span>
+                              <span>📚 الVolumeات: {manga.volumes.length}</span>
                               <span>📖 فصول: {totalChaptersCount}</span>
                             </div>
                           </div>
@@ -3160,15 +3160,15 @@ export default function App() {
                           <div className="w-16 h-16 bg-purple-950/20 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400 mx-auto mb-4">
                             <Plus size={28} />
                           </div>
-                          <h3 className="text-lg font-bold text-slate-200">لا توجد مجلدات حالياً</h3>
+                          <h3 className="text-lg font-bold text-slate-200">لا توجد Volumeات حالياً</h3>
                           <p className="text-xs text-slate-400 max-w-sm mx-auto mt-2 leading-relaxed">
-                            مجلدات المانجا تستخدم لتنظيم وتقسيم فئات فصول الترجمة الكبيرة (مثال: مجلد 20، مجلد 1).
+                            Volumeات المانجا تستخدم لتنظيم وتقسيم فئات فصول الTranslation الكبيرة (مثال: Volume 20، Volume 1).
                           </p>
                           <button
                             onClick={handleAddVolumePrompt}
                             className="mt-5 bg-purple-600 hover:bg-purple-550 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition-all"
                           >
-                            + إضافة أول مجلد جديد (Create Volume)
+                            + Add أول Volume جديد (Create Volume)
                           </button>
                         </div>
                       ) : (
@@ -3192,13 +3192,13 @@ export default function App() {
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 const allImages = vol.chapters.flatMap(c => c.images);
-                                if (allImages.length === 0) return Swal.fire('فارغ', 'لا توجد صور في هذا المجلد لتحميلها', 'info');
-                                Swal.fire({ title: 'جاري الضغط...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                                await downloadProcessedZip(allImages, `${vol.name}.zip`);
+                                if (allImages.length === 0) return Swal.fire('Empty', 'لا توجد Images في هذا الVolume لLoadingها', 'info');
+                                Swal.fire({ title: 'Compressing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                await downloadProcessedZip(allImages, undefined, `${vol.name}.zip`);
                                 Swal.close();
                               }}
                               className="absolute top-4 left-4 bg-purple-950/80 hover:bg-purple-700 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-purple-500/20"
-                              title="تحميل كل فصول المجلد كـ ZIP"
+                              title="Loading كل فصول الVolume كـ ZIP"
                             >
                               <Download size={13} />
                             </button>
@@ -3210,7 +3210,7 @@ export default function App() {
                                 handleDeleteVolume(vol.id);
                               }}
                               className="absolute top-4 right-4 bg-red-950/80 hover:bg-red-700 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-red-500/20"
-                              title="حذف هذا المجلد كلياً"
+                              title="Delete هذا الVolume كلياً"
                             >
                               <Trash2 size={13} />
                             </button>
@@ -3224,7 +3224,7 @@ export default function App() {
                               <p className="text-xs text-slate-350 line-clamp-2 h-8 font-sans leading-relaxed text-left">
                                 {vol.chapters.length > 0 
                                   ? `يحتوي على: ${vol.chapters.map(c => c.name).join(', ')}` 
-                                  : 'مجلد فارغ حالياً، انقر لإضافة فصول ترجمة جديدة بداخل هذا المجلد.'}
+                                  : 'Volume Empty حالياً، انقر لAdd فصول Translation جديدة بداخل هذا الVolume.'}
                               </p>
                               <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono mt-1 pt-2 border-t border-purple-500/10 w-full">
                                 <span>📖 الفصول: {vol.chapters.length} </span>
@@ -3254,13 +3254,13 @@ export default function App() {
                           </div>
                           <h3 className="text-lg font-bold text-slate-200">لا توجد فصول حالياً</h3>
                           <p className="text-xs text-slate-400 max-w-sm mx-auto mt-2 leading-relaxed">
-                            أنشئ فصولاً لهذا المجلد للبدء فوراً في إرفاق صفحات المانجا وتبييض وملاءمة الفقاعات عبر الاستوديو الأساسي.
+                            أنشئ فصولاً لهذا الVolume للبدء فوراً في إرفاق صفحات المانجا وCleaning وملاءمة الفقاعات عبر الاستوديو الأساسي.
                           </p>
                           <button
                             onClick={handleAddChapterPrompt}
                             className="mt-5 bg-indigo-600 hover:bg-indigo-550 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition-all"
                           >
-                            + إضافة شابتر جديد للترجمة (Add Chapter)
+                            + Add Chapter جديد للTranslation (Add Chapter)
                           </button>
                         </div>
                       ) : (
@@ -3291,13 +3291,13 @@ export default function App() {
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  if (chap.images.length === 0) return Swal.fire('فارغ', 'لا توجد صور في هذا الشابتر لتحميلها', 'info');
-                                  Swal.fire({ title: 'جاري الضغط...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                                  await downloadProcessedZip(chap.images, `${chap.name}.zip`);
+                                  if (chap.images.length === 0) return Swal.fire('Empty', 'لا توجد Images في هذا الChapter لLoadingها', 'info');
+                                  Swal.fire({ title: 'Compressing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                  await downloadProcessedZip(chap.images, undefined, `${chap.name}.zip`);
                                   Swal.close();
                                 }}
                                 className="absolute top-4 left-4 bg-purple-950/85 hover:bg-purple-750 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-purple-500/20"
-                                title="تحميل كل صور الشابتر كـ ZIP"
+                                title="Loading كل Images الChapter كـ ZIP"
                               >
                                 <Download size={13} />
                               </button>
@@ -3309,7 +3309,7 @@ export default function App() {
                                   handleDeleteChapter(chap.id);
                                 }}
                                 className="absolute top-4 right-4 bg-red-950/85 hover:bg-red-750 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-red-500/20"
-                                title="حذف هذا الشابتر كلياً"
+                                title="Delete هذا الChapter كلياً"
                               >
                                 <Trash2 size={13} />
                               </button>
@@ -3319,7 +3319,7 @@ export default function App() {
                                 <span className="text-[10px] text-indigo-400 tracking-wider font-mono font-bold">MANGA CHAPTER</span>
                                 <h3 className="text-base font-display font-bold text-white tracking-tight leading-none mb-1">{chap.name}</h3>
                                 <p className="text-[11px] text-slate-350 leading-normal line-clamp-1 font-sans">
-                                  {chap.images.length > 0 ? `يحتوي على ${chap.images.length} صفحة مجهزة.` : 'شابتر فارغ. انقر للدخول ورفع الصور.'}
+                                  {chap.images.length > 0 ? `يحتوي على ${chap.images.length} صفحة مجهزة.` : 'Chapter Empty. انقر للدخول وUpload الImages.'}
                                 </p>
                                 <div className="flex justify-between items-center text-[10px] text-indigo-300 font-mono mt-1.5 pt-1.5 border-t border-purple-500/10 w-full">
                                   <span>🚀 فتح بالاستوديو</span>
@@ -3352,9 +3352,9 @@ export default function App() {
                 </svg>
               </div>
               <div className="flex flex-col gap-1.5">
-                <h3 className="text-2xl font-display font-bold text-white tracking-tight">هذا الفصل فارغ حالياً (Chapter is Empty)</h3>
+                <h3 className="text-2xl font-display font-bold text-white tracking-tight">هذا الفصل Empty حالياً (Chapter is Empty)</h3>
                 <p className="text-sm text-slate-400 max-w-md mt-1 mx-auto leading-relaxed font-sans">
-                  قم بإنشاء مساحتك داخل هدا الفصل عن طريق سحب وإسقاط ملف ZIP، أو رفع الصفحات واحدة تلو الأخرى، أو تحميل مشروع تجريبي لتجربته فوراً.
+                  قم بإنشاء مساحتك داخل هدا الفصل عن طريق سحب وإسقاط ملف ZIP، أو Upload الصفحات واحدة تلو الأخرى، أو Loading Project تجريبي لتجربته فوراً.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full mt-2">
@@ -3362,13 +3362,13 @@ export default function App() {
                   onClick={() => setShowCreateProjectModal(true)}
                   className="w-full sm:w-auto flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-purple-950/30 transition-all active:scale-95 cursor-pointer text-sm"
                 >
-                  + رفع وتجهيز الصور (Load Media)
+                  + Upload وتجهيز الImages (Load Media)
                 </button>
                 <button 
                   onClick={loadDemoProject}
                   className="w-full sm:w-auto flex-1 bg-black/60 hover:bg-black/90 border border-purple-500/20 hover:border-purple-500/40 text-slate-350 font-bold py-3.5 px-6 rounded-xl transition-all active:scale-95 cursor-pointer text-sm"
                 >
-                  تحميل الصفحات النموذجية (Load Sample)
+                  Loading الصفحات النموذجية (Load Sample)
                 </button>
               </div>
             </div>
@@ -3459,7 +3459,7 @@ export default function App() {
                   <button
                     onClick={() => setShowExternalAIModal(true)}
                     className="flex items-center gap-1.5 bg-[#090615] hover:bg-[#130d2a] border border-purple-500/30 text-purple-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all shadow-[0_4px_12px_rgba(168,85,247,0.15)]"
-                    title="تحميل وطرح الترجمة عبر الذكاء الاصطناعي الخارجي المساعد"
+                    title="Loading وطرح الTranslation عبر الذكاء الاصطناعي الخارجي المساعد"
                   >
                     <Sparkles size={13} className="text-purple-300 animate-bounce" /> كوكتيل الذكاء الاصطناعي الخارجي ✦
                   </button>
@@ -3518,14 +3518,14 @@ export default function App() {
                     <button 
                       onClick={() => setActiveTool('crop')}
                       className={`p-1.5 rounded-md ${activeTool === 'crop' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200 hover:text-indigo-300'}`}
-                      title="اقتصاص جزء للترجمة (AI Crop & Translate Panel)"
+                      title="اقتصاص جزء للTranslation (AI Crop & Translate Panel)"
                     >
                       <Scissors size={16} className="-rotate-90 text-indigo-400" />
                     </button>
                     <button 
                       onClick={() => setActiveTool('scribble_bubble')}
                       className={`p-1.5 rounded-md ${activeTool === 'scribble_bubble' ? 'bg-indigo-600 text-white' : 'text-purple-400 hover:text-purple-300 hover:bg-purple-950/20'}`}
-                      title="تحديد الفقاعة بالشخبطة الذكية (Scribble Bubble)"
+                      title="Select الفقاعة بالشخبطة الذكية (Scribble Bubble)"
                     >
                       <PenTool size={16} />
                     </button>
@@ -3685,8 +3685,8 @@ export default function App() {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
                   <div className="bg-black border border-[#444] rounded-xl p-8 flex flex-col items-center gap-4 max-w-sm w-full shadow-2xl animate-fade-in text-center">
                     <Loader2 size={42} className="animate-spin text-indigo-500" />
-                    <h3 className="text-sm font-bold text-white tracking-tight">جاري ترجمة ومعالجة المانهوا بالذكاء الاصطناعي...</h3>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">يقوم Gemini الآن بتحليل وتبييض ومحاذاة القطاع المقتطع تلقائياً ومطابقته على الصورة الكاملة بدقة فائقة.</p>
+                    <h3 className="text-sm font-bold text-white tracking-tight">Translating and Processing Manga with AI...</h3>
+                    <p className="text-[11px] text-slate-400 leading-relaxed">يقوم Gemini الآن بتحليل وCleaning ومحاذاة القطاع المقتطع تلقائياً ومطابقته على الImagesة الكاملة بدقة فائقة.</p>
                   </div>
                 </div>
               )}
@@ -3759,7 +3759,7 @@ export default function App() {
                       onClick={handleTranslateCropQueue}
                       className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer"
                     >
-                      <Sparkles size={12} className="text-white shrink-0 animate-pulse" /> ترجمة مجمعة
+                      <Sparkles size={12} className="text-white shrink-0 animate-pulse" /> Translation مجمعة
                     </button>
                   </div>
                 </div>
@@ -3801,7 +3801,7 @@ export default function App() {
                   value={selectedRegion.translatedText}
                   onChange={(e) => updateRegion(selectedRegion.id, { translatedText: e.target.value })}
                   className="w-full h-24 bg-black border border-[#444] rounded-md p-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
-                  dir="rtl"
+                  dir="ltr"
                 />
               </div>
 
@@ -3813,9 +3813,9 @@ export default function App() {
                       <button 
                         onClick={() => fontInputRef.current?.click()}
                         className="text-[10px] text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1 font-sans bg-purple-950/20 px-1.5 py-0.5 rounded border border-purple-800/30"
-                        title="رفع خط مخصص (.ttf, .otf, .zip)"
+                        title="Upload خط مخصص (.ttf, .otf, .zip)"
                       >
-                        <Plus size={10} /> رفع خطوط مخصصة
+                        <Plus size={10} /> Upload خطوط مخصصة
                       </button>
                       <input 
                         type="file" 
@@ -3851,10 +3851,10 @@ export default function App() {
                           key={font}
                           onClick={() => updateRegion(selectedRegion.id, { fontFamily: font })}
                           style={{ fontFamily: font }}
-                          className={`w-full text-right hover:bg-purple-950/40 p-2 rounded-lg text-xs transition-all flex justify-between items-center ${selectedRegion.fontFamily === font ? 'bg-purple-950/60 text-purple-300 border border-purple-700/50' : 'text-slate-300'}`}
+                          className={`w-full text-left hover:bg-purple-950/40 p-2 rounded-lg text-xs transition-all flex justify-between items-center ${selectedRegion.fontFamily === font ? 'bg-purple-950/60 text-purple-300 border border-purple-700/50' : 'text-slate-300'}`}
                         >
                           <span className="text-[9px] text-slate-500 font-mono select-none">{font.replace('MET-', '')}</span>
-                          <span className="text-sm tracking-wide truncate max-w-[70%] text-right font-semibold">تصفيف: مانجا {font.replace('MET-', '')}</span>
+                          <span className="text-sm tracking-wide truncate max-w-[70%] text-left font-semibold">تصفيف: مانجا {font.replace('MET-', '')}</span>
                         </button>
                       ))}
                     </div>
@@ -3985,7 +3985,7 @@ export default function App() {
                       onChange={(e) => updateRegion(selectedRegion.id, { angle: Number(e.target.value) })}
                       className="flex-1 accent-indigo-500"
                     />
-                    <span className="text-xs w-8 text-right font-mono">{Math.round(selectedRegion.angle)}°</span>
+                    <span className="text-xs w-8 text-left font-mono">{Math.round(selectedRegion.angle)}°</span>
                   </div>
                 </div>
 
@@ -4002,7 +4002,7 @@ export default function App() {
                         onChange={(e) => updateRegion(selectedRegion.id, { letterSpacing: Number(e.target.value) })}
                         className="flex-1 accent-indigo-500"
                       />
-                      <span className="text-xs w-6 text-right font-mono">{selectedRegion.letterSpacing || 0}</span>
+                      <span className="text-xs w-6 text-left font-mono">{selectedRegion.letterSpacing || 0}</span>
                     </div>
                   </div>
                   <div className="space-y-1.5">
@@ -4017,7 +4017,7 @@ export default function App() {
                         onChange={(e) => updateRegion(selectedRegion.id, { opacity: Number(e.target.value) })}
                         className="flex-1 accent-indigo-500"
                       />
-                      <span className="text-xs w-8 text-right font-mono">{Math.round((selectedRegion.opacity ?? 1) * 100)}%</span>
+                      <span className="text-xs w-8 text-left font-mono">{Math.round((selectedRegion.opacity ?? 1) * 100)}%</span>
                     </div>
                   </div>
                 </div>
@@ -4162,7 +4162,7 @@ export default function App() {
                   </div>
 
                   {/* Kashida layouts */}
-                  <div className="bg-purple-950/10 p-2 text-right rounded-lg border border-purple-900/20 space-y-1.5">
+                  <div className="bg-purple-950/10 p-2 text-left rounded-lg border border-purple-900/20 space-y-1.5">
                     <label className="text-[10px] font-semibold text-purple-300 flex items-center justify-between">
                       <span>كشيدة تمديد السطور العربية (Kashida)</span>
                       <span>✦</span>
@@ -4401,7 +4401,7 @@ export default function App() {
                 }
               }}
               className="w-14 h-14 bg-black border-2 border-purple-500 rounded-full flex items-center justify-center shadow-[0_5px_22px_rgba(168,85,247,0.55)] cursor-pointer text-white hover:scale-110 active:scale-95 transition-all duration-350"
-              title="أنشئ مشروعاً جديداً"
+              title="أنشئ Projectاً جديداً"
             >
               <svg className="w-6 h-6 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
                 <line x1={12} y1={5} x2={12} y2={19} />
@@ -4562,7 +4562,7 @@ export default function App() {
 
       {/* Stunning Create Series Modal */}
       {showCreateSeriesModal && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 backdrop-blur-md animate-fade-in text-right" dir="rtl">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 backdrop-blur-md animate-fade-in text-left" dir="ltr">
           <div className="liquid-glass p-8 rounded-3xl max-w-lg w-full mx-4 shadow-[0_20px_50px_rgba(168,85,247,0.3)] border border-purple-500/25 relative text-slate-200 flex flex-col gap-5">
             <button 
               onClick={() => setShowCreateSeriesModal(false)}
@@ -4571,19 +4571,19 @@ export default function App() {
               ✕
             </button>
             
-            <div className="flex flex-col gap-1.5 text-right border-b border-purple-500/10 pb-4">
+            <div className="flex flex-col gap-1.5 text-left border-b border-purple-500/10 pb-4">
               <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2 justify-start">
-                <span className="text-purple-400">✧</span> إضافة سلسلة جديدة لمكتبتك
+                <span className="text-purple-400">✧</span> Add سلسلة جديدة لمكتبتك
               </h2>
               <p className="text-xs text-slate-400">
-                أنشئ عملاً أو سلسلة مانجا/مانهوا جديدة لتنظيم وإتباع المجلدات وفصول الترجمة بداخلها.
+                أنشئ عملاً أو سلسلة مانجا/مانهوا جديدة لتنظيم وإتباع الVolumeات وفصول الTranslation بداخلها.
               </p>
             </div>
 
-            <div className="space-y-4 text-right">
+            <div className="space-y-4 text-left">
               {/* Cover Upload / URL Preview inline */}
               <div className="space-y-1.5 text-start">
-                <label className="text-xs font-semibold text-purple-300 block text-right">صورة غلاف السلسلة (PNG أو JPG):</label>
+                <label className="text-xs font-semibold text-purple-300 block text-left">Imagesة غلاف السلسلة (PNG أو JPG):</label>
                 <div className="flex items-center gap-4 flex-row-reverse">
                   <div className="w-20 h-24 rounded-lg border border-purple-500/10 bg-[#0c061c] overflow-hidden flex items-center justify-center shrink-0">
                     {newSeriesCoverUrl ? (
@@ -4592,7 +4592,7 @@ export default function App() {
                       <ImageIcon size={20} className="text-purple-500/40" />
                     )}
                   </div>
-                  <div className="flex flex-col gap-2 w-full text-right">
+                  <div className="flex flex-col gap-2 w-full text-left">
                     <input 
                       type="file" 
                       accept="image/*"
@@ -4604,7 +4604,7 @@ export default function App() {
                       htmlFor="series-cover-file"
                       className="cursor-pointer bg-purple-950/40 hover:bg-purple-900 border border-purple-500/30 text-purple-300 px-4 py-2 rounded-xl text-xs font-bold text-center transition-all block"
                     >
-                      اختر صورة من جهازك
+                      اختر Imagesة من جهازك
                     </label>
                     <span className="text-[10px] text-slate-500 text-center font-mono block">(الموصى به: نسبة طول إلى عرض 4:3)</span>
                   </div>
@@ -4613,19 +4613,19 @@ export default function App() {
 
               {/* Series Title */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-purple-300 block text-right">عنوان السلسلة:</label>
+                <label className="text-xs font-semibold text-purple-300 block text-left">عنوان السلسلة:</label>
                 <input 
                   type="text"
                   placeholder="مثال: Solo Leveling أو مانهوا سولو ليفنج..."
                   value={newSeriesTitle}
                   onChange={(e) => setNewSeriesTitle(e.target.value)}
-                  className="w-full bg-black/60 border border-purple-500/20 hover:border-purple-500/40 focus:border-purple-400 rounded-xl p-3 text-sm text-white outline-none font-sans text-right"
+                  className="w-full bg-black/60 border border-purple-500/20 hover:border-purple-500/40 focus:border-purple-400 rounded-xl p-3 text-sm text-white outline-none font-sans text-left"
                 />
               </div>
 
               {/* Series Type */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-purple-300 block text-right">النوع (Classification):</label>
+                <label className="text-xs font-semibold text-purple-300 block text-left">النوع (Classification):</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setNewSeriesType('manga')}
@@ -4644,13 +4644,13 @@ export default function App() {
 
               {/* Series Description */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-purple-300 block text-right">نبذة أو وصف مختصر:</label>
+                <label className="text-xs font-semibold text-purple-300 block text-left">نبذة أو وصف مختصر:</label>
                 <textarea 
                   rows={3}
-                  placeholder="اكتب وصفاً مختصراً لقصة المانجا أو تفاصيل المترجمين..."
+                  placeholder="اكتب وصفاً مختصراً لقصة المانجا أو Details المترجمين..."
                   value={newSeriesDesc}
                   onChange={(e) => setNewSeriesDesc(e.target.value)}
-                  className="w-full bg-black/60 border border-purple-500/20 hover:border-purple-500/40 focus:border-purple-400 rounded-xl p-3 text-sm text-white outline-none resize-none font-sans text-right"
+                  className="w-full bg-black/60 border border-purple-500/20 hover:border-purple-500/40 focus:border-purple-400 rounded-xl p-3 text-sm text-white outline-none resize-none font-sans text-left"
                 />
               </div>
             </div>
@@ -4660,13 +4660,13 @@ export default function App() {
                 onClick={() => setShowCreateSeriesModal(false)}
                 className="bg-black/60 hover:bg-black border border-purple-500/15 hover:border-purple-500/30 text-slate-350 font-bold py-2.5 px-6 rounded-xl text-xs transition-all cursor-pointer"
               >
-                إلغاء (Cancel)
+                Cancel (Cancel)
               </button>
               <button
                 onClick={handleCreateSeries}
                 className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-2.5 px-7 rounded-xl text-xs transition-all shadow-lg shadow-purple-950/45 cursor-pointer"
               >
-                ✓ إنشاء وإضافة السلسلة
+                ✓ إنشاء وAdd السلسلة
               </button>
             </div>
           </div>
@@ -4675,7 +4675,7 @@ export default function App() {
 
       {/* Stunning External AI Prompt & Paste Modal */}
       {showExternalAIModal && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 backdrop-blur-md animate-fade-in text-right" dir="rtl">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 backdrop-blur-md animate-fade-in text-left" dir="ltr">
           <div className="liquid-glass p-8 rounded-3xl max-w-2xl w-full mx-4 shadow-[0_20px_50px_rgba(168,85,247,0.35)] border border-purple-500/25 relative text-slate-200 flex flex-col gap-6 max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setShowExternalAIModal(false)}
@@ -4684,12 +4684,12 @@ export default function App() {
               ✕
             </button>
             
-            <div className="flex flex-col gap-1.5 text-right border-b border-purple-500/10 pb-4">
+            <div className="flex flex-col gap-1.5 text-left border-b border-purple-500/10 pb-4">
               <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2 justify-start">
-                <span className="text-purple-400">✧</span> معالج الترجمة المساعد عبر الذكاء الاصطناعي الخارجي
+                <span className="text-purple-400">✧</span> معالج الTranslation المساعد عبر الذكاء الاصطناعي الخارجي
               </h2>
               <p className="text-xs text-slate-400">
-                إذا لم تكن تمتلك مفاتيح API خاصة داخل التطبيق، يمكنك تزويد أي نموذج ذكاء اصطناعي خارجي (مثل Claude 3.5 Sonnet أو Gemini 1.5 Pro) بصورة الصفحة والطلب التفصيلي أدناه ليعود لك بملف الترجمة وتطبيقه بلحظة واحدة!
+                إذا لم تكن تمتلك مفاتيح API خاصة داخل التطبيق، يمكنك تزويد أي نموذج ذكاء اصطناعي خارجي (مثل Claude 3.5 Sonnet أو Gemini 1.5 Pro) بImagesة الصفحة والطلب التفصيلي أدناه ليعود لك بملف الTranslation وتطبيقه بلحظة واحدة!
               </p>
             </div>
 
@@ -4701,7 +4701,7 @@ export default function App() {
                   الخطوة الأولى: نسخ باقة الطلب (AI Request Cocktail)
                 </h3>
                 <p className="text-xs text-slate-400">
-                  انسخ المطالبة التفصيلية الجاهزة وأرسلها للـ AI الخارجي مع صورة الصفحة المفتوحة حالياً للتبييض بالذكاء الاصطناعي:
+                  انسخ المطالبة التفصيلية الجاهزة وأرسلها للـ AI الخارجي مع Imagesة الصفحة المفتوحة حالياً للCleaning بالذكاء الاصطناعي:
                 </p>
                 <div className="relative">
                   <textarea
@@ -4716,7 +4716,7 @@ Please locate speech balloons and output exactly in this JSON format ONLY (No ot
     "ymax": 380,
     "type": "bubble",
     "originalText": "Original English balloon text",
-    "translatedText": "الترجمة العربية البديلة والمحاذاة للوسط"
+    "translatedText": "الTranslation العربية البديلة والمحاذاة للوسط"
   }
 ]`}
                     className="w-full h-28 bg-black/60 border border-[#444] rounded-xl p-3 text-xs text-slate-350 font-mono resize-none text-left"
@@ -4734,7 +4734,7 @@ Please locate speech balloons and output exactly in this JSON format ONLY (No ot
     "ymax": 380,
     "type": "bubble",
     "originalText": "Original English balloon text",
-    "translatedText": "الترجمة العربية البديلة والمحاذاة للوسط"
+    "translatedText": "الTranslation العربية البديلة والمحاذاة للوسط"
   }
 ]`);
                       Swal.fire({
@@ -4761,7 +4761,7 @@ Please locate speech balloons and output exactly in this JSON format ONLY (No ot
                   الخطوة الثانية: لصق الاستجابة المسترجعة (Pasted Response JSON)
                 </h3>
                 <p className="text-xs text-slate-400">
-                  الصق الاستجابة التي صاغها لك الذكاء الاصطناعي الخارجي وسنقوم بتوزيع الترجمة على إحداثيات الصفحة فوراً:
+                  الصق الاستجابة التي صاغها لك الذكاء الاصطناعي الخارجي وسنقوم بتوزيع الTranslation على إحداثيات الصفحة فوراً:
                 </p>
                 <textarea
                   placeholder="[ ... مصفوفة الـ JSON المسترجعة ... ]"
@@ -4778,13 +4778,13 @@ Please locate speech balloons and output exactly in this JSON format ONLY (No ot
                 onClick={() => setShowExternalAIModal(false)}
                 className="bg-black/60 hover:bg-black border border-purple-500/15 hover:border-purple-500/30 text-slate-350 font-bold py-2.5 px-6 rounded-xl text-xs transition-all cursor-pointer"
               >
-                إلغاء
+                Cancel
               </button>
               <button
                 onClick={handleApplyExternalAICocktail}
                 className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-2.5 px-7 rounded-xl text-xs transition-all shadow-lg shadow-purple-950/45 cursor-pointer"
               >
-                ✓ تطبيق الترجمة الذكي على الصفحة
+                ✓ تطبيق الTranslation الذكي على الصفحة
               </button>
             </div>
           </div>
