@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, Cloud, Upload as UploadIcon, File, Link2, RefreshCw, Key, MessageSquare, Download, CheckCircle, Smartphone, Lock, HardDrive, HelpCircle, User, Plus } from 'lucide-react';
+import { Settings, Cloud, Upload as UploadIcon, File, Link2, RefreshCw, Key, MessageSquare, Download, CheckCircle, Smartphone, Lock, HardDrive, HelpCircle, User, Plus, Trash2 } from 'lucide-react';
 import { Api, TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import Swal from 'sweetalert2';
@@ -27,6 +27,8 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [files, setFiles] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   
   // Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null);
@@ -191,6 +193,7 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
 
 // Chat state
   const [chatMessage, setChatMessage] = useState('');
+  const [chatFile, setChatFile] = useState<File | null>(null);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
 
   const fetchChatMessages = async () => {
@@ -199,19 +202,16 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
       const msgs = await client.getMessages(chatId, { limit: 50 });
       // Only keep messages that are not manga projects, or formatted chat JSON
       const formattedChats = msgs.map(m => {
-        if (!m.message) return null;
+        if (!m.message && !m.media) return null;
         try {
-          const data = JSON.parse(m.message);
+          const data = JSON.parse(m.message || '{}');
           if (data && data.type === 'chat') {
-            return { id: m.id, text: data.text, date: new Date(m.date * 1000).toLocaleString(), sender: data.sender || 'مستخدم مجهول', avatar: data.avatar || null };
+             return { id: m.id, text: data.text || '', date: new Date(m.date * 1000).toLocaleString(), sender: data.sender || 'Anonymous', avatar: data.avatar || null, hasMedia: !!m.media, msgObj: m, fileName: data.fileName };
           }
-          return null; // It's structured JSON but not chat (likely manga_project)
+          return null; // It's structured JSON but not chat
         } catch {
           // Normal message (not valid JSON)
-          if (!m.media) {
-            return { id: m.id, text: m.message, date: new Date(m.date * 1000).toLocaleString(), sender: 'عضو القناة', avatar: null };
-          }
-          return null;
+          return { id: m.id, text: m.message || '', date: new Date(m.date * 1000).toLocaleString(), sender: 'Team Member', avatar: null, hasMedia: !!m.media, msgObj: m, fileName: (m.media as any)?.document?.attributes?.find((a:any)=>a.fileName)?.fileName || 'attachment' };
         }
       }).filter(Boolean);
       setChatMessages(formattedChats);
@@ -221,23 +221,42 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
   };
 
   const sendChatMessage = async () => {
-    if (!client || !chatId || !chatMessage.trim()) return;
+    if (!client || !chatId || (!chatMessage.trim() && !chatFile)) return;
     try {
       const p = JSON.parse(localStorage.getItem('team_profile') || '{}');
-      const senderName = p.name || 'عضو مجهول';
+      const senderName = p.name || 'Anonymous';
       
       const payload = {
         type: 'chat',
         text: chatMessage,
         sender: senderName,
         avatar: p.avatar || null,
+        fileName: chatFile?.name || null,
         timestamp: Date.now()
       };
-      await client.sendMessage(chatId, { message: JSON.stringify(payload) });
+      
+      if (chatFile) {
+        Swal.fire({ title: 'Uploading...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        const arrayBuffer = await chatFile.arrayBuffer();
+        const fileBuffer: any = Buffer.from(arrayBuffer);
+        fileBuffer.name = chatFile.name;
+        
+        await client.sendFile(chatId, {
+           file: fileBuffer,
+           caption: JSON.stringify(payload),
+           forceDocument: true
+        });
+        Swal.close();
+      } else {
+        await client.sendMessage(chatId, { message: JSON.stringify(payload) });
+      }
+      
       setChatMessage('');
+      setChatFile(null);
       fetchChatMessages();
     } catch (e) {
       console.error("Failed to send chat", e);
+      Swal.fire('Error', 'Failed to send message', 'error');
     }
   };
 
@@ -516,30 +535,46 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                   </div>
                   
                   <div className="space-y-1">
-                    <label className="text-xs text-blue-300 font-semibold block">الصورة الشخصية (محلياً)</label>
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      id="profile-upload"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          const reader = new FileReader();
-                          reader.onload = (ev) => {
+                    <label className="text-xs text-blue-300 font-semibold block">Avatar Variant</label>
+                    <div className="flex gap-2">
+                       <select 
+                         className="flex-1 bg-black/40 border border-blue-500/30 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-blue-400"
+                         onChange={(e) => {
                             try {
                                const p = JSON.parse(localStorage.getItem('team_profile') || '{}');
-                               p.avatar = ev.target?.result;
+                               const name = p.name || 'Anonymous';
+                               p.avatar = `https://api.dicebear.com/7.x/${e.target.value}/svg?seed=${encodeURIComponent(name)}`;
                                localStorage.setItem('team_profile', JSON.stringify(p));
-                               Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, icon: 'success', title: 'تم حفظ الصورة الشخصية', background: '#090615', color: '#fff'});
+                               window.dispatchEvent(new Event('storage'));
+                               Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, icon: 'success', title: 'Avatar Changed', background: '#090615', color: '#fff' });
                             } catch {}
-                          };
-                          reader.readAsDataURL(e.target.files[0]);
-                        }
-                      }}
-                    />
-                    <label htmlFor="profile-upload" className="w-full bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 text-blue-300 cursor-pointer font-bold py-3 rounded-xl transition-all text-sm flex items-center justify-center gap-2">
-                      <UploadIcon size={16} /> اختيار صورة من الجهاز
-                    </label>
+                         }}
+                         defaultValue="bottts"
+                       >
+                         <option value="bottts">Robot</option>
+                         <option value="adventurer">Adventurer</option>
+                         <option value="avataaars">Avataaars</option>
+                         <option value="fun-emoji">Emoji</option>
+                         <option value="shapes">Shapes</option>
+                       </select>
+                       <button 
+                         onClick={() => {
+                            try {
+                               const p = JSON.parse(localStorage.getItem('team_profile') || '{}');
+                               const variants = ['bottts', 'adventurer', 'avataaars', 'fun-emoji', 'shapes'];
+                               const variant = variants[Math.floor(Math.random() * variants.length)];
+                               const seed = Math.random().toString(36).substring(7);
+                               p.avatar = `https://api.dicebear.com/7.x/${variant}/svg?seed=${seed}`;
+                               localStorage.setItem('team_profile', JSON.stringify(p));
+                               window.dispatchEvent(new Event('storage'));
+                               Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, icon: 'success', title: 'Randomized Avatar', background: '#090615', color: '#fff' });
+                            } catch {}
+                         }}
+                         className="bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/30 text-blue-300 px-4 py-3 rounded-xl transition-colors font-bold text-xs"
+                       >
+                         🎲 Randomize
+                       </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -658,14 +693,32 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
               </div>
 
               {/* Grid/List Files */}
-              <div>
-                <div className="flex justify-between items-center mb-4">
+              <div className="space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
                   <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                    <HardDrive className="text-purple-400" size={18} /> المستودع السحابي
+                    <HardDrive className="text-purple-400" size={18} /> Cloud Storage
                   </h3>
-                  <button onClick={fetchFiles} className="text-sm text-purple-400 hover:text-white flex items-center gap-1 bg-purple-900/20 px-3 py-1.5 rounded-lg transition-colors">
-                    <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> تحديث القائمة
-                  </button>
+                  <div className="flex items-center gap-2 w-full md:w-auto">
+                     <input 
+                       type="text" 
+                       placeholder="Search files..."
+                       value={searchQuery}
+                       onChange={e => setSearchQuery(e.target.value)}
+                       className="flex-1 min-w-[200px] bg-black/40 border border-purple-500/30 rounded-xl px-4 py-2 text-white text-sm outline-none focus:border-purple-400"
+                     />
+                     <select
+                       value={sortOrder}
+                       onChange={e => setSortOrder(e.target.value as any)}
+                       className="bg-black/40 border border-purple-500/30 rounded-xl px-3 py-2 text-white text-sm outline-none focus:border-purple-400"
+                     >
+                        <option value="newest">Newest First</option>
+                        <option value="oldest">Oldest First</option>
+                        <option value="alphabetical">A-Z</option>
+                     </select>
+                     <button onClick={fetchFiles} className="text-sm text-purple-400 hover:text-white flex items-center gap-1 bg-purple-900/20 px-3 py-2 rounded-xl border border-purple-500/20 transition-colors">
+                       <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> Refresh
+                     </button>
+                  </div>
                 </div>
                 
                 {isLoading && files.length === 0 ? (
@@ -677,12 +730,16 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                 ) : files.length === 0 ? (
                    <div className="text-center py-16 liquid-glass rounded-2xl border border-purple-500/10">
                      <File className="mx-auto text-slate-500 mb-3 opacity-50" size={48} />
-                     <p className="text-slate-400 font-semibold">المستودع فارغ حالياً.</p>
-                     <p className="text-xs text-slate-500 mt-1">ارفع أول ملف لرؤية السحر!</p>
+                     <p className="text-slate-400 font-semibold">Repository is empty.</p>
+                     <p className="text-xs text-slate-500 mt-1">Upload the first file to see the magic!</p>
                    </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {files.map((file, idx) => (
+                    {files.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()) || f.sender.toLowerCase().includes(searchQuery.toLowerCase())).sort((a,b) => {
+                       if (sortOrder === 'oldest') return new Date(a.date).getTime() - new Date(b.date).getTime();
+                       if (sortOrder === 'alphabetical') return a.name.localeCompare(b.name);
+                       return new Date(b.date).getTime() - new Date(a.date).getTime();
+                    }).map((file, idx) => (
                       <div key={idx} className="liquid-glass rounded-xl overflow-hidden border border-purple-500/20 hover:border-purple-400/50 transition-colors group relative">
                         {coverUrls[file.id] ? (
                            <div className="h-40 w-full bg-black/60 relative">
@@ -709,8 +766,36 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
 
                           <div className="flex justify-between items-center text-xs text-slate-400 font-mono border-t border-white/5 pt-2 mt-2">
                              <span>{new Date(file.date).toLocaleDateString()}</span>
-                             <button className="text-purple-400 hover:text-white flex items-center gap-1 font-sans font-bold bg-purple-600/20 hover:bg-purple-600/40 px-2 py-1 rounded transition-colors block">
-                               <Download size={14} /> تنزيل
+                             <button 
+                               onClick={async () => {
+                                  try {
+                                    Swal.fire({ title: 'Downloading from Cloud...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                    const buffer = await client?.downloadMedia(file.msg);
+                                    if (buffer) {
+                                      const blob = new Blob([buffer]);
+                                      const url = window.URL.createObjectURL(blob);
+                                      const a = document.createElement('a');
+                                      a.style.display = 'none';
+                                      a.href = url;
+                                      
+                                      // The uploaded file already had `.zip` usually, but we fallback gracefully
+                                      const ext = (file.msg as any)?.file?.name?.split('.').pop() || 'zip';
+                                      a.download = `${file.name || 'project'}.${ext}`;
+                                      
+                                      document.body.appendChild(a);
+                                      a.click();
+                                      window.URL.revokeObjectURL(url);
+                                      Swal.close();
+                                    } else {
+                                      Swal.fire('Error', 'Empty file buffer received', 'error');
+                                    }
+                                  } catch (e: any) {
+                                    Swal.fire('Error', e?.message || 'Download failed', 'error');
+                                  }
+                               }}
+                               className="text-purple-400 hover:text-white flex items-center gap-1 font-sans font-bold bg-purple-600/20 hover:bg-purple-600/40 px-2 py-1 rounded transition-colors block"
+                             >
+                                <Download size={14} /> Download
                              </button>
                           </div>
                         </div>
@@ -762,7 +847,38 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                           <div className="flex flex-col">
                              {!isMe && <span className="text-[10px] text-purple-400 font-bold mb-1 mr-1">{msg.sender}</span>}
                              <div className={`p-3 rounded-2xl border ${isMe ? 'bg-purple-600 border-purple-500 text-white rounded-br-sm' : 'bg-white/5 border-white/10 text-slate-200 rounded-bl-sm'} shadow-lg backdrop-blur-md`}>
-                                <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                                {msg.text && <p className="text-sm whitespace-pre-wrap">{msg.text}</p>}
+                                {msg.hasMedia && (
+                                   <div className={`mt-2 p-2 rounded bg-black/20 flex items-center gap-2 border border-white/10 ${msg.text ? '' : 'mt-0'}`}>
+                                      <File size={20} className="text-indigo-300 shrink-0" />
+                                      <span className="text-xs truncate max-w-[150px]">{msg.fileName || 'Attachment'}</span>
+                                      <button 
+                                        onClick={async () => {
+                                           try {
+                                              Swal.fire({ title: 'Downloading file...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                              const buffer = await client?.downloadMedia(msg.msgObj);
+                                              if (buffer) {
+                                                const blob = new Blob([buffer]);
+                                                const url = window.URL.createObjectURL(blob);
+                                                const a = document.createElement('a');
+                                                a.style.display = 'none';
+                                                a.href = url;
+                                                a.download = msg.fileName || 'attachment';
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                window.URL.revokeObjectURL(url);
+                                                Swal.close();
+                                              }
+                                           } catch (err: any) {
+                                              Swal.fire('Error', err.message || 'Failed', 'error');
+                                           }
+                                        }}
+                                        className="ml-auto bg-purple-500/30 hover:bg-purple-500/50 p-1.5 rounded text-white"
+                                      >
+                                        <Download size={14} />
+                                      </button>
+                                   </div>
+                                )}
                              </div>
                              <span className={`text-[9px] text-slate-500 mt-1 font-mono ${isMe ? 'text-left ml-1' : 'text-right mr-1'}`}>{msg.date}</span>
                           </div>
@@ -772,19 +888,43 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                  )}
                </div>
 
+               {chatFile && (
+                 <div className="flex items-center gap-2 mb-2 bg-purple-900/40 p-2 rounded-xl border border-purple-500/30">
+                   <File size={16} className="text-purple-300" />
+                   <span className="text-xs text-slate-200 flex-1 truncate">{chatFile.name}</span>
+                   <button onClick={() => setChatFile(null)} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={14} /></button>
+                 </div>
+               )}
                <div className="flex gap-2 shrink-0">
+                 <input 
+                   type="file"
+                   id="chat-file-upload"
+                   className="hidden"
+                   onChange={(e) => {
+                     if (e.target.files && e.target.files[0]) {
+                       setChatFile(e.target.files[0]);
+                     }
+                   }}
+                 />
+                 <label 
+                   htmlFor="chat-file-upload" 
+                   className="bg-black/40 border border-purple-500/30 text-purple-400 hover:bg-purple-900/50 hover:text-purple-300 cursor-pointer rounded-xl px-4 flex items-center justify-center transition-all bg-purple-900/20"
+                 >
+                   <UploadIcon size={18} />
+                 </label>
+                 
                  <input 
                    type="text" 
                    value={chatMessage}
                    onChange={e => setChatMessage(e.target.value)}
                    onKeyDown={e => e.key === 'Enter' && sendChatMessage()}
                    placeholder="اكتب رسالتك وتوجيهاتك للفريق هنا..."
-                   className="flex-1 bg-black/40 border border-purple-500/30 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-purple-400"
+                   className="flex-1 bg-black/40 border border-purple-500/30 rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-purple-400 shrink min-w-0"
                  />
                  <button 
                    onClick={sendChatMessage}
-                   disabled={!chatMessage.trim()}
-                   className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-3 px-6 rounded-xl transition-all"
+                   disabled={!chatMessage.trim() && !chatFile}
+                   className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold py-3 px-6 rounded-xl transition-all whitespace-nowrap"
                  >
                    إرسال
                  </button>

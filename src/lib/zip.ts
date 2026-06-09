@@ -161,28 +161,32 @@ async function renderImageToDataUrl(img: ProcessedImage, format: 'jpeg' | 'png' 
 }
 
 export async function downloadProcessedZip(processedImages: ProcessedImage[], setProgress?: (msg: string) => void, zipFileName = 'translated_manga.zip') {
-  const zip = new JSZip();
+  try {
+    const zip = new JSZip();
 
-  for (let idx = 0; idx < processedImages.length; idx++) {
-    const img = processedImages[idx];
-    if (typeof setProgress === 'function') setProgress(`Processing page ${idx + 1} of ${processedImages.length}...`);
-    
-    // Rename sequentially
-    const ext = img.filename.split('.').pop() || 'png';
-    const newFilename = `page-${String(idx + 1).padStart(3, '0')}.${ext}`;
+    for (let idx = 0; idx < processedImages.length; idx++) {
+      const img = processedImages[idx];
+      if (typeof setProgress === 'function') setProgress(`Processing page ${idx + 1} of ${processedImages.length}...`);
+      
+      const ext = img.filename.split('.').pop() || 'png';
+      const newFilename = `page-${String(idx + 1).padStart(3, '0')}.${ext}`;
 
-    if (img.status !== 'done' && img.regions.length === 0 && img.paintStrokes.length === 0) {
-      zip.file(newFilename, img.dataUrl.split(',')[1], { base64: true });
-      continue;
+      if (img.status !== 'done' && (!img.regions || img.regions.length === 0) && (!img.paintStrokes || img.paintStrokes.length === 0)) {
+        zip.file(newFilename, img.dataUrl.split(',')[1], { base64: true });
+        continue;
+      }
+
+      const dataUrl = await renderImageToDataUrl(img, img.mimeType?.includes('jpeg') ? 'jpeg' : 'png');
+      zip.file(newFilename, dataUrl.split(',')[1], { base64: true });
     }
 
-    const dataUrl = await renderImageToDataUrl(img, img.mimeType?.includes('jpeg') ? 'jpeg' : 'png');
-    zip.file(newFilename, dataUrl.split(',')[1], { base64: true });
+    if (typeof setProgress === 'function') setProgress('Zipping files...');
+    const content = await zip.generateAsync({ type: 'blob' });
+    saveAs(content, typeof setProgress === 'string' ? setProgress : zipFileName);
+  } catch (err) {
+    console.error("Zip Error:", err);
+    throw err;
   }
-
-  if (typeof setProgress === 'function') setProgress('Zipping files...');
-  const content = await zip.generateAsync({ type: 'blob' });
-  saveAs(content, typeof setProgress === 'string' ? setProgress : zipFileName);
 }
 
 export async function downloadSingleImage(img: ProcessedImage) {

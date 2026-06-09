@@ -3192,13 +3192,18 @@ export default function App() {
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 const allImages = vol.chapters.flatMap(c => c.images);
-                                if (allImages.length === 0) return Swal.fire('Empty', 'لا توجد Images في هذا الVolume لLoadingها', 'info');
+                                if (allImages.length === 0) return Swal.fire('Empty', 'No images to compress', 'info');
                                 Swal.fire({ title: 'Compressing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                                await downloadProcessedZip(allImages, undefined, `${vol.name}.zip`);
-                                Swal.close();
+                                try {
+                                  await downloadProcessedZip(allImages, undefined, `${vol.name}.zip`);
+                                } catch (err: any) {
+                                  Swal.fire('Error', err?.message || 'Failed to generate ZIP', 'error');
+                                } finally {
+                                  Swal.close();
+                                }
                               }}
                               className="absolute top-4 left-4 bg-purple-950/80 hover:bg-purple-700 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-purple-500/20"
-                              title="Loading كل فصول الVolume كـ ZIP"
+                              title="Download all volume chapters as ZIP"
                             >
                               <Download size={13} />
                             </button>
@@ -3291,13 +3296,18 @@ export default function App() {
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  if (chap.images.length === 0) return Swal.fire('Empty', 'لا توجد Images في هذا الChapter لLoadingها', 'info');
+                                  if (chap.images.length === 0) return Swal.fire('Empty', 'No images to compress', 'info');
                                   Swal.fire({ title: 'Compressing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                                  await downloadProcessedZip(chap.images, undefined, `${chap.name}.zip`);
-                                  Swal.close();
+                                  try {
+                                    await downloadProcessedZip(chap.images, undefined, `${chap.name}.zip`);
+                                  } catch (err: any) {
+                                    Swal.fire('Error', err?.message || 'Failed to generate ZIP', 'error');
+                                  } finally {
+                                    Swal.close();
+                                  }
                                 }}
                                 className="absolute top-4 left-4 bg-purple-950/85 hover:bg-purple-750 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-purple-500/20"
-                                title="Loading كل Images الChapter كـ ZIP"
+                                title="Download all chapter images as ZIP"
                               >
                                 <Download size={13} />
                               </button>
