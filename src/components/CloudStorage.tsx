@@ -143,15 +143,18 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
     setIsLoading(true);
     try {
       const msgs = await client.getMessages(chatId, { limit: 50 });
-      const cloudFiles = msgs.filter(m => m.media && m.message && m.message.includes('"type":"manga_project"')).map(m => {
+      const cloudFiles = msgs.filter(m => m.media && m.message).map(m => {
         try {
           // Parse the JSON from the message text
           const data = JSON.parse(m.message);
-          return {
-            id: m.id,
-            msg: m,
-            ...data
-          };
+          if (data && data.type === 'manga_project') {
+            return {
+              id: m.id,
+              msg: m,
+              ...data
+            };
+          }
+          return null;
         } catch {
           return null;
         }
@@ -179,14 +182,14 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
         if (!m.message) return null;
         try {
           const data = JSON.parse(m.message);
-          if (data.type === 'chat') {
-            return { id: m.id, text: data.text, date: new Date(m.date * 1000).toLocaleString(), sender: data.sender || 'مستخدم مجهول' };
+          if (data && data.type === 'chat') {
+            return { id: m.id, text: data.text, date: new Date(m.date * 1000).toLocaleString(), sender: data.sender || 'مستخدم مجهول', avatar: data.avatar || null };
           }
-          return null;
+          return null; // It's structured JSON but not chat (likely manga_project)
         } catch {
-          // Normal message
-          if (!m.message.includes('"type":"manga_project"')) {
-            return { id: m.id, text: m.message, date: new Date(m.date * 1000).toLocaleString(), sender: 'عضو القناة' };
+          // Normal message (not valid JSON)
+          if (!m.media) {
+            return { id: m.id, text: m.message, date: new Date(m.date * 1000).toLocaleString(), sender: 'عضو القناة', avatar: null };
           }
           return null;
         }
@@ -207,6 +210,7 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
         type: 'chat',
         text: chatMessage,
         sender: senderName,
+        avatar: p.avatar || null,
         timestamp: Date.now()
       };
       await client.sendMessage(chatId, { message: JSON.stringify(payload) });
@@ -239,12 +243,17 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
       const fileBuffer: any = Buffer.from(arrayBuffer);
       fileBuffer.name = uploadFile.name; // Polyfill name property so Telegram parses it
 
+      let p = { name: '', avatar: '' };
+      try { p = JSON.parse(localStorage.getItem('team_profile') || '{}'); } catch {}
+
       const metadata = {
         type: "manga_project",
         name: uploadName || uploadFile.name,
         status: uploadStatus || "New",
         description: uploadDesc || "", // Custom description
         cover: uploadCover || "",      // Base64 cover
+        sender: p.name || 'مستخدم مجهول',
+        avatar: p.avatar || '',
         date: new Date().toISOString()
       };
 
@@ -567,10 +576,26 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                       type="file" 
                       className="hidden" 
                       ref={fileInputRef}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         if(e.target.files && e.target.files[0]) {
-                          setUploadFile(e.target.files[0]);
-                          if(!uploadName) setUploadName(e.target.files[0].name);
+                          const file = e.target.files[0];
+                          setUploadFile(file);
+                          if(!uploadName) setUploadName(file.name);
+                          
+                          if (file.name.toLowerCase().endsWith('.zip')) {
+                            try {
+                              const jszip = new (await import('jszip')).default();
+                              const zip = await jszip.loadAsync(file);
+                              const imageFiles = Object.keys(zip.files).filter(name => !zip.files[name].dir && name.match(/\.(png|jpe?g|webp)$/i));
+                              if (imageFiles.length > 0) {
+                                const fileData = await zip.files[imageFiles[0]].async('base64');
+                                setUploadCover(`data:image/jpeg;base64,${fileData}`);
+                                Swal.fire({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000, icon: 'success', title: 'تم استخراج الغلاف تلقائياً', background: '#090615', color: '#fff' });
+                              }
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }
                         }
                       }}
                     />
@@ -646,6 +671,14 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                           <h4 className="font-bold text-white text-base mb-1 truncate">{file.name}</h4>
                           <span className="inline-block px-2 py-0.5 rounded bg-purple-500/15 border border-purple-500/30 text-[10px] text-purple-300 font-bold mb-3">{file.status}</span>
                           
+                          {/* Sender Info for File */}
+                          <div className="flex items-center gap-2 mb-3 bg-white/5 p-2 rounded-lg border border-white/5">
+                            <div className="w-6 h-6 rounded-full overflow-hidden bg-purple-900 border border-purple-500/30 shrink-0">
+                               {file.avatar ? <img src={file.avatar} alt="Sender" className="w-full h-full object-cover" /> : <User size={12} className="m-auto mt-1 text-purple-400" />}
+                            </div>
+                            <span className="text-xs text-slate-300 truncate">{file.sender || 'مستخدم مجهول'}</span>
+                          </div>
+
                           <div className="flex justify-between items-center text-xs text-slate-400 font-mono border-t border-white/5 pt-2 mt-2">
                              <span>{new Date(file.date).toLocaleDateString()}</span>
                              <button className="text-purple-400 hover:text-white flex items-center gap-1 font-sans font-bold bg-purple-600/20 hover:bg-purple-600/40 px-2 py-1 rounded transition-colors block">
@@ -678,22 +711,36 @@ export function CloudStorage({ onBack }: CloudStorageProps) {
                  </button>
                </div>
                
-               <div className="flex-1 overflow-y-auto w-full space-y-4 pr-2 mb-4 scrollbar-thin scrollbar-thumb-purple-900 scrollbar-track-transparent">
+               <div className="flex-1 overflow-y-auto w-full space-y-6 pr-2 mb-4 scrollbar-thin scrollbar-thumb-purple-900 scrollbar-track-transparent flex flex-col">
                  {chatMessages.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-slate-500 opacity-50">
                       <MessageSquare size={48} className="mb-2" />
                       <p>لا توجد رسائل سابقة. ابدأ النقاش مع الفريق المجهول الخاص بك!</p>
                     </div>
                  ) : (
-                    chatMessages.slice().reverse().map((msg, idx) => (
-                      <div key={idx} className="bg-purple-950/20 border border-purple-500/15 rounded-xl p-3 w-fit max-w-[85%] self-start text-right">
-                        <div className="flex gap-2 items-center mb-1">
-                           <span className="text-xs font-bold text-purple-300">{msg.sender}</span>
-                           <span className="text-[10px] text-slate-500 font-mono">{msg.date}</span>
+                    chatMessages.slice().reverse().map((msg, idx) => {
+                      let myName = '';
+                      try { myName = JSON.parse(localStorage.getItem('team_profile') || '{}').name; } catch {}
+                      const isMe = msg.sender === myName && myName !== '';
+                      
+                      return (
+                        <div key={idx} className={`flex items-end gap-3 max-w-[85%] ${isMe ? 'self-end flex-row-reverse' : 'self-start'}`}>
+                          {/* Avatar */}
+                          <div className="w-8 h-8 rounded-full overflow-hidden bg-purple-900 border border-purple-500/30 shrink-0 flex items-center justify-center">
+                            {msg.avatar ? <img src={msg.avatar} alt={msg.sender} className="w-full h-full object-cover" /> : <User size={14} className="text-purple-300" />}
+                          </div>
+                          
+                          {/* Bubble */}
+                          <div className="flex flex-col">
+                             {!isMe && <span className="text-[10px] text-purple-400 font-bold mb-1 mr-1">{msg.sender}</span>}
+                             <div className={`p-3 rounded-2xl border ${isMe ? 'bg-purple-600 border-purple-500 text-white rounded-br-sm' : 'bg-white/5 border-white/10 text-slate-200 rounded-bl-sm'} shadow-lg backdrop-blur-md`}>
+                                <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                             </div>
+                             <span className={`text-[9px] text-slate-500 mt-1 font-mono ${isMe ? 'text-left ml-1' : 'text-right mr-1'}`}>{msg.date}</span>
+                          </div>
                         </div>
-                        <p className="text-sm text-slate-200">{msg.text}</p>
-                      </div>
-                    ))
+                      )
+                    })
                  )}
                </div>
 

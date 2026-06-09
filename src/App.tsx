@@ -2983,11 +2983,88 @@ export default function App() {
                       >
                         ← المجلدات (Volumes)
                       </button>
+                      <label 
+                        className="bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 text-purple-300 font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer flex items-center justify-center gap-2"
+                      >
+                        <UploadIcon size={14} /> رفع مجلد كـ شابتر
+                        <input 
+                          type="file" 
+                          // @ts-ignore
+                          webkitdirectory="true" 
+                          directory="true" 
+                          multiple 
+                          className="hidden"
+                          onChange={async (e) => {
+                             const files = e.target.files;
+                             if (!files || files.length === 0) return;
+                             
+                             Swal.fire({ title: 'جاري معالجة صور المجلد...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                             
+                             // filter images only and sort them by name naturally
+                             const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
+                             
+                             if (imageFiles.length === 0) {
+                               return Swal.fire('فارغ', 'لا توجد صور في هذا المجلد', 'error');
+                             }
+                             
+                             const newImages: ProcessedImage[] = [];
+                             for (let i = 0; i < imageFiles.length; i++) {
+                               const file = imageFiles[i];
+                               const dataUrl = await new Promise<string>((resolve) => {
+                                 const reader = new FileReader();
+                                 reader.onload = (ev) => resolve(ev.target?.result as string);
+                                 reader.readAsDataURL(file);
+                               });
+                               const dimensions = await new Promise<{width: number, height: number}>((resolve) => {
+                                   const img = new Image();
+                                   img.onload = () => resolve({ width: img.width, height: img.height });
+                                   img.src = dataUrl;
+                               });
+                               newImages.push({
+                                   id: Math.random().toString(36).substr(2, 9),
+                                   filename: file.name,
+                                   dataUrl,
+                                   mimeType: file.type,
+                                   regions: [],
+                                   paintStrokes: [],
+                                   status: "idle",
+                                   width: dimensions.width,
+                                   height: dimensions.height
+                               });
+                             }
+                             
+                             const folderPathParts = imageFiles[0].webkitRelativePath.split('/');
+                             const chapterName = folderPathParts.length > 1 ? folderPathParts[0] : 'شابتر جديد (من مجلد)';
+                             
+                             const newChapter: Chapter = {
+                               id: Math.random().toString(36).substr(2, 9),
+                               name: chapterName,
+                               images: newImages
+                             };
+                             
+                             setMangas(prev => prev.map(m => {
+                               if (m.id !== activeMangaId) return m;
+                               return {
+                                 ...m,
+                                 volumes: m.volumes.map(v => {
+                                   if (v.id !== activeVolumeId) return v;
+                                   return { ...v, chapters: [...v.chapters, newChapter] }
+                                 })
+                               }
+                             }));
+                             
+                             Swal.close();
+                             
+                             // clear input
+                             e.target.value = '';
+                          }}
+                        />
+                      </label>
                       <button 
                         onClick={handleAddChapterPrompt}
                         className="bg-indigo-600 hover:bg-indigo-550 text-white font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer shadow-md shadow-indigo-950/45"
                       >
-                        + إضافة شابتر جديد (Add Chapter)
+                        + إضافة شابتر فارغ
                       </button>
                     </>
                   )}
