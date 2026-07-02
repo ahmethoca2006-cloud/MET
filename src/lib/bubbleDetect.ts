@@ -3,9 +3,10 @@ export function floodFillBubble(
   startX: number,
   startY: number,
   regionWidth?: number,
-  regionHeight?: number
+  regionHeight?: number,
+  avoidPoints?: { x: number; y: number }[]
 ): { x: number; y: number; width: number; height: number } | null {
-  const result = floodFillBubbleDetailed(imageData, startX, startY, regionWidth, regionHeight);
+  const result = floodFillBubbleDetailed(imageData, startX, startY, regionWidth, regionHeight, avoidPoints);
   if (!result) return null;
   return {
     x: result.x,
@@ -256,7 +257,11 @@ export function floodFillBubbleDetailed(
   startX: number,
   startY: number,
   regionWidth?: number,
-  regionHeight?: number
+  regionHeight?: number,
+  // Centers of OTHER bubbles already placed on the same page. This is
+  // information no amount of pixel analysis can recover on its own - see
+  // the "Sibling-bubble barrier" comment below for why it matters.
+  avoidPoints?: { x: number; y: number }[]
 ): DetailedBubbleResult | null {
   const { width, height, data } = imageData;
   if (width === 0 || height === 0) return null;
@@ -428,6 +433,34 @@ export function floodFillBubbleDetailed(
   const maxExtentY = Math.min(height, regionHeight ? Math.max(180, Math.round(regionHeight * 2.4)) : Math.round(height * 0.32));
   const maxIterations = Math.min(260000, Math.max(35000, maxExtentX * maxExtentY * 2));
 
+  // Sibling-bubble barrier: other bubbles already placed on this page have
+  // known centers - information no amount of pixel analysis can recover on
+  // its own. Real manga bubbles are sometimes drawn touching or overlapping,
+  // or separated only by a border thin enough that no purely local color
+  // test can reliably hold (see isFillable above); when that happens here,
+  // this fill and the neighbor's would otherwise both claim the same
+  // territory and their safe-text rectangles would land on top of each
+  // other. Carving a small hard "keep-out" disk around every other known
+  // bubble center gives the fill (and therefore the traced contour and the
+  // inscribed safe-text rectangle, both derived from it) a boundary it can
+  // never cross - so two adjacent bubbles can't end up with overlapping
+  // text boxes even when their fills would otherwise merge into one blob.
+  const avoidRadius = Math.max(6, Math.round(Math.min(maxExtentX, maxExtentY) * 0.05));
+  const avoidRadiusSq = avoidRadius * avoidRadius;
+  const relevantAvoidPoints = (avoidPoints ?? []).filter(p => {
+    const adx = p.x - startX, ady = p.y - startY;
+    if (adx === 0 && ady === 0) return false; // guard against a caller accidentally including this bubble's own seed
+    return Math.abs(adx) <= maxExtentX * 1.5 && Math.abs(ady) <= maxExtentY * 1.5;
+  });
+  const isAvoided = (px: number, py: number) => {
+    for (let i = 0; i < relevantAvoidPoints.length; i++) {
+      const p = relevantAvoidPoints[i];
+      const ddx = px - p.x, ddy = py - p.y;
+      if (ddx * ddx + ddy * ddy <= avoidRadiusSq) return true;
+    }
+    return false;
+  };
+
   const visited = new Uint8Array(width * height); // interior fill + one-pixel boundary ring (for contour)
   const interior = new Uint8Array(width * height); // interior fill only (for safe text-bounds rectangle)
   const queueX: number[] = [startX];
@@ -466,6 +499,7 @@ export function floodFillBubbleDetailed(
 
       const idx1D = ny * width + nx;
       if (visited[idx1D]) continue;
+      if (relevantAvoidPoints.length > 0 && isAvoided(nx, ny)) continue; // hard wall - never visited, never fillable
       visited[idx1D] = 1;
 
       if (isFillable(nx, ny, parentR, parentG, parentB)) {

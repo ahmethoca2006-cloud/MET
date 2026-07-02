@@ -780,9 +780,13 @@ export default function App() {
       
       ctx.drawImage(imageObj, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      
-      const result = floodFillBubbleDetailed(imageData, Math.floor(seedX), Math.floor(seedY), imageObj.width, imageObj.height);
-      
+
+      // Keep the new fill from swallowing any bubble that's already placed nearby.
+      const avoidPoints = img.regions
+        .filter(r => r.type === 'bubble')
+        .map(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 }));
+      const result = floodFillBubbleDetailed(imageData, Math.floor(seedX), Math.floor(seedY), imageObj.width, imageObj.height, avoidPoints);
+
       if (result) {
         saveHistory(img.id);
         const id = 'region-' + Math.random().toString(36).substr(2, 9);
@@ -1071,9 +1075,12 @@ export default function App() {
     
     const startX = Math.floor(region.x + region.width / 2);
     const startY = Math.floor(region.y + region.height / 2);
-    
-    const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height);
-    
+
+    const avoidPoints = img.regions
+      .filter(r => r.type === 'bubble' && r.id !== region.id)
+      .map(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 }));
+    const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
+
     if (result) {
       saveHistory(img.id);
       updateRegion(region.id, {
@@ -1109,11 +1116,18 @@ export default function App() {
       ctx.drawImage(imageObj, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+      // Fixed snapshot of every bubble's original center, taken before any of
+      // them are re-detected, so processing order can't change the outcome.
+      const allBubbleCenters = regions
+        .filter(r => r.type === 'bubble')
+        .map(r => ({ id: r.id, x: r.x + r.width / 2, y: r.y + r.height / 2 }));
+
       return regions.map(region => {
         if (region.type === 'bubble') {
           const startX = Math.floor(region.x + region.width / 2);
           const startY = Math.floor(region.y + region.height / 2);
-          const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height);
+          const avoidPoints = allBubbleCenters.filter(p => p.id !== region.id);
+          const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
           if (result) {
             return {
               ...region,
@@ -1529,12 +1543,19 @@ export default function App() {
     const newRegions = [...img.regions];
     let changed = false;
 
+    // Fixed snapshot of every bubble's original center, taken before any of
+    // them are re-detected, so processing order can't change the outcome.
+    const allBubbleCenters = img.regions
+      .filter(r => r.type === 'bubble')
+      .map(r => ({ id: r.id, x: r.x + r.width / 2, y: r.y + r.height / 2 }));
+
     for (let i = 0; i < newRegions.length; i++) {
        const region = newRegions[i];
        if (region.type === 'bubble') { // ignores SFX completely
          const startX = Math.floor(region.x + region.width / 2);
          const startY = Math.floor(region.y + region.height / 2);
-         const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height);
+         const avoidPoints = allBubbleCenters.filter(p => p.id !== region.id);
+         const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
          if (result) {
            newRegions[i] = { 
              ...region, 
@@ -1578,11 +1599,18 @@ export default function App() {
       
       const previews: any[] = [];
 
+      // Fixed snapshot of every bubble's original center, taken before any of
+      // them are re-detected, so processing order can't change the outcome.
+      const allBubbleCenters = img.regions
+        .filter(r => r.type === 'bubble')
+        .map(r => ({ id: r.id, x: r.x + r.width / 2, y: r.y + r.height / 2 }));
+
       for (const region of img.regions) {
         if (region.type === 'bubble') { // ignore SFX regions
           const startX = Math.floor(region.x + region.width / 2);
           const startY = Math.floor(region.y + region.height / 2);
-          const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height);
+          const avoidPoints = allBubbleCenters.filter(p => p.id !== region.id);
+          const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
           if (result) {
             previews.push({
               regionId: region.id,
