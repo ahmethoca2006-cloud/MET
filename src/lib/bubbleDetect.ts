@@ -25,6 +25,7 @@ export interface DetailedBubbleResult {
   safeTextBounds: { x: number; y: number; width: number; height: number };
 }
 
+
 // Perceptual-ish weighted RGB distance ("redmean" approximation of CIE76).
 // Far cheaper than converting to Lab, but tracks human color perception
 // much better than plain Euclidean distance - important once we compare
@@ -440,23 +441,33 @@ export function floodFillBubbleDetailed(
   // test can reliably hold (see isFillable above); when that happens here,
   // this fill and the neighbor's would otherwise both claim the same
   // territory and their safe-text rectangles would land on top of each
-  // other. Carving a small hard "keep-out" disk around every other known
-  // bubble center gives the fill (and therefore the traced contour and the
-  // inscribed safe-text rectangle, both derived from it) a boundary it can
-  // never cross - so two adjacent bubbles can't end up with overlapping
-  // text boxes even when their fills would otherwise merge into one blob.
-  const avoidRadius = Math.max(6, Math.round(Math.min(maxExtentX, maxExtentY) * 0.05));
-  const avoidRadiusSq = avoidRadius * avoidRadius;
+  // other.
+  //
+  // A small fixed-radius keep-out disk around each sibling center was tried
+  // first and rejected: it only dents a fused blob right next to the
+  // sibling's exact center, so the maximal-rectangle search just routes
+  // around it and still produces a rectangle that spans (most of) both
+  // bubbles - a fixed radius has no way to know how large "this bubble" is,
+  // especially on the very first click where the only size hint available
+  // is the whole image, not the bubble. A Voronoi-style nearest-seed
+  // partition has no such scale problem: a candidate pixel is only ours if
+  // it's closer to OUR seed than to any sibling's, i.e. the perpendicular
+  // bisector between the two seeds becomes the wall. That boundary falls
+  // near the true waist of a fused blob regardless of how big the blob is,
+  // with nothing to tune.
   const relevantAvoidPoints = (avoidPoints ?? []).filter(p => {
     const adx = p.x - startX, ady = p.y - startY;
     if (adx === 0 && ady === 0) return false; // guard against a caller accidentally including this bubble's own seed
     return Math.abs(adx) <= maxExtentX * 1.5 && Math.abs(ady) <= maxExtentY * 1.5;
   });
   const isAvoided = (px: number, py: number) => {
+    if (relevantAvoidPoints.length === 0) return false;
+    const mdx = px - startX, mdy = py - startY;
+    const ownDistSq = mdx * mdx + mdy * mdy;
     for (let i = 0; i < relevantAvoidPoints.length; i++) {
       const p = relevantAvoidPoints[i];
       const ddx = px - p.x, ddy = py - p.y;
-      if (ddx * ddx + ddy * ddy <= avoidRadiusSq) return true;
+      if (ddx * ddx + ddy * ddy < ownDistSq) return true; // strictly closer to a sibling's seed than to our own
     }
     return false;
   };
