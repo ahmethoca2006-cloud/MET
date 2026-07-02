@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense } from 'react';
-import { Upload, Download, Play, Save, Loader2, Image as ImageIcon, Type as TypeIcon, MousePointer2, Brush, Eraser, PenTool, ZoomIn, ZoomOut, Maximize, Palette, Plus, Pipette, Trash2, ChevronUp, ChevronDown, ImagePlus, Key, Sparkles, Scissors, Undo, Wand2, Settings, LayoutGrid } from 'lucide-react';
+import { Upload, Download, Play, Save, Loader2, Image as ImageIcon, Type as TypeIcon, MousePointer2, Brush, Eraser, PenTool, ZoomIn, ZoomOut, Maximize, Palette, Plus, Pipette, Trash2, ChevronUp, ChevronDown, ImagePlus, Key, Sparkles, Scissors, Undo, Wand2, Settings, LayoutGrid, CalendarClock, CloudCog } from 'lucide-react';
 import { extractImagesFromZip, downloadProcessedZip, downloadPdf, downloadSingleImage } from './lib/zip';
 import { processMangaPages, generateInpaint, RawRegion } from './lib/gemini';
 import { floodFillBubble, floodFillBubbleDetailed } from './lib/bubbleDetect';
@@ -13,12 +13,14 @@ import { saveAs } from 'file-saver';
 import { CloudStorage } from './components/CloudStorage';
 import { TopBar } from './components/TopBar';
 import { FloatingMusicPlayer } from './components/FloatingMusicPlayer';
+import { SplashScreen } from './components/SplashScreen';
 
 const ImageEditor = React.lazy(() => import('./components/ImageEditor').then(m => ({ default: m.ImageEditor })));
 
 type Tool = 'select' | 'draw' | 'erase' | 'fill_poly' | 'bg_erase' | 'smart_sfx' | 'gen_erase' | 'crop' | 'scribble_bubble';
 
 export default function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [images, setImages] = useState<ProcessedImage[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState<string | null>(null);
@@ -265,6 +267,8 @@ export default function App() {
   };
   
   // Editor State
+  const [showLeftPanel, setShowLeftPanel] = useState(false);
+  const [showRightPanel, setShowRightPanel] = useState(false);
   const [activeTool, setActiveTool] = useState<Tool>('select');
   const [brushSize, setBrushSize] = useState(20);
   const [brushColor, setBrushColor] = useState('#ffffff');
@@ -2441,6 +2445,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-tr from-[#02000a] via-[#0d091a] to-[#0a0514] dynamic-bg text-slate-200 overflow-hidden font-sans">
+      {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
       <TopBar />
       <FloatingMusicPlayer />
       
@@ -2455,30 +2460,30 @@ export default function App() {
       )}
       {/* Topbar */}
       {activeNavigationTab === 'library' && activeChapterId !== null && (
-        <header className="h-16 border-b border-purple-500/10 flex items-center justify-between px-6 bg-black/40 backdrop-blur-md shrink-0">
-          <div className="flex items-center gap-6">
+        <header className="h-14 sm:h-16 border-b border-purple-500/10 flex items-center justify-between px-2.5 sm:px-6 bg-black/40 backdrop-blur-md shrink-0 overflow-x-auto scrollbar-thin gap-3">
+          <div className="flex items-center gap-3 sm:gap-6 shrink-0">
             <button
               onClick={() => {
                 setActiveChapterId(null);
                 setImages([]);
                 setSelectedImageId(null);
               }}
-              className="flex items-center gap-2 bg-purple-950/45 hover:bg-purple-900 border border-purple-500/35 text-purple-300 hover:text-white px-3 py-1.5 rounded-lg text-xs font-semibold font-display transition-all"
+              className="flex items-center gap-2 bg-purple-950/45 hover:bg-purple-900 border border-purple-500/35 text-purple-300 hover:text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold font-display transition-all shrink-0 whitespace-nowrap"
             >
-              ← Back للمكتبة (Library)
+              ← <span className="hidden xs:inline">Back للمكتبة (Library)</span>
             </button>
-            <div className="flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-3 shrink-0">
               <TypeIcon className="text-purple-400" />
-              <h1 className="font-display font-bold text-xl tracking-tight text-white leading-none">MangaAI Studio</h1>
+              <h1 className="font-display font-bold text-xl tracking-tight text-white leading-none whitespace-nowrap">MangaAI Studio</h1>
             </div>
-            
-            <div className="relative">
-             <button 
+
+            <div className="relative shrink-0">
+             <button
                onClick={() => setShowSettingsModal(true)}
-               className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${customApiKey ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400' : 'bg-[#111] border-[#444] text-slate-300'}`}
+               className={`flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-colors border whitespace-nowrap ${customApiKey ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400' : 'bg-[#111] border-[#444] text-slate-300'}`}
              >
                <Settings size={14} />
-               Settings
+               <span className="hidden xs:inline">Settings</span>
              </button>
           </div>
         </div>
@@ -3415,8 +3420,22 @@ export default function App() {
 
         {activeNavigationTab === 'library' && activeChapterId !== null && images.length > 0 && (
           <>
-            {/* Left Sidebar (Thumbnails) */}
-            <aside className="w-64 border-r border-purple-500/10 bg-black/30 backdrop-blur-md flex flex-col overflow-y-auto glass-noise">
+            {/* Backdrop for off-canvas panels on narrow screens */}
+            {(showLeftPanel || showRightPanel) && (
+              <div
+                className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"
+                onClick={() => { setShowLeftPanel(false); setShowRightPanel(false); }}
+              />
+            )}
+
+            {/* Left Sidebar (Thumbnails): static column on desktop, off-canvas drawer below lg */}
+            <aside className={`fixed inset-y-0 left-0 z-40 w-64 border-r border-purple-500/10 bg-black/95 lg:bg-black/30 backdrop-blur-md flex flex-col overflow-y-auto glass-noise transition-transform duration-300 lg:static lg:translate-x-0 ${showLeftPanel ? 'translate-x-0' : '-translate-x-full'}`}>
+              <button
+                onClick={() => setShowLeftPanel(false)}
+                className="lg:hidden flex items-center gap-1.5 m-2 self-end bg-white/5 border border-white/10 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg"
+              >
+                ✕ Close
+              </button>
               {images.length === 0 && (
                 <div className="p-8 text-center text-slate-500 text-sm">
                   Upload a ZIP file to get started.
@@ -3493,7 +3512,21 @@ export default function App() {
             <div className="w-full h-full flex flex-col gap-4">
               <div className="flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-3 flex-wrap">
+                  <button
+                    onClick={() => setShowLeftPanel(true)}
+                    className="lg:hidden flex items-center gap-1.5 bg-[#111] border border-purple-500/25 text-purple-300 text-xs font-semibold px-2.5 py-1.5 rounded-lg"
+                    title="Show page thumbnails"
+                  >
+                    <LayoutGrid size={13} /> Pages
+                  </button>
                   <h2 className="font-medium text-slate-300 text-sm max-w-[200px] truncate">{selectedImage.filename}</h2>
+                  <button
+                    onClick={() => setShowRightPanel(true)}
+                    className="lg:hidden flex items-center gap-1.5 bg-[#111] border border-purple-500/25 text-purple-300 text-xs font-semibold px-2.5 py-1.5 rounded-lg"
+                    title="Show properties panel"
+                  >
+                    <Settings size={13} /> Properties
+                  </button>
                   <button
                     onClick={() => setShowExternalAIModal(true)}
                     className="flex items-center gap-1.5 bg-[#090615] hover:bg-[#130d2a] border border-purple-500/30 text-purple-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all shadow-[0_4px_12px_rgba(168,85,247,0.15)]"
@@ -3811,8 +3844,14 @@ export default function App() {
           )}
         </main>
 
-        {/* Right Sidebar (Properties) */}
-        <aside className="w-80 border-l border-[#333] bg-black flex flex-col overflow-y-auto">
+        {/* Right Sidebar (Properties): static column on desktop, off-canvas drawer below lg */}
+        <aside className={`fixed inset-y-0 right-0 z-40 w-80 max-w-[85vw] border-l border-[#333] bg-black flex flex-col overflow-y-auto transition-transform duration-300 lg:static lg:max-w-none lg:translate-x-0 ${showRightPanel ? 'translate-x-0' : 'translate-x-full'}`}>
+          <button
+            onClick={() => setShowRightPanel(false)}
+            className="lg:hidden flex items-center gap-1.5 m-2 self-start bg-white/5 border border-white/10 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg"
+          >
+            ✕ Close
+          </button>
           {selectedImage && selectedRegion ? (
             <div className="p-5 flex flex-col gap-6">
               <div>
@@ -4385,102 +4424,84 @@ export default function App() {
         )}
       </div>
 
-      {/* Dynamic Purple/Black Liquid Glass Bottom Toolbar */}
+      {/* iOS-style Liquid Glass floating tab bar */}
       {activeChapterId === null && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-6 py-2.5 bg-black/90 backdrop-blur-xl border border-purple-500/25 rounded-full shadow-[0_12px_45px_-8px_rgba(147,51,234,0.45)] flex items-center justify-between gap-10 z-50 transition-all hover:border-purple-500/40">
-          
-          {/* Left Side Tab Actions (Scheduler, Settings) */}
-          <div className="flex items-center gap-6">
-            <button 
-              type="button"
-              onClick={() => setActiveNavigationTab('settings')}
-              className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'settings' ? 'text-purple-400 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'settings' ? 'bg-purple-950/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]' : 'group-hover:bg-white/5'}`}>
-                <svg className="w-5 h-5 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx={12} cy={12} r={3} />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
-              </div>
-              <span className="text-[10px] font-medium tracking-wide">Settings</span>
-            </button>
+        <div className="fixed bottom-safe left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-sm sm:w-auto sm:max-w-none flex justify-center">
+          <div className="liquid-glass-nav w-full sm:w-auto px-3 xs:px-5 sm:px-6 py-2.5 rounded-[28px] flex items-center justify-between gap-2 xs:gap-5 sm:gap-8 md:gap-10 transition-all">
 
-            <button 
-              type="button"
-              onClick={() => setActiveNavigationTab('scheduler')}
-              className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'scheduler' ? 'text-purple-400 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'scheduler' ? 'bg-purple-950/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]' : 'group-hover:bg-white/5'}`}>
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <rect x={3} y={4} width={18} height={18} rx={2} ry={2} />
-                  <line x1={16} y1={2} x2={16} y2={6} />
-                  <line x1={8} y1={2} x2={8} y2={6} />
-                  <line x1={3} y1={10} x2={21} y2={10} />
-                  <path d="M12 14v4h4" />
-                </svg>
-              </div>
-              <span className="text-[10px] font-medium tracking-wide">Scheduler</span>
-            </button>
-          </div>
+            {/* Left Side Tab Actions (Settings, Scheduler) */}
+            <div className="flex items-center gap-2 xs:gap-4 sm:gap-6">
+              <button
+                type="button"
+                onClick={() => setActiveNavigationTab('settings')}
+                className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'settings' ? 'text-purple-300 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'settings' ? 'bg-purple-500/20 shadow-[0_0_14px_rgba(168,85,247,0.35)]' : 'group-hover:bg-white/8'}`}>
+                  <Settings size={19} strokeWidth={1.8} />
+                </div>
+                <span className="hidden xs:block text-[10px] font-medium tracking-wide">Settings</span>
+              </button>
 
-          {/* Central Standalone Black Circular Plus Button */}
-          <div className="relative -mt-6">
-            <button 
-              type="button"
-              onClick={() => {
-                if (activeMangaId) {
-                  if (activeVolumeId) {
-                    handleAddChapterPrompt();
+              <button
+                type="button"
+                onClick={() => setActiveNavigationTab('scheduler')}
+                className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'scheduler' ? 'text-purple-300 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'scheduler' ? 'bg-purple-500/20 shadow-[0_0_14px_rgba(168,85,247,0.35)]' : 'group-hover:bg-white/8'}`}>
+                  <CalendarClock size={19} strokeWidth={1.8} />
+                </div>
+                <span className="hidden xs:block text-[10px] font-medium tracking-wide">Scheduler</span>
+              </button>
+            </div>
+
+            {/* Central Standalone Liquid Glass Plus Button */}
+            <div className="relative -mt-7 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeMangaId) {
+                    if (activeVolumeId) {
+                      handleAddChapterPrompt();
+                    } else {
+                      handleAddVolumePrompt();
+                    }
                   } else {
-                    handleAddVolumePrompt();
+                    setShowCreateSeriesModal(true);
                   }
-                } else {
-                  setShowCreateSeriesModal(true);
-                }
-              }}
-              className="w-14 h-14 bg-black border-2 border-purple-500 rounded-full flex items-center justify-center shadow-[0_5px_22px_rgba(168,85,247,0.55)] cursor-pointer text-white hover:scale-110 active:scale-95 transition-all duration-350"
-              title="أنشئ Projectاً جديداً"
-            >
-              <svg className="w-6 h-6 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round">
-                <line x1={12} y1={5} x2={12} y2={19} />
-                <line x1={5} y1={12} x2={19} y2={12} />
-              </svg>
-            </button>
+                }}
+                className="w-14 h-14 bg-gradient-to-b from-purple-500 to-fuchsia-700 rounded-full flex items-center justify-center shadow-[0_6px_24px_rgba(168,85,247,0.65)] ring-1 ring-white/25 cursor-pointer text-white hover:scale-110 active:scale-95 transition-all duration-300"
+                title="أنشئ Projectاً جديداً"
+              >
+                <Plus size={26} strokeWidth={2.6} />
+              </button>
+            </div>
+
+            {/* Right Side Tab Actions (Cloud Storage, Library) */}
+            <div className="flex items-center gap-2 xs:gap-4 sm:gap-6">
+              <button
+                type="button"
+                onClick={() => setActiveNavigationTab('cloud')}
+                className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'cloud' ? 'text-purple-300 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'cloud' ? 'bg-purple-500/20 shadow-[0_0_14px_rgba(168,85,247,0.35)]' : 'group-hover:bg-white/8'}`}>
+                  <CloudCog size={19} strokeWidth={1.8} />
+                </div>
+                <span className="hidden xs:block text-[10px] font-medium tracking-wide">Cloud</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveNavigationTab('library')}
+                className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'library' ? 'text-purple-300 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'library' ? 'bg-purple-500/20 shadow-[0_0_14px_rgba(168,85,247,0.35)]' : 'group-hover:bg-white/8'}`}>
+                  <LayoutGrid size={19} strokeWidth={1.8} />
+                </div>
+                <span className="hidden xs:block text-[10px] font-medium tracking-wide">My Library</span>
+              </button>
+            </div>
+
           </div>
-
-          {/* Right Side Tab Actions (Cloud Storage, Library) */}
-          <div className="flex items-center gap-6">
-            <button 
-              type="button"
-              onClick={() => setActiveNavigationTab('cloud')}
-              className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'cloud' ? 'text-purple-400 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'cloud' ? 'bg-purple-950/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]' : 'group-hover:bg-white/5'}`}>
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 10v6M9 13l3 3 3-3" />
-                  <path d="M20.88 18.04A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29" />
-                </svg>
-              </div>
-              <span className="text-[10px] font-medium tracking-wide">Cloud</span>
-            </button>
-
-            <button 
-              type="button"
-              onClick={() => setActiveNavigationTab('library')}
-              className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'library' ? 'text-purple-400 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-            >
-              <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'library' ? 'bg-purple-950/40 shadow-[0_0_12px_rgba(168,85,247,0.2)]' : 'group-hover:bg-white/5'}`}>
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                  <rect x={3} y={3} width={7} height={7} rx={1} />
-                  <rect x={14} y={3} width={7} height={7} rx={1} />
-                  <rect x={14} y={14} width={7} height={7} rx={1} />
-                  <rect x={3} y={14} width={7} height={7} rx={1} />
-                </svg>
-              </div>
-              <span className="text-[10px] font-medium tracking-wide">My Library</span>
-            </button>
-          </div>
-
         </div>
       )}
 
