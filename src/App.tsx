@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback, Suspense } from 'react';
-import { Upload, Download, Play, Save, Loader2, Image as ImageIcon, Type as TypeIcon, MousePointer2, Brush, Eraser, PenTool, ZoomIn, ZoomOut, Maximize, Palette, Plus, Pipette, Trash2, ChevronUp, ChevronDown, ImagePlus, Key, Sparkles, Scissors, Undo, Wand2, Settings, LayoutGrid, CalendarClock, CloudCog } from 'lucide-react';
+import { Upload, Download, Play, Save, Loader2, Image as ImageIcon, Type as TypeIcon, MousePointer2, Brush, Eraser, PenTool, ZoomIn, ZoomOut, Maximize, Palette, Plus, Pipette, Trash2, ChevronUp, ChevronDown, ImagePlus, Key, Sparkles, Scissors, Undo, Wand2, Settings, LayoutGrid } from 'lucide-react';
 import { extractImagesFromZip, downloadProcessedZip, downloadPdf, downloadSingleImage } from './lib/zip';
 import { processMangaPages, generateInpaint, RawRegion } from './lib/gemini';
 import { floodFillBubble, floodFillBubbleDetailed } from './lib/bubbleDetect';
 import { createTranslationDoc, parseTranslationDoc } from './lib/translationDoc';
 import { ProcessedImage, Region, PaintStroke, CropSelection, MangaSeries, Volume, Chapter } from './types';
 import { get, set } from 'idb-keyval';
-import Swal from 'sweetalert2';
+import { swal, swalToast, Swal } from './lib/swalTheme';
 import 'sweetalert2/dist/sweetalert2.min.css';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
@@ -14,6 +14,10 @@ import { CloudStorage } from './components/CloudStorage';
 import { TopBar } from './components/TopBar';
 import { FloatingMusicPlayer } from './components/FloatingMusicPlayer';
 import { SplashScreen } from './components/SplashScreen';
+import { SettingsPanel } from './components/SettingsPanel';
+import { BottomTabBar } from './components/BottomTabBar';
+import { SidebarRail } from './components/SidebarRail';
+import { Modal, Button } from './components/ui';
 
 const ImageEditor = React.lazy(() => import('./components/ImageEditor').then(m => ({ default: m.ImageEditor })));
 
@@ -342,13 +346,10 @@ export default function App() {
 
   const handleApplyExternalAICocktail = () => {
     if (!selectedImageId) {
-      Swal.fire({
+      swal({
         icon: 'warning',
         title: 'تنبيه',
-        text: 'برجاء فتح صفحة واحدة أولاً والوقوف عليها داخل الاستوديو لتطبيق الTranslation.',
-        background: '#090615',
-        color: '#ffffff',
-        confirmButtonColor: '#7c3aed'
+        text: 'برجاء فتح صفحة واحدة أولاً والوقوف عليها داخل الاستوديو لتطبيق الTranslation.'
       });
       return;
     }
@@ -358,13 +359,10 @@ export default function App() {
     try {
       const cleanData = externalAIPasteData.trim();
       if (!cleanData) {
-        Swal.fire({
+        swal({
           icon: 'error',
           title: 'حقل Empty',
-          text: 'برجاء لصق الكود (مصفوفة الـ JSON) المسترجع من الذكاء الاصطناعي أولاً.',
-          background: '#090615',
-          color: '#ffffff',
-          confirmButtonColor: '#7c3aed'
+          text: 'برجاء لصق الكود (مصفوفة الـ JSON) المسترجع من الذكاء الاصطناعي أولاً.'
         });
         return;
       }
@@ -424,23 +422,17 @@ export default function App() {
       setExternalAIPasteData('');
       setShowExternalAIModal(false);
 
-      Swal.fire({
+      swal({
         icon: 'success',
         title: 'تم دمج الTranslation الخارجية بSuccess!',
-        text: `تم التعرف واسترداد عدد ${newRegions.length} فقاعات حوارية وتطبيقها بذكاء مع توسيط الTextوص.`,
-        confirmButtonColor: '#7c3aed',
-        background: '#090615',
-        color: '#ffffff'
+        text: `تم التعرف واسترداد عدد ${newRegions.length} فقاعات حوارية وتطبيقها بذكاء مع توسيط الTextوص.`
       });
     } catch (err: any) {
       console.error(err);
-      Swal.fire({
+      swal({
         icon: 'error',
         title: 'صيغة غير صالحة',
-        text: 'فشل تحليل الText المنسوخ كقائمة مدخلات Translation صالحة. تأكد من ثبات قائمة الـ JSON المسترجعة.',
-        confirmButtonColor: '#7c3aed',
-        background: '#090615',
-        color: '#ffffff'
+        text: 'فشل تحليل الText المنسوخ كقائمة مدخلات Translation صالحة. تأكد من ثبات قائمة الـ JSON المسترجعة.'
       });
     }
   };
@@ -449,15 +441,13 @@ export default function App() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
     
-    Swal.fire({
+    swal({
       title: 'Loading and parsing fonts...',
       text: 'الرجاء الانتظار الحين معالجة ملفات الخطوط',
       allowOutsideClick: false,
       didOpen: () => {
         Swal.showLoading();
-      },
-      background: '#090615',
-      color: '#ffffff'
+      }
     });
 
     try {
@@ -495,34 +485,25 @@ export default function App() {
 
       if (loadedFonts.length > 0) {
         setCustomFonts(prev => [...prev, ...loadedFonts]);
-        Swal.fire({
+        swal({
           icon: 'success',
           title: 'تم تفعيل الخطوط المخصصة!',
           text: `تم استخراج وLoading ${loadedFonts.length} من الخطوط بSuccess داخل الاستوديو.`,
-          confirmButtonText: 'رائع',
-          confirmButtonColor: '#7c3aed',
-          background: '#090615',
-          color: '#ffffff'
+          confirmButtonText: 'رائع'
         });
       } else {
-        Swal.fire({
+        swal({
           icon: 'error',
           title: 'Error في معالجة الملف',
-          text: 'لم يتم العثور على خطوط صالحة (TTF/OTF) داخل الملف المرفوع.',
-          confirmButtonColor: '#7c3aed',
-          background: '#090615',
-          color: '#ffffff'
+          text: 'لم يتم العثور على خطوط صالحة (TTF/OTF) داخل الملف المرفوع.'
         });
       }
     } catch (err) {
       console.error(err);
-      Swal.fire({
+      swal({
         icon: 'error',
         title: 'فشل تثبيت الخطوط',
-        text: 'حدث Error غير متوقع أثناء تفكيك وقراءة ملفات الخط.',
-        confirmButtonColor: '#7c3aed',
-        background: '#090615',
-        color: '#ffffff'
+        text: 'حدث Error غير متوقع أثناء تفكيك وقراءة ملفات الخط.'
       });
     }
   };
@@ -612,14 +593,12 @@ export default function App() {
       };
     }));
 
-    Swal.fire({
+    swal({
       icon: 'success',
       title: 'تم فصل الفقاعتين!',
       text: 'تم فصل الفقاعة المستهدفة بذكاء لفقاعتين مستقلتين مواءمتين للمحاذاة.',
       timer: 1500,
-      showConfirmButton: false,
-      background: '#090615',
-      color: '#ffffff'
+      showConfirmButton: false
     });
   };
 
@@ -668,32 +647,28 @@ export default function App() {
 
     updateRegion(region.id, { translatedText: formatted });
 
-    Swal.fire({
+    swal({
       icon: 'success',
       title: 'تم ضبط كشيدة الTextوص!',
       text: style === 'oval' ? 'تم تطبيق كشيدة التدريج البيضاوي لملائمة الدوائر.' : 'تم استعادة التنسيق المستطيل القياسي.',
       timer: 1200,
-      showConfirmButton: false,
-      background: '#090615',
-      color: '#ffffff'
+      showConfirmButton: false
     });
   };
 
   const handleExportPsd = async () => {
     if (images.length === 0) {
-      Swal.fire('Error', 'برجاء Loading Images الفصل للExport.', 'error');
+      swal({ title: 'Error', text: 'برجاء Loading Images الفصل للExport.', icon: 'error' });
       return;
     }
 
-    Swal.fire({
+    swal({
       title: 'توليد ملفات Photoshop PSD...',
       text: 'Packing layers, transparent texts, and repainted art into a PSD-compatible workspace...',
       allowOutsideClick: false,
       didOpen: () => {
         Swal.showLoading();
-      },
-      background: '#090615',
-      color: '#ffffff'
+      }
     });
 
     try {
@@ -753,18 +728,15 @@ export default function App() {
       const content = await zip.generateAsync({ type: 'blob' });
       saveAs(content, `${mangas.find(m => m.id === activeMangaId)?.title || 'MET'}_Photoshop_MultiLayer_PSD.zip`);
 
-      Swal.fire({
+      swal({
         icon: 'success',
         title: 'تم Export حزمة طبقات PSD بSuccess!',
         text: 'تم تسليمك ملف ZIP يضم الطبقات مفصولة بالكامل، خطوط الTextوص الشفافة المستقلة، والتصميم الجمالي الجاهز للمتابعة داخل فوتوشوب دقة عالية.',
-        confirmButtonText: 'ممتاز',
-        confirmButtonColor: '#7c3aed',
-        background: '#090615',
-        color: '#ffffff'
+        confirmButtonText: 'ممتاز'
       });
     } catch (err) {
       console.error(err);
-      Swal.fire('Error في الExport', 'تعذر كتابة ملف PSD الExportي.', 'error');
+      swal({ title: 'Error في الExport', text: 'تعذر كتابة ملف PSD الExportي.', icon: 'error' });
     }
   };
 
@@ -849,23 +821,18 @@ export default function App() {
           };
         }));
         
-        Swal.fire({
+        swal({
           icon: 'success',
           title: 'حدود محاذاة ذكية!',
           text: 'تم رصد واحتواء فقاعة الحوار تلقائياً بدلالة الشخبطة وتوسيط الText.',
           timer: 1500,
-          showConfirmButton: false,
-          background: '#090615',
-          color: '#ffffff'
+          showConfirmButton: false
         });
       } else {
-        Swal.fire({
+        swal({
           icon: 'warning',
           title: 'تنبيه',
-          text: 'تعذر التعرف التلقائي على حدود الفقاعة من نقطة الشخبطة. يرجى تجربة الشخبطة بمنتصف الفقاعة تماماً.',
-          confirmButtonColor: '#7c3aed',
-          background: '#090615',
-          color: '#ffffff'
+          text: 'تعذر التعرف التلقائي على حدود الفقاعة من نقطة الشخبطة. يرجى تجربة الشخبطة بمنتصف الفقاعة تماماً.'
         });
       }
     };
@@ -876,15 +843,13 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    Swal.fire({
+    swal({
       title: 'Importing Manga Pages...',
       text: 'Please wait while we unpack the archive and prepare the pages.',
       allowOutsideClick: false,
       didOpen: () => {
         Swal.showLoading();
-      },
-      background: '#120b24',
-      color: '#f8fafc'
+      }
     });
 
     try {
@@ -894,27 +859,19 @@ export default function App() {
         setSelectedImageId(extractedImages[0].id);
       }
       Swal.close();
-      
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
+
+      swalToast({
         icon: 'success',
         title: 'Archive Imported!',
         text: `Successfully loaded ${extractedImages.length} images into the library.`,
-        showConfirmButton: false,
-        timer: 2000,
-        background: '#120b24',
-        color: '#f8fafc'
+        timer: 2000
       });
     } catch (error) {
       console.error("Error reading zip", error);
-      Swal.fire({
+      swal({
         icon: 'error',
         title: 'ZIP Import Failed',
-        text: 'The archive might be corrupted or in an unsupported format.',
-        confirmButtonColor: '#7c3aed',
-        background: '#120b24',
-        color: '#f8fafc'
+        text: 'The archive might be corrupted or in an unsupported format.'
       });
     }
   };
@@ -925,27 +882,22 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    Swal.fire({
+    swal({
       title: 'Merging Cleaned Plates...',
       text: 'Matching the whitened manga sheets against original page indices...',
       allowOutsideClick: false,
       didOpen: () => {
         Swal.showLoading();
-      },
-      background: '#120b24',
-      color: '#f8fafc'
+      }
     });
 
     try {
       const cleanedImages = await extractImagesFromZip(file);
       if (cleanedImages.length === 0) {
-        Swal.fire({
+        swal({
           icon: 'warning',
           title: 'Empty Clean Archive',
-          text: 'No matching cleaned image sheets were found in the uploaded file.',
-          confirmButtonColor: '#eab308',
-          background: '#120b24',
-          color: '#f8fafc'
+          text: 'No matching cleaned image sheets were found in the uploaded file.'
         });
         return;
       }
@@ -985,23 +937,17 @@ export default function App() {
         return newImages;
       });
       
-      Swal.fire({
+      swal({
         icon: 'success',
         title: 'Manga Cleaning Plates Merged!',
-        text: 'Successfully swapped original sheets for whitened plates. Use the "View Original" toggle to inspect any changes.',
-        confirmButtonColor: '#7c3aed',
-        background: '#120b24',
-        color: '#f8fafc'
+        text: 'Successfully swapped original sheets for whitened plates. Use the "View Original" toggle to inspect any changes.'
       });
     } catch (error) {
       console.error("Error reading cleaned zip", error);
-      Swal.fire({
+      swal({
         icon: 'error',
         title: 'Clean Plate Import Failed',
-        text: 'Could not successfully swap or process image paths: ' + (error as Error).message,
-        confirmButtonColor: '#ef4444',
-        background: '#120b24',
-        color: '#f8fafc'
+        text: 'Could not successfully swap or process image paths: ' + (error as Error).message
       });
     }
     if (cleanZipInputRef.current) cleanZipInputRef.current.value = '';
@@ -1187,13 +1133,10 @@ export default function App() {
 
       const rawRegions = results[0]?.regions || [];
       if (rawRegions.length === 0) {
-        Swal.fire({
+        swal({
           icon: 'info',
           title: 'No Texts Found',
-          text: 'The AI model could not detect any text or bubbles in this specified crop segment.',
-          background: '#120b24',
-          color: '#f8fafc',
-          confirmButtonColor: '#7c3aed'
+          text: 'The AI model could not detect any text or bubbles in this specified crop segment.'
         });
         return;
       }
@@ -1246,27 +1189,19 @@ export default function App() {
         setSelectedRegionId(newRegions[0].id);
       }
 
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
+      swalToast({
         icon: 'success',
         title: 'Translated Successfully!',
-        showConfirmButton: false,
         timer: 1500,
-        timerProgressBar: true,
-        background: '#120b24',
-        color: '#f8fafc'
+        timerProgressBar: true
       });
 
     } catch (err) {
       console.error("AI Cropped Translate error:", err);
-      Swal.fire({
+      swal({
         icon: 'error',
         title: 'Translation Failed',
-        text: 'An error occurred during crop segment translation: ' + (err as Error).message,
-        confirmButtonColor: '#ef4444',
-        background: '#120b24',
-        color: '#f8fafc'
+        text: 'An error occurred during crop segment translation: ' + (err as Error).message
       });
     } finally {
       setIsProcessingCrop(false);
@@ -1308,44 +1243,30 @@ export default function App() {
 
       setCropsQueue(prev => [...prev, newCrop]);
 
-      Swal.fire({
-        toast: true,
-        position: 'top-end',
+      swalToast({
         icon: 'success',
         title: 'Added to Batch Queue',
         text: `Segment bounding [${Math.round(rect.w)}x${Math.round(rect.h)}] saved to batch pipeline.`,
-        showConfirmButton: false,
         timer: 2000,
-        timerProgressBar: true,
-        background: '#120b24',
-        color: '#f8fafc',
-        customClass: {
-          popup: 'backdrop-blur-md bg-purple-950/90 border border-purple-800/80 rounded-xl shadow-2xl'
-        }
+        timerProgressBar: true
       });
 
     } catch (e) {
       console.error("Error cropping section for queue:", e);
-      Swal.fire({
+      swal({
         icon: 'error',
         title: 'Crop Segment Error',
-        text: 'Failed to write cropped canvas data: ' + (e as Error).message,
-        confirmButtonColor: '#ef4444',
-        background: '#120b24',
-        color: '#f8fafc'
+        text: 'Failed to write cropped canvas data: ' + (e as Error).message
       });
     }
   };
 
   const handleTranslateCropQueue = async () => {
     if (cropsQueue.length === 0) {
-      Swal.fire({
+      swal({
         icon: 'warning',
         title: 'Crop Queue is Empty',
-        text: 'Please crop at least one segment first using the Crop tool, then proceed with translation.',
-        confirmButtonColor: '#7c3aed',
-        background: '#120b24',
-        color: '#f8fafc'
+        text: 'Please crop at least one segment first using the Crop tool, then proceed with translation.'
       });
       return;
     }
@@ -1414,13 +1335,10 @@ export default function App() {
 
       const rawRegions = results[0]?.regions || [];
       if (rawRegions.length === 0) {
-        Swal.fire({
+        swal({
           icon: 'info',
           title: 'No Texts Found',
-          text: 'The Gemini AI model did not detect any text regions in the crop segments.',
-          confirmButtonColor: '#7c3aed',
-          background: '#120b24',
-          color: '#f8fafc'
+          text: 'The Gemini AI model did not detect any text regions in the crop segments.'
         });
         return;
       }
@@ -1501,24 +1419,18 @@ export default function App() {
 
       setCropsQueue([]);
 
-      Swal.fire({
+      swal({
         icon: 'success',
         title: 'Batch Translation Complete!',
-        text: `Processed crops and localized ${totalAddedCount} translated text bubbled regions directly on their matching original sheets.`,
-        confirmButtonColor: '#7c3aed',
-        background: '#120b24',
-        color: '#f8fafc'
+        text: `Processed crops and localized ${totalAddedCount} translated text bubbled regions directly on their matching original sheets.`
       });
 
     } catch (err) {
       console.error("Batch Queue translate error:", err);
-      Swal.fire({
+      swal({
         icon: 'error',
         title: 'Batch Translation Failed',
-        text: 'An error occurred during multi-crop Gemini API processing: ' + (err as Error).message,
-        confirmButtonColor: '#ef4444',
-        background: '#120b24',
-        color: '#f8fafc'
+        text: 'An error occurred during multi-crop Gemini API processing: ' + (err as Error).message
       });
     } finally {
       setIsProcessingCrop(false);
@@ -1875,17 +1787,13 @@ export default function App() {
   };
 
   const handleDeleteManga = (mangaId: string) => {
-    Swal.fire({
+    swal({
       title: 'هل ترغب بDelete هذه المانجا كلياً من Library؟',
       text: "سيؤدي هذا الإجراء لDelete كافة الVolumeات والفصول والصفحات المTranslation نهائياً ولا يمكن الBack فيه!",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'نعم، اDelete السلسلة',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#374151',
-      background: '#120b24',
-      color: '#f8fafc'
+      cancelButtonText: 'Cancel'
     }).then((result) => {
       if (result.isConfirmed) {
         setMangas(prev => prev.filter(m => m.id !== mangaId));
@@ -1894,29 +1802,22 @@ export default function App() {
           setActiveVolumeId(null);
           setActiveChapterId(null);
         }
-        Swal.fire({
+        swal({
           icon: 'success',
-          text: 'تم Delete سلسلة المانجا بSuccess!',
-          confirmButtonColor: '#7c3aed',
-          background: '#120b24',
-          color: '#f8fafc'
+          text: 'تم Delete سلسلة المانجا بSuccess!'
         });
       }
     });
   };
 
   const handleDeleteVolume = (volId: string) => {
-    Swal.fire({
+    swal({
       title: 'هل تريد Delete هذا الVolume وجسد فصوله؟',
       text: "سيتم Delete الVolume بكافة الفصول الموجودة بداخله نهائياً!",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'نعم، اDeleteه',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#374151',
-      background: '#120b24',
-      color: '#f8fafc'
+      cancelButtonText: 'Cancel'
     }).then((result) => {
       if (result.isConfirmed) {
         setMangas(prev => prev.map(m => {
@@ -1930,29 +1831,22 @@ export default function App() {
           setActiveVolumeId(null);
           setActiveChapterId(null);
         }
-        Swal.fire({
+        swal({
           icon: 'success',
-          text: 'تم Delete الVolume بSuccess!',
-          confirmButtonColor: '#7c3aed',
-          background: '#120b24',
-          color: '#f8fafc'
+          text: 'تم Delete الVolume بSuccess!'
         });
       }
     });
   };
 
   const handleDeleteChapter = (chapId: string) => {
-    Swal.fire({
+    swal({
       title: 'هل تريد Delete هذا الChapter كلياً؟',
       text: "سيؤدي هذا لDelete كافة الImages المغروسة والEditات المطبقة نهائياً!",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'نعم، اDeleteه',
-      cancelButtonText: 'Cancel',
-      confirmButtonColor: '#dc2626',
-      cancelButtonColor: '#374151',
-      background: '#120b24',
-      color: '#f8fafc'
+      cancelButtonText: 'Cancel'
     }).then((result) => {
       if (result.isConfirmed) {
         setMangas(prev => prev.map(m => {
@@ -1972,19 +1866,16 @@ export default function App() {
           setActiveChapterId(null);
           setImages([]);
         }
-        Swal.fire({
+        swal({
           icon: 'success',
-          text: 'تم Delete الChapter المترجم بSuccess!',
-          confirmButtonColor: '#7c3aed',
-          background: '#120b24',
-          color: '#f8fafc'
+          text: 'تم Delete الChapter المترجم بSuccess!'
         });
       }
     });
   };
 
   const handleAddVolumePrompt = () => {
-    Swal.fire({
+    swal({
       title: 'Add Volume جديد (New Volume)',
       text: 'أدخل اسم الVolume أو رقمه الترتيبي للتصنيف:',
       input: 'text',
@@ -1992,9 +1883,6 @@ export default function App() {
       showCancelButton: true,
       confirmButtonText: 'Add الVolume',
       cancelButtonText: 'Cancel',
-      confirmButtonColor: '#7c3aed',
-      background: '#120b24',
-      color: '#f8fafc',
       inputValidator: (value) => {
         if (!value) {
           return 'يجب كتابة اسم الVolume!';
@@ -2016,19 +1904,16 @@ export default function App() {
             volumes: [...m.volumes, newVol]
           };
         }));
-        Swal.fire({
+        swal({
           icon: 'success',
-          text: `تمت Add الVolume ${value} بSuccess!`,
-          confirmButtonColor: '#7c3aed',
-          background: '#120b24',
-          color: '#f8fafc'
+          text: `تمت Add الVolume ${value} بSuccess!`
         });
       }
     });
   };
 
   const handleAddChapterPrompt = () => {
-    Swal.fire({
+    swal({
       title: 'Add Chapter جديد (New Chapter)',
       text: 'أدخل رقم الفصل أو اسم الجزء لحساب الTranslation:',
       input: 'text',
@@ -2036,9 +1921,6 @@ export default function App() {
       showCancelButton: true,
       confirmButtonText: 'إنشاء الفصل',
       cancelButtonText: 'Cancel',
-      confirmButtonColor: '#7c3aed',
-      background: '#120b24',
-      color: '#f8fafc',
       inputValidator: (value) => {
         if (!value) {
           return 'يجب كتابة اسم الفصل!';
@@ -2077,12 +1959,9 @@ export default function App() {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 2 * 1024 * 1024) {
-        Swal.fire({
+        swal({
           icon: 'warning',
-          text: 'يرجى اختيار Imagesة بحجم أصغر من 2 ميجابايت لضمان سرعة الأداء.',
-          confirmButtonColor: '#7c3aed',
-          background: '#120b24',
-          color: '#f8fafc'
+          text: 'يرجى اختيار Imagesة بحجم أصغر من 2 ميجابايت لضمان سرعة الأداء.'
         });
         return;
       }
@@ -2098,12 +1977,9 @@ export default function App() {
 
   const handleCreateSeries = () => {
     if (!newSeriesTitle.trim()) {
-      Swal.fire({
+      swal({
         icon: 'error',
-        text: 'يجب كتابة عنوان المانجا/المانهوا للبدء!',
-        confirmButtonColor: '#7c3aed',
-        background: '#120b24',
-        color: '#f8fafc'
+        text: 'يجب كتابة عنوان المانجا/المانهوا للبدء!'
       });
       return;
     }
@@ -2126,12 +2002,9 @@ export default function App() {
     setNewSeriesCoverUrl('');
     setShowCreateSeriesModal(false);
 
-    Swal.fire({
+    swal({
       icon: 'success',
-      text: 'تمت Add السلسلة الجديدة لمكتبتك بSuccess! انقر عليها الآن لإنشاء الVolumeات والفصول.',
-      confirmButtonColor: '#7c3aed',
-      background: '#120b24',
-      color: '#f8fafc'
+      text: 'تمت Add السلسلة الجديدة لمكتبتك بSuccess! انقر عليها الآن لإنشاء الVolumeات والفصول.'
     });
   };
 
@@ -2307,12 +2180,9 @@ export default function App() {
     setImages([demoImage]);
     setSelectedImageId(demoImage.id);
     setActiveNavigationTab('library');
-    Swal.fire({
+    swal({
       icon: 'success',
-      text: 'Interactive sample demo project loaded! Select individual speech bubbles to translate, realign, or change fonts.',
-      confirmButtonColor: '#7c3aed',
-      background: '#120b24',
-      color: '#f8fafc'
+      text: 'Interactive sample demo project loaded! Select individual speech bubbles to translate, realign, or change fonts.'
     });
   };
 
@@ -2444,23 +2314,23 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-tr from-[#02000a] via-[#0d091a] to-[#0a0514] dynamic-bg text-slate-200 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen app-shell-bg dynamic-bg text-ink overflow-hidden font-sans">
       {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
       <TopBar />
       <FloatingMusicPlayer />
       
       {exportProgress && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm">
-          <div className="liquid-glass rounded-3xl p-8 flex flex-col items-center gap-4 max-w-md w-full shadow-[0_20px_50px_rgba(168,85,247,0.35)] border border-purple-500/35 animate-fade-in">
-            <Loader2 size={48} className="animate-spin text-purple-400" />
-            <h2 className="text-xl font-display font-bold text-white tracking-tight">Exporting High Quality ZIP</h2>
-            <p className="text-sm text-slate-400 text-center font-mono">{exportProgress}</p>
+          <div className="liquid-glass rounded-3xl p-8 flex flex-col items-center gap-4 max-w-md w-full shadow-[0_20px_50px_var(--color-accent-soft)] border border-accent/35 animate-fade-in">
+            <Loader2 size={48} className="animate-spin text-accent" />
+            <h2 className="text-xl font-display font-bold text-ink tracking-tight">Exporting High Quality ZIP</h2>
+            <p className="text-sm text-ink-muted text-center font-mono">{exportProgress}</p>
           </div>
         </div>
       )}
       {/* Topbar */}
       {activeNavigationTab === 'library' && activeChapterId !== null && (
-        <header className="h-14 sm:h-16 border-b border-purple-500/10 flex items-center justify-between px-2.5 sm:px-6 bg-black/40 backdrop-blur-md shrink-0 overflow-x-auto scrollbar-thin gap-3">
+        <header className="h-14 sm:h-16 border-b border-hairline flex items-center justify-between px-2.5 sm:px-6 bg-surface/70 backdrop-blur-md shrink-0 overflow-x-auto scrollbar-thin gap-3">
           <div className="flex items-center gap-3 sm:gap-6 shrink-0">
             <button
               onClick={() => {
@@ -2468,19 +2338,19 @@ export default function App() {
                 setImages([]);
                 setSelectedImageId(null);
               }}
-              className="flex items-center gap-2 bg-purple-950/45 hover:bg-purple-900 border border-purple-500/35 text-purple-300 hover:text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold font-display transition-all shrink-0 whitespace-nowrap"
+              className="flex items-center gap-2 bg-accent-soft hover:bg-accent/30 border border-accent/35 text-accent hover:text-ink px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold font-display transition-all shrink-0 whitespace-nowrap"
             >
               ← <span className="hidden xs:inline">Back للمكتبة (Library)</span>
             </button>
             <div className="hidden sm:flex items-center gap-3 shrink-0">
-              <TypeIcon className="text-purple-400" />
-              <h1 className="font-display font-bold text-xl tracking-tight text-white leading-none whitespace-nowrap">MangaAI Studio</h1>
+              <TypeIcon className="text-accent" />
+              <h1 className="font-display font-bold text-xl tracking-tight text-ink leading-none whitespace-nowrap">MangaAI Studio</h1>
             </div>
 
             <div className="relative shrink-0">
              <button
                onClick={() => setShowSettingsModal(true)}
-               className={`flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-colors border whitespace-nowrap ${customApiKey ? 'bg-emerald-950/40 border-emerald-800 text-emerald-400' : 'bg-[#111] border-[#444] text-slate-300'}`}
+               className={`flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-colors border whitespace-nowrap ${customApiKey ? 'bg-success/10 border-success/40 text-success' : 'bg-elevated border-hairline text-ink-muted'}`}
              >
                <Settings size={14} />
                <span className="hidden xs:inline">Settings</span>
@@ -2488,274 +2358,176 @@ export default function App() {
           </div>
         </div>
         
-        {showSettingsModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 text-left">
-          <div className="liquid-glass rounded-3xl w-full max-w-md shadow-[0_20px_50px_rgba(168,85,247,0.3)] border border-purple-500/25 flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center p-5 border-b border-purple-500/10">
-              <h2 className="text-lg font-display font-bold text-white flex items-center gap-2">
-                <span className="text-purple-400">✧</span> Application Settings
-              </h2>
-              <button 
-                onClick={() => setShowSettingsModal(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-md transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-            
-            <div className="p-5 overflow-y-auto flex flex-col gap-6">
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-slate-300 font-display">
-                    Gemini API Keys (One per line)
-                  </span>
-                  {customApiKey.split(/[\s,\n]+/).map(k => k.trim()).filter(Boolean).length > 0 && (
-                    <span className="text-[11px] bg-purple-950/40 border border-purple-800 text-purple-400 px-2 py-0.5 rounded-full font-mono">
-                      {customApiKey.split(/[\s,\n]+/).map(k => k.trim()).filter(Boolean).length} Keys
-                    </span>
-                  )}
-                </div>
-                <textarea 
-                  value={customApiKey}
-                  onChange={handleApiKeyChange}
-                  placeholder="Enter your Gemini API key(s)..."
-                  className="w-full h-24 bg-black/60 border border-purple-500/15 rounded-md p-2 text-xs outline-none focus:border-purple-500 font-mono text-slate-200 resize-none"
-                />
-                <div className="space-y-1 text-[10px] text-slate-500 leading-relaxed font-mono">
-                  <p>✔ Enter multiple API keys to enable concurrent parallel translation across multiple page streams.</p>
-                  <p>✔ Keeps rate limits healthy by routing requests across keys dynamically.</p>
-                  <p>✔ External usage outside of the AI Studio preview environment requires a valid personal Gemini API Key.</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="flex flex-col text-sm font-medium text-slate-300">
-                  Cleaned ZIP Match Mode
-                  <select 
-                    value={zipMatchMode}
-                    onChange={(e) => handleSetZipMatchMode(e.target.value as 'filename' | 'index')}
-                    className="w-full bg-black border border-[#444] rounded-md p-2 mt-1 text-sm outline-none focus:border-indigo-500 font-normal text-slate-200"
-                  >
-                    <option value="filename">Match by Filename (Recommended)</option>
-                    <option value="index">Match by Order (Index)</option>
-                  </select>
-                </label>
-                <p className="text-[10px] text-slate-500">How to map uploaded cleaned images to the original ones.</p>
-              </div>
-
-              <div className="space-y-2">
-                <label className="flex flex-col text-sm font-medium text-slate-300">
-                  Custom AI Instructions
-                  <textarea 
-                    value={customInstructions}
-                    onChange={handleCustomInstructionsChange}
-                    placeholder="E.g., Translate the text specifically using Egyptian dialect."
-                    className="w-full bg-black border border-[#444] rounded-md p-2 mt-1 text-sm outline-none focus:border-indigo-500 font-normal h-20 resize-y"
-                  />
-                </label>
-                <p className="text-[10px] text-slate-500">Custom instructions supplied to the translation agent.</p>
-              </div>
-
-              <div className="flex flex-col gap-4">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={translateJapanese} 
-                    onChange={(e) => handleSetTranslateJapanese(e.target.checked)}
-                    className="w-4 h-4 rounded border-[#444] bg-black text-indigo-600 focus:ring-indigo-500 focus:ring-offset-black"
-                  />
-                  <span className="text-sm font-medium text-slate-300">Translate text from Japanese</span>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={translateSfx} 
-                    onChange={(e) => handleSetTranslateSfx(e.target.checked)}
-                    className="w-4 h-4 rounded border-[#444] bg-black text-indigo-600 focus:ring-indigo-500 focus:ring-offset-black"
-                  />
-                  <span className="text-sm font-medium text-slate-300">Analyze and translate SFX</span>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer border-t border-slate-800/60 pt-3">
-                  <input 
-                    type="checkbox" 
-                    checked={autoFitAndCenter} 
-                    onChange={(e) => handleSetAutoFitAndCenter(e.target.checked)}
-                    className="w-4 h-4 rounded border-[#444] bg-black text-indigo-600 focus:ring-indigo-500 focus:ring-offset-black"
-                  />
-                  <span className="text-sm font-medium text-slate-300 flex flex-col">
-                    <span>Auto Flood Fill & Alignment</span>
-                    <span className="text-[10px] text-slate-500 font-normal">Automatically align text and expand bounds to fit speech bubbles safely</span>
-                  </span>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={compressBeforeProcessing} 
-                    onChange={(e) => handleSetCompressBeforeProcessing(e.target.checked)}
-                    className="w-4 h-4 rounded border-[#444] bg-[#111] text-indigo-600 focus:ring-indigo-500 focus:ring-offset-black"
-                  />
-                  <span className="text-sm font-medium text-slate-300 flex flex-col">
-                    <span>Compress Large Images</span>
-                    <span className="text-[10px] text-slate-500 font-normal">Pre-compress page images to boost Gemini AI analytical processing speeds</span>
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-[#333] flex justify-end">
-              <button 
-                onClick={() => setShowSettingsModal(false)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer"
-              >
+        <Modal
+          open={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+          title="Application Settings"
+          size="md"
+          footer={
+            <div className="flex justify-end">
+              <Button variant="primary" onClick={() => setShowSettingsModal(false)}>
                 Close Settings
-              </button>
+              </Button>
             </div>
-          </div>
-        </div>
-      )}
-      
+          }
+        >
+          <SettingsPanel
+            customApiKey={customApiKey}
+            onApiKeyChange={handleApiKeyChange}
+            zipMatchMode={zipMatchMode}
+            onZipMatchModeChange={handleSetZipMatchMode}
+            customInstructions={customInstructions}
+            onCustomInstructionsChange={handleCustomInstructionsChange}
+            translateJapanese={translateJapanese}
+            onTranslateJapaneseChange={handleSetTranslateJapanese}
+            translateSfx={translateSfx}
+            onTranslateSfxChange={handleSetTranslateSfx}
+            autoFitAndCenter={autoFitAndCenter}
+            onAutoFitAndCenterChange={handleSetAutoFitAndCenter}
+            compressBeforeProcessing={compressBeforeProcessing}
+            onCompressBeforeProcessingChange={handleSetCompressBeforeProcessing}
+          />
+        </Modal>
+
         <div className="flex items-center gap-4 z-10">
-           <div className="flex bg-[#111] rounded-md p-1">
-            <input 
-              type="file" 
-              accept=".zip" 
-              className="hidden" 
+           <div className="flex bg-elevated rounded-md p-1">
+            <input
+              type="file"
+              accept=".zip"
+              className="hidden"
               ref={fileInputRef}
               onChange={handleZipUpload}
             />
-            <button 
+            <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 hover:bg-[#222] px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-2 hover:bg-ink/10 px-3 py-1.5 rounded text-sm transition-colors text-ink-muted"
               title="Import ZIP"
             >
               <Upload size={16} /> Import ZIP
             </button>
 
-            <div className="w-px bg-slate-700 mx-1 my-1"></div>
+            <div className="w-px bg-hairline mx-1 my-1"></div>
 
-            <input 
-              type="file" 
-              accept=".zip" 
-              className="hidden" 
+            <input
+              type="file"
+              accept=".zip"
+              className="hidden"
               ref={cleanZipInputRef}
               onChange={handleCleanedZipUpload}
             />
-            <button 
+            <button
               onClick={() => cleanZipInputRef.current?.click()}
-              className="flex items-center gap-2 hover:bg-[#222] px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-2 hover:bg-ink/10 px-3 py-1.5 rounded text-sm transition-colors text-ink-muted"
               title="Upload Cleaned ZIP"
             >
               <Sparkles size={16} /> Cleaned ZIP
             </button>
 
-            <div className="w-px bg-slate-700 mx-1 my-1"></div>
+            <div className="w-px bg-hairline mx-1 my-1"></div>
 
-            <input 
-              type="file" 
+            <input
+              type="file"
               accept="image/*"
               multiple
-              className="hidden" 
+              className="hidden"
               ref={appendImagesInputRef}
               onChange={handleAppendImages}
             />
-            <button 
+            <button
               onClick={() => appendImagesInputRef.current?.click()}
-              className="flex items-center gap-2 hover:bg-[#222] px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-2 hover:bg-ink/10 px-3 py-1.5 rounded text-sm transition-colors text-ink-muted"
               title="Add Images"
             >
               <ImagePlus size={16} /> Add Images
             </button>
 
-            <div className="w-px bg-slate-700 mx-1 my-1"></div>
+            <div className="w-px bg-hairline mx-1 my-1"></div>
 
-            <input 
-              type="file" 
-              accept=".json" 
-              className="hidden" 
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
               ref={projectInputRef}
               onChange={handleLoadProject}
             />
-            <button 
+            <button
               onClick={() => projectInputRef.current?.click()}
-              className="flex items-center gap-1.5 hover:bg-[#222] px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-1.5 hover:bg-ink/10 px-3 py-1.5 rounded text-sm transition-colors text-ink-muted"
               title="Load Project"
             >
               Load State
             </button>
-            <button 
+            <button
               onClick={handleSaveProject}
               disabled={images.length === 0}
-              className="flex items-center gap-1.5 hover:bg-[#222] disabled:opacity-50 px-3 py-1.5 rounded text-sm transition-colors text-slate-300"
+              className="flex items-center gap-1.5 hover:bg-ink/10 disabled:opacity-50 px-3 py-1.5 rounded text-sm transition-colors text-ink-muted"
               title="Save Project"
             >
               <Save size={16} /> Save State
             </button>
           </div>
-          
-          <button 
+
+          <button
             onClick={processAllImages}
             disabled={images.length === 0 || isProcessingAll}
-            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 disabled:cursor-not-allowed px-4 py-2 rounded-md font-medium text-sm transition-colors"
+            className="flex items-center gap-2 bg-accent hover:brightness-110 disabled:bg-accent/50 disabled:cursor-not-allowed px-4 py-2 rounded-md font-medium text-sm text-white transition-colors"
           >
             {isProcessingAll ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
             Process All
           </button>
-          
-          <button 
+
+          <button
             onClick={() => setShowOriginal(!showOriginal)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors border ${showOriginal ? 'bg-amber-600 border-amber-600 text-white' : 'bg-[#111] border-[#444] text-slate-300 hover:bg-[#222]'}`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors border ${showOriginal ? 'bg-warning border-warning text-white' : 'bg-elevated border-hairline text-ink-muted hover:bg-ink/10'}`}
           >
             {showOriginal ? 'Showing Original' : 'View Original'}
           </button>
-          
-          <button 
+
+          <button
             onClick={() => setShowText(!showText)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors border ${!showText ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-[#111] border-[#444] text-slate-300 hover:bg-[#222]'}`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium text-sm transition-colors border ${!showText ? 'bg-accent border-accent text-white' : 'bg-elevated border-hairline text-ink-muted hover:bg-ink/10'}`}
           >
             <TypeIcon size={16} />
             {showText ? 'Hide Texts' : 'Show Texts'}
           </button>
-          
-          <div className="flex bg-emerald-700/50 rounded-md overflow-hidden border border-emerald-600/30">
-            <button 
+
+          <div className="flex bg-success/30 rounded-md overflow-hidden border border-success/30">
+            <button
               onClick={handleExportZip}
               disabled={images.length === 0}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-emerald-500/20"
+              className="flex items-center gap-2 bg-success hover:brightness-110 disabled:bg-success/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-success/20"
               title="Export as ZIP archive"
             >
               <Download size={16} /> ZIP
             </button>
-            <button 
+            <button
               onClick={handleExportPsd}
               disabled={images.length === 0}
-              className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-600/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-purple-500/20"
+              className="flex items-center gap-2 bg-accent hover:brightness-110 disabled:bg-accent/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-accent/20"
               title="Export حزمة PSD لبرنامج فوتوشوب (Photoshop Layout Layers Archive)"
             >
-              <Download size={16} className="text-purple-200" /> PSD جديد
+              <Download size={16} className="text-white/80" /> PSD جديد
             </button>
-            <button 
+            <button
               onClick={handleExportPdf}
               disabled={images.length === 0}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-emerald-500/20"
+              className="flex items-center gap-2 bg-success hover:brightness-110 disabled:bg-success/50 disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-success/20"
               title="Export as paginated PDF"
             >
               PDF
             </button>
-            <button 
+            <button
               onClick={handleExportTranslation}
               disabled={images.length === 0}
-              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-[#111] disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors border-r border-slate-600"
+              className="flex items-center gap-2 bg-ink/15 hover:bg-ink/25 disabled:bg-elevated disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-ink transition-colors border-r border-hairline"
               title="Export text document for external translation"
             >
               Export Docs
             </button>
-            <button 
+            <button
               onClick={() => importTranslationRef.current?.click()}
               disabled={images.length === 0}
-              className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 disabled:bg-[#111] disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-white transition-colors"
+              className="flex items-center gap-2 bg-ink/15 hover:bg-ink/25 disabled:bg-elevated disabled:cursor-not-allowed px-4 py-2 font-medium text-sm text-ink transition-colors"
               title="Import translated text document"
             >
               Import Docs
@@ -2773,130 +2545,48 @@ export default function App() {
       )}
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      {activeChapterId === null && (
+        <SidebarRail
+          activeTab={activeNavigationTab}
+          onTabChange={setActiveNavigationTab}
+          onCreatePress={() => {
+            if (activeMangaId) {
+              if (activeVolumeId) {
+                handleAddChapterPrompt();
+              } else {
+                handleAddVolumePrompt();
+              }
+            } else {
+              setShowCreateSeriesModal(true);
+            }
+          }}
+        />
+      )}
+      <div className={`flex flex-1 overflow-hidden ${activeChapterId === null ? 'lg:pl-20' : ''}`}>
         {activeNavigationTab === 'settings' && (
-          <div className="flex-1 flex flex-col p-8 bg-gradient-to-tr from-[#03010c] via-[#0b0718] to-black relative overflow-y-auto pb-32">
-            <div className="absolute top-10 right-10 w-96 h-96 bg-purple-600/5 rounded-full blur-[140px] pointer-events-none" />
-            <div className="max-w-5xl mx-auto w-full flex flex-col gap-8 relative z-10">
+          <div className="flex-1 flex flex-col p-4 sm:p-8 overflow-y-auto pb-32">
+            <div className="max-w-3xl mx-auto w-full flex flex-col gap-6">
               <div>
-                <h1 className="text-3xl font-display font-bold text-white tracking-tight">Studio Configuration Settings</h1>
-                <p className="text-sm text-slate-400 mt-1">Fine-tune translation thresholds, OCR dialects, parallel execution caches, and Gemini API keys.</p>
+                <h1 className="text-2xl sm:text-3xl font-display font-bold text-ink tracking-tight">Studio Configuration Settings</h1>
+                <p className="text-sm text-ink-muted mt-1">Fine-tune translation thresholds, OCR dialects, parallel execution caches, and Gemini API keys.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {/* Left Config Panel */}
-                <div className="md:col-span-2 space-y-6">
-                  {/* API Key Box */}
-                  <div className="liquid-glass p-6 rounded-2xl border border-purple-500/15 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h3 className="text-base font-semibold text-white font-display">Gemini API Credentials</h3>
-                      {customApiKey.split(/[\s,\n]+/).map(k => k.trim()).filter(Boolean).length > 0 && (
-                        <span className="text-[11px] bg-purple-950/40 border border-purple-800 text-purple-400 px-2.5 py-0.5 rounded-full font-mono">
-                          {customApiKey.split(/[\s,\n]+/).map(k => k.trim()).filter(Boolean).length} Key(s) Loaded
-                        </span>
-                      )}
-                    </div>
-                    <textarea 
-                      value={customApiKey}
-                      onChange={handleApiKeyChange}
-                      placeholder="Add keys (one key per line or comma-separated)..."
-                      className="w-full h-28 bg-black/60 border border-purple-500/15 rounded-xl p-3 text-sm outline-none focus:border-purple-500 text-slate-200 resize-none font-mono focus:ring-1 focus:ring-purple-500/20"
-                    />
-                    <div className="space-y-1.5 text-[11px] text-slate-400 leading-relaxed font-mono">
-                      <p>✧ Speed tip: Rotating several keys shares requests seamlessly to avoid rate limits safely.</p>
-                      <p>✧ Runs automatically on standard Gemini flash parameters to ensure prompt translations.</p>
-                    </div>
-                  </div>
-
-                  {/* Instructions Box */}
-                  <div className="liquid-glass p-6 rounded-2xl border border-purple-500/15 space-y-4">
-                    <h3 className="text-base font-semibold text-white font-display">Custom Agent Prompting</h3>
-                    <textarea 
-                      value={customInstructions}
-                      onChange={handleCustomInstructionsChange}
-                      placeholder="E.g., Translate to Egyptian dialect, keep humor puns, keep sound effects minimal, etc."
-                      className="w-full h-28 bg-black/60 border border-purple-500/15 rounded-xl p-3 text-sm outline-none focus:border-purple-500 text-slate-200 resize-none font-sans focus:ring-1 focus:ring-purple-500/20"
-                    />
-                    <p className="text-[11px] text-slate-400 font-mono">
-                      ✧ Custom instructions are passed directly to the Gemini neural vision matrix during page synthesis.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right Toggle Rules */}
-                <div className="space-y-6">
-                  <div className="liquid-glass p-6 rounded-2xl border border-purple-500/15 space-y-5">
-                    <h3 className="text-base font-semibold text-white font-display">Optimization Rules</h3>
-                    
-                    <div className="space-y-4">
-                      {/* Checkboxes */}
-                      <label className="flex items-start gap-3 cursor-pointer group">
-                        <input 
-                          type="checkbox" 
-                          checked={translateJapanese} 
-                          onChange={(e) => handleSetTranslateJapanese(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 rounded border-purple-500/20 bg-black text-purple-600 focus:ring-purple-500"
-                        />
-                        <span className="flex flex-col">
-                          <span className="text-sm font-semibold text-slate-200 group-hover:text-purple-300 transition-colors">Translate Japanese Content</span>
-                          <span className="text-[10px] text-slate-500 mt-0.5">Optimizes neural model parameters for Japanese language OCR streams.</span>
-                        </span>
-                      </label>
-
-                      <label className="flex items-start gap-3 cursor-pointer group">
-                        <input 
-                          type="checkbox" 
-                          checked={translateSfx} 
-                          onChange={(e) => handleSetTranslateSfx(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 rounded border-purple-500/20 bg-black text-purple-600 focus:ring-purple-500"
-                        />
-                        <span className="flex flex-col">
-                          <span className="text-sm font-semibold text-slate-200 group-hover:text-purple-300 transition-colors">Translate Comic SFX</span>
-                          <span className="text-[10px] text-slate-500 mt-0.5">Translate small action sound effects alongside text blocks.</span>
-                        </span>
-                      </label>
-
-                      <label className="flex items-start gap-3 cursor-pointer group">
-                        <input 
-                          type="checkbox" 
-                          checked={autoFitAndCenter} 
-                          onChange={(e) => handleSetAutoFitAndCenter(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 rounded border-purple-500/20 bg-black text-purple-600 focus:ring-purple-500"
-                        />
-                        <span className="flex flex-col">
-                          <span className="text-sm font-semibold text-slate-200 group-hover:text-purple-300 transition-colors">Auto Bubble Fit & Center</span>
-                          <span className="text-[10px] text-slate-500 mt-0.5">Automatically calculates text bounds to match speech balloon radii.</span>
-                        </span>
-                      </label>
-
-                      <label className="flex items-start gap-3 cursor-pointer group">
-                        <input 
-                          type="checkbox" 
-                          checked={compressBeforeProcessing} 
-                          onChange={(e) => handleSetCompressBeforeProcessing(e.target.checked)}
-                          className="w-4 h-4 mt-0.5 rounded border-purple-500/20 bg-black text-purple-600 focus:ring-purple-500"
-                        />
-                        <span className="flex flex-col">
-                          <span className="text-sm font-semibold text-slate-200 group-hover:text-purple-300 transition-colors">Pre-Compress Plate Images</span>
-                          <span className="text-[10px] text-slate-500 mt-0.5">Reduces page sizes to achieve 3.5x faster analytical cycle times.</span>
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="liquid-glass p-6 rounded-2xl border border-purple-500/15 space-y-3">
-                    <h4 className="text-sm font-semibold text-slate-200">Plates Mapping Mode</h4>
-                    <select 
-                      value={zipMatchMode}
-                      onChange={(e) => handleSetZipMatchMode(e.target.value as 'filename' | 'index')}
-                      className="w-full bg-black/60 border border-purple-500/15 rounded-xl p-2.5 text-xs text-slate-300 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 outline-none"
-                    >
-                      <option value="filename">Match by Filename (Recommended)</option>
-                      <option value="index">Match by Order Index</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+              <SettingsPanel
+                customApiKey={customApiKey}
+                onApiKeyChange={handleApiKeyChange}
+                zipMatchMode={zipMatchMode}
+                onZipMatchModeChange={handleSetZipMatchMode}
+                customInstructions={customInstructions}
+                onCustomInstructionsChange={handleCustomInstructionsChange}
+                translateJapanese={translateJapanese}
+                onTranslateJapaneseChange={handleSetTranslateJapanese}
+                translateSfx={translateSfx}
+                onTranslateSfxChange={handleSetTranslateSfx}
+                autoFitAndCenter={autoFitAndCenter}
+                onAutoFitAndCenterChange={handleSetAutoFitAndCenter}
+                compressBeforeProcessing={compressBeforeProcessing}
+                onCompressBeforeProcessingChange={handleSetCompressBeforeProcessing}
+              />
             </div>
           </div>
         )}
@@ -2906,17 +2596,17 @@ export default function App() {
         )}
 
         {activeNavigationTab === 'scheduler' && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-tr from-[#03010c] via-[#0b0718] to-black relative">
-            <div className="absolute top-10 right-10 w-96 h-96 bg-purple-600/5 rounded-full blur-[140px] pointer-events-none" />
+          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-base relative">
+            <div className="absolute top-10 right-10 w-96 h-96 bg-accent/5 rounded-full blur-[140px] pointer-events-none" />
             <div className="text-center flex flex-col items-center max-w-lg z-10 animate-fade-in">
               <div className="relative mb-6">
                 {/* Spinning gear (ترس دوار) */}
-                <Settings size={72} className="animate-spin text-purple-500 duration-[4000ms] ease-linear shadow-[0_0_40px_rgba(168,85,247,0.3)] rounded-full p-2 bg-purple-950/20 border border-purple-500/20" />
-                <span className="absolute bottom-0 right-0 w-4.5 h-4.5 bg-purple-500 border border-black rounded-full animate-ping"></span>
+                <Settings size={72} className="animate-spin text-accent duration-[4000ms] ease-linear shadow-[0_0_40px_var(--color-accent-soft)] rounded-full p-2 bg-accent-soft border border-accent/20" />
+                <span className="absolute bottom-0 right-0 w-4.5 h-4.5 bg-accent border border-elevated rounded-full animate-ping"></span>
               </div>
-              <h1 className="text-3xl font-display font-semibold text-white tracking-tight mb-2">إدارة الجدولة (Scheduler)</h1>
-              <p className="text-lg text-purple-300 font-sans mb-4">تحت العمل والتطوير المستمر حالياً...</p>
-              <div className="liquid-glass p-4 rounded-xl border border-purple-500/10 text-xs text-slate-400 font-sans leading-relaxed">
+              <h1 className="text-3xl font-display font-semibold text-ink tracking-tight mb-2">إدارة الجدولة (Scheduler)</h1>
+              <p className="text-lg text-accent font-sans mb-4">تحت العمل والتطوير المستمر حالياً...</p>
+              <div className="liquid-glass p-4 rounded-xl border border-hairline text-xs text-ink-muted font-sans leading-relaxed">
                 Tools أتمتة وجدولة دورات المسح والTranslation التلقائية للفصول الجديدة فور صدورها على مTextات Webtoon الكورية الرسمية.
               </div>
             </div>
@@ -2924,23 +2614,23 @@ export default function App() {
         )}
 
         {activeNavigationTab === 'library' && activeChapterId === null && (
-          <div className="flex-1 flex flex-col p-8 bg-gradient-to-tr from-[#03010c] via-[#090615] to-black relative overflow-y-auto pb-32">
-            <div className="absolute top-10 right-10 w-96 h-96 bg-purple-600/5 rounded-full blur-[140px] pointer-events-none" />
-            <div className="absolute bottom-10 left-10 w-96 h-96 bg-indigo-650/5 rounded-full blur-[140px] pointer-events-none" />
+          <div className="flex-1 flex flex-col p-8 bg-base relative overflow-y-auto pb-32">
+            <div className="absolute top-10 right-10 w-96 h-96 bg-accent/5 rounded-full blur-[140px] pointer-events-none" />
+            <div className="absolute bottom-10 left-10 w-96 h-96 bg-accent/5 rounded-full blur-[140px] pointer-events-none" />
 
             <div className="max-w-6xl mx-auto w-full flex flex-col gap-8 relative z-10">
-              
+
               {/* BREADCRUMBS & ACTION HEADER */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-purple-500/10 pb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-hairline pb-6">
                 <div>
-                  <div className="flex items-center gap-2 text-xs font-mono text-purple-350 mb-2">
+                  <div className="flex items-center gap-2 text-xs font-mono text-accent mb-2">
                     <span className="font-semibold select-none">Library (Library)</span>
                     {activeMangaId && (
                       <>
                         <span>/</span>
-                        <button 
+                        <button
                           onClick={() => { setActiveMangaId(null); setActiveVolumeId(null); }}
-                          className="hover:text-white transition-all underline decoration-purple-500/50"
+                          className="hover:text-ink transition-all underline decoration-accent/50"
                         >
                           {mangas.find(m => m.id === activeMangaId)?.title}
                         </button>
@@ -2949,28 +2639,28 @@ export default function App() {
                     {activeVolumeId && (
                       <>
                         <span>/</span>
-                        <button 
+                        <button
                           onClick={() => setActiveVolumeId(null)}
-                          className="hover:text-white transition-all underline decoration-purple-500/50"
+                          className="hover:text-ink transition-all underline decoration-accent/50"
                         >
                           {mangas.find(m => m.id === activeMangaId)?.volumes.find(v => v.id === activeVolumeId)?.name}
                         </button>
                       </>
                     )}
                   </div>
-                  
-                  <h1 className="text-3xl font-display font-bold text-white tracking-tight">
-                    {!activeMangaId 
-                      ? 'قسم مكتبتي - السلاسل (Series Library)' 
-                      : !activeVolumeId 
-                        ? 'إدارة الVolumeات (Volumes List)' 
+
+                  <h1 className="text-3xl font-display font-bold text-ink tracking-tight">
+                    {!activeMangaId
+                      ? 'قسم مكتبتي - السلاسل (Series Library)'
+                      : !activeVolumeId
+                        ? 'إدارة الVolumeات (Volumes List)'
                         : 'فصول الTranslation (Chapter Workspace)'}
                   </h1>
-                  <p className="text-xs text-slate-400 mt-1.5 font-sans leading-relaxed">
-                    {!activeMangaId 
-                      ? 'تصفح قصص المانجا والمانهوا الحالية، أو أنشئ سلسلة Translation جديدة بضغطة زر.' 
-                      : !activeVolumeId 
-                        ? 'اختر Volumeاً محدداً لتقسيم وإدارة فصول الTranslation التابعة له.' 
+                  <p className="text-xs text-ink-muted mt-1.5 font-sans leading-relaxed">
+                    {!activeMangaId
+                      ? 'تصفح قصص المانجا والمانهوا الحالية، أو أنشئ سلسلة Translation جديدة بضغطة زر.'
+                      : !activeVolumeId
+                        ? 'اختر Volumeاً محدداً لتقسيم وإدارة فصول الTranslation التابعة له.'
                         : 'افتح فصل الTranslation للدخول إلى الاستوديو وبدء المسح الآلي وملاءمة الفقاعات وسحب النتائج.'}
                   </p>
                 </div>
@@ -2978,15 +2668,15 @@ export default function App() {
                 <div className="flex items-center gap-2.5">
                   {!activeMangaId && (
                     <>
-                      <button 
+                      <button
                         onClick={loadDemoProject}
-                        className="bg-black/60 hover:bg-black border border-purple-500/25 text-purple-300 font-bold py-2.5 px-5 rounded-xl transition-all cursor-pointer text-xs"
+                        className="bg-elevated hover:bg-ink/10 border border-accent/25 text-accent font-bold py-2.5 px-5 rounded-xl transition-all cursor-pointer text-xs"
                       >
                         ⚡ Loading عينة مانهوا (Load Demo)
                       </button>
-                      <button 
+                      <button
                         onClick={() => setShowCreateSeriesModal(true)}
-                        className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-2.5 px-5 rounded-xl transition-all cursor-pointer text-xs shadow-md"
+                        className="bg-accent hover:brightness-110 text-white font-bold py-2.5 px-5 rounded-xl transition-all cursor-pointer text-xs shadow-md"
                       >
                         + إنشاء مانجا جديدة (New Manga)
                       </button>
@@ -2994,15 +2684,15 @@ export default function App() {
                   )}
                   {activeMangaId && !activeVolumeId && (
                     <>
-                      <button 
+                      <button
                         onClick={() => { setActiveMangaId(null); }}
-                        className="bg-black/60 border border-purple-500/15 hover:border-purple-500/40 text-slate-350 font-bold py-2.5 px-4 rounded-xl transition-all text-xs"
+                        className="bg-elevated border border-hairline hover:border-accent/40 text-ink-muted font-bold py-2.5 px-4 rounded-xl transition-all text-xs"
                       >
                         ← Back للكل (Back)
                       </button>
-                      <button 
+                      <button
                         onClick={handleAddVolumePrompt}
-                        className="bg-purple-600 hover:bg-purple-550 text-white font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer shadow-md shadow-purple-950/45"
+                        className="bg-accent hover:brightness-110 text-white font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer shadow-md shadow-[0_0_20px_var(--color-accent-soft)]"
                       >
                         + Add Volume جديد (Add Volume)
                       </button>
@@ -3010,14 +2700,14 @@ export default function App() {
                   )}
                   {activeMangaId && activeVolumeId && (
                     <>
-                      <button 
+                      <button
                         onClick={() => { setActiveVolumeId(null); }}
-                        className="bg-black/60 border border-purple-500/15 hover:border-purple-500/40 text-slate-350 font-bold py-2.5 px-4 rounded-xl transition-all text-xs"
+                        className="bg-elevated border border-hairline hover:border-accent/40 text-ink-muted font-bold py-2.5 px-4 rounded-xl transition-all text-xs"
                       >
                         ← الVolumeات (Volumes)
                       </button>
-                      <label 
-                        className="bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 text-purple-300 font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer flex items-center justify-center gap-2"
+                      <label
+                        className="bg-accent-soft hover:bg-accent/40 border border-accent/30 text-accent font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer flex items-center justify-center gap-2"
                       >
                         <Upload size={14} /> Upload Volume as Chapter
                         <input 
@@ -3031,13 +2721,13 @@ export default function App() {
                              const files = e.target.files;
                              if (!files || files.length === 0) return;
                              
-                             Swal.fire({ title: 'Processing folder images...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                             
+                             swal({ title: 'Processing folder images...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
                              // filter images only and sort them by name naturally
                              const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/')).sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true}));
-                             
+
                              if (imageFiles.length === 0) {
-                               return Swal.fire('Empty', 'لا توجد Images في هذا الVolume', 'error');
+                               return swal({ title: 'Empty', text: 'لا توجد Images في هذا الVolume', icon: 'error' });
                              }
                              
                              const newImages: ProcessedImage[] = [];
@@ -3093,9 +2783,9 @@ export default function App() {
                           }}
                         />
                       </label>
-                      <button 
+                      <button
                         onClick={handleAddChapterPrompt}
-                        className="bg-indigo-600 hover:bg-indigo-550 text-white font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer shadow-md shadow-indigo-950/45"
+                        className="bg-accent hover:brightness-110 text-white font-bold py-2.5 px-5 rounded-xl transition-all text-xs cursor-pointer shadow-md shadow-[0_0_20px_var(--color-accent-soft)]"
                       >
                         + Add Chapter Empty
                       </button>
@@ -3109,16 +2799,16 @@ export default function App() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                   {mangas.length === 0 ? (
                     <div className="col-span-full py-16 text-center">
-                      <div className="w-16 h-16 bg-purple-950/20 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400 mx-auto mb-4">
+                      <div className="w-16 h-16 bg-accent-soft border border-accent/20 rounded-2xl flex items-center justify-center text-accent mx-auto mb-4">
                         <ImageIcon size={28} />
                       </div>
-                      <h3 className="text-lg font-bold text-slate-200">لا توجد سلاسل مانجا حالياً</h3>
-                      <p className="text-xs text-slate-400 max-w-sm mx-auto mt-2 leading-relaxed font-sans">
+                      <h3 className="text-lg font-bold text-ink">لا توجد سلاسل مانجا حالياً</h3>
+                      <p className="text-xs text-ink-muted max-w-sm mx-auto mt-2 leading-relaxed font-sans">
                         قم بالبدء بإنشاء سلسلة مانجا/مانهوا جديدة لتسجيل فصولها وترجمتها بشكل منظم، أو اضغط زر "Loading عينة مانهوا" للحصول على مانهوا سولو ليفنج تجريبية.
                       </p>
                       <button
                         onClick={() => setShowCreateSeriesModal(true)}
-                        className="mt-5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition-all"
+                        className="mt-5 bg-accent text-white font-bold text-xs py-2.5 px-6 rounded-xl transition-all"
                       >
                         + إنشاء مانجا جديدة للبدء (Create New)
                       </button>
@@ -3127,10 +2817,10 @@ export default function App() {
                     mangas.map(manga => {
                       const totalChaptersCount = manga.volumes.reduce((acc, v) => acc + v.chapters.length, 0);
                       return (
-                        <div 
+                        <div
                           key={manga.id}
                           onClick={() => setActiveMangaId(manga.id)}
-                          className="relative aspect-[3/4] rounded-2xl overflow-hidden group shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-purple-500/10 hover:border-purple-500/35 transition-all duration-300 cursor-pointer flex flex-col justify-end bg-[#05020c]"
+                          className="relative aspect-[3/4] rounded-2xl overflow-hidden group shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-hairline hover:border-accent/35 transition-all duration-300 cursor-pointer flex flex-col justify-end bg-elevated"
                         >
                           {/* Cover Image/Gradient Representation */}
                           {manga.coverUrl ? (
@@ -3141,14 +2831,14 @@ export default function App() {
                               className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-60"
                             />
                           ) : (
-                            <div className="absolute inset-0 bg-gradient-to-tr from-[#120731] via-[#09041a] to-black flex flex-col items-center justify-center p-6 text-center">
-                              <Sparkles className="w-10 h-10 text-purple-500/60 animate-pulse mb-3" />
-                              <span className="text-xs text-purple-400/85 tracking-widest uppercase font-mono font-bold leading-none">{manga.type}</span>
+                            <div className="absolute inset-0 bg-elevated flex flex-col items-center justify-center p-6 text-center">
+                              <Sparkles className="w-10 h-10 text-accent/60 animate-pulse mb-3" />
+                              <span className="text-xs text-accent/85 tracking-widest uppercase font-mono font-bold leading-none">{manga.type}</span>
                             </div>
                           )}
-                          
+
                           {/* Type Badge top-left */}
-                          <span className={`absolute top-4 left-4 text-[9px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider z-20 ${manga.type === 'manhwa' ? 'bg-indigo-600 border border-indigo-400 text-white' : 'bg-amber-600 border border-amber-400 text-white'}`}>
+                          <span className={`absolute top-4 left-4 text-[9px] font-bold px-2.5 py-1 rounded-md uppercase tracking-wider z-20 ${manga.type === 'manhwa' ? 'bg-accent border border-accent text-white' : 'bg-warning border border-warning text-white'}`}>
                             {manga.type}
                           </span>
 
@@ -3158,18 +2848,18 @@ export default function App() {
                               e.stopPropagation();
                               handleDeleteManga(manga.id);
                             }}
-                            className="absolute top-4 right-4 bg-red-950/80 hover:bg-red-700 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-red-500/20"
+                            className="absolute top-4 right-4 bg-danger/80 hover:bg-danger text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-danger/20"
                             title="Delete السلسلة من Library"
                           >
                             <Trash2 size={13} />
                           </button>
 
                           {/* Lower Liquid Glass layer - overlay cover bottom */}
-                          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black/60 backdrop-blur-md border-t border-purple-500/15 flex flex-col gap-1 transition-all group-hover:bg-[#110729]/85 z-10 text-left">
-                            <span className="text-[10px] text-purple-400 tracking-wider uppercase font-mono font-bold">{manga.type}</span>
+                          <div className="absolute bottom-0 left-0 right-0 p-4 bg-black/60 backdrop-blur-md border-t border-accent/15 flex flex-col gap-1 transition-all group-hover:bg-black/85 z-10 text-left">
+                            <span className="text-[10px] text-accent tracking-wider uppercase font-mono font-bold">{manga.type}</span>
                             <h3 className="text-base font-display font-bold text-white tracking-tight truncate leading-tight">{manga.title}</h3>
-                            <p className="text-[11px] text-slate-350 leading-normal line-clamp-2 h-8 font-sans">{manga.description || 'لم يتم كتابة وصف مخصص لهذه السلسلة بعد.'}</p>
-                            <div className="flex items-center justify-between text-[10px] text-purple-300 font-mono mt-1 w-full pt-2 border-t border-purple-500/10">
+                            <p className="text-[11px] text-ink-muted leading-normal line-clamp-2 h-8 font-sans">{manga.description || 'لم يتم كتابة وصف مخصص لهذه السلسلة بعد.'}</p>
+                            <div className="flex items-center justify-between text-[10px] text-accent font-mono mt-1 w-full pt-2 border-t border-accent/10">
                               <span>📚 الVolumeات: {manga.volumes.length}</span>
                               <span>📖 فصول: {totalChaptersCount}</span>
                             </div>
@@ -3190,26 +2880,26 @@ export default function App() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                       {currentManga.volumes.length === 0 ? (
                         <div className="col-span-full py-16 text-center">
-                          <div className="w-16 h-16 bg-purple-950/20 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400 mx-auto mb-4">
+                          <div className="w-16 h-16 bg-accent-soft border border-accent/20 rounded-2xl flex items-center justify-center text-accent mx-auto mb-4">
                             <Plus size={28} />
                           </div>
-                          <h3 className="text-lg font-bold text-slate-200">لا توجد Volumeات حالياً</h3>
-                          <p className="text-xs text-slate-400 max-w-sm mx-auto mt-2 leading-relaxed">
+                          <h3 className="text-lg font-bold text-ink">لا توجد Volumeات حالياً</h3>
+                          <p className="text-xs text-ink-muted max-w-sm mx-auto mt-2 leading-relaxed">
                             Volumeات المانجا تستخدم لتنظيم وتقسيم فئات فصول الTranslation الكبيرة (مثال: Volume 20، Volume 1).
                           </p>
                           <button
                             onClick={handleAddVolumePrompt}
-                            className="mt-5 bg-purple-600 hover:bg-purple-550 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition-all"
+                            className="mt-5 bg-accent hover:brightness-110 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition-all"
                           >
                             + Add أول Volume جديد (Create Volume)
                           </button>
                         </div>
                       ) : (
                         currentManga.volumes.map(vol => (
-                          <div 
+                          <div
                             key={vol.id}
                             onClick={() => setActiveVolumeId(vol.id)}
-                            className="relative aspect-[3/4] bg-gradient-to-tr from-[#12072f] via-[#09041a] to-black rounded-2xl overflow-hidden border border-purple-500/10 hover:border-purple-500/35 transition-all duration-300 cursor-pointer flex flex-col justify-end p-6 group text-left"
+                            className="relative aspect-[3/4] bg-elevated rounded-2xl overflow-hidden border border-hairline hover:border-accent/35 transition-all duration-300 cursor-pointer flex flex-col justify-end p-6 group text-left"
                           >
                             {/* Inherited Cover backdrop or pattern */}
                             {currentManga.coverUrl && (
@@ -3225,17 +2915,17 @@ export default function App() {
                               onClick={async (e) => {
                                 e.stopPropagation();
                                 const allImages = vol.chapters.flatMap(c => c.images);
-                                if (allImages.length === 0) return Swal.fire('Empty', 'No images to compress', 'info');
-                                Swal.fire({ title: 'Compressing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                if (allImages.length === 0) return swal({ title: 'Empty', text: 'No images to compress', icon: 'info' });
+                                swal({ title: 'Compressing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                                 try {
                                   await downloadProcessedZip(allImages, undefined, `${vol.name}.zip`);
                                 } catch (err: any) {
-                                  Swal.fire('Error', err?.message || 'Failed to generate ZIP', 'error');
+                                  swal({ title: 'Error', text: err?.message || 'Failed to generate ZIP', icon: 'error' });
                                 } finally {
                                   Swal.close();
                                 }
                               }}
-                              className="absolute top-4 left-4 bg-purple-950/80 hover:bg-purple-700 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-purple-500/20"
+                              className="absolute top-4 left-4 bg-accent-soft hover:bg-accent text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-accent/20"
                               title="Download all volume chapters as ZIP"
                             >
                               <Download size={13} />
@@ -3247,7 +2937,7 @@ export default function App() {
                                 e.stopPropagation();
                                 handleDeleteVolume(vol.id);
                               }}
-                              className="absolute top-4 right-4 bg-red-950/80 hover:bg-red-700 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-red-500/20"
+                              className="absolute top-4 right-4 bg-danger/80 hover:bg-danger text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-danger/20"
                               title="Delete هذا الVolume كلياً"
                             >
                               <Trash2 size={13} />
@@ -3256,17 +2946,17 @@ export default function App() {
                             <div className="absolute inset-0 bg-radial-gradient from-transparent to-black pointer-events-none" />
 
                             {/* Bottom Liquid Glass display inside the Volume Card */}
-                            <div className="absolute bottom-0 left-0 right-0 p-5 bg-black/80 backdrop-blur-md border-t border-purple-500/15 flex flex-col gap-1.5 transition-all group-hover:bg-[#110729]/95 z-10 text-left">
-                              <span className="text-[10px] text-purple-400 tracking-wider font-mono font-bold">VOLUME CONTAINER</span>
-                              <h3 className="text-xl font-display font-bold text-purple-300 tracking-tight leading-none mb-1">{vol.name}</h3>
-                              <p className="text-xs text-slate-350 line-clamp-2 h-8 font-sans leading-relaxed text-left">
-                                {vol.chapters.length > 0 
-                                  ? `يحتوي على: ${vol.chapters.map(c => c.name).join(', ')}` 
+                            <div className="absolute bottom-0 left-0 right-0 p-5 bg-black/80 backdrop-blur-md border-t border-accent/15 flex flex-col gap-1.5 transition-all group-hover:bg-black/95 z-10 text-left">
+                              <span className="text-[10px] text-accent tracking-wider font-mono font-bold">VOLUME CONTAINER</span>
+                              <h3 className="text-xl font-display font-bold text-accent tracking-tight leading-none mb-1">{vol.name}</h3>
+                              <p className="text-xs text-ink-muted line-clamp-2 h-8 font-sans leading-relaxed text-left">
+                                {vol.chapters.length > 0
+                                  ? `يحتوي على: ${vol.chapters.map(c => c.name).join(', ')}`
                                   : 'Volume Empty حالياً، انقر لAdd فصول Translation جديدة بداخل هذا الVolume.'}
                               </p>
-                              <div className="flex justify-between items-center text-[10px] text-slate-400 font-mono mt-1 pt-2 border-t border-purple-500/10 w-full">
+                              <div className="flex justify-between items-center text-[10px] text-ink-muted font-mono mt-1 pt-2 border-t border-accent/10 w-full">
                                 <span>📖 الفصول: {vol.chapters.length} </span>
-                                <span className="text-emerald-500 font-bold font-mono">✔ نشط</span>
+                                <span className="text-success font-bold font-mono">✔ نشط</span>
                               </div>
                             </div>
                           </div>
@@ -3287,16 +2977,16 @@ export default function App() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                       {currentVolume.chapters.length === 0 ? (
                         <div className="col-span-full py-16 text-center">
-                          <div className="w-16 h-16 bg-purple-950/20 border border-purple-500/20 rounded-2xl flex items-center justify-center text-purple-400 mx-auto mb-4">
+                          <div className="w-16 h-16 bg-accent-soft border border-accent/20 rounded-2xl flex items-center justify-center text-accent mx-auto mb-4">
                             <Plus size={28} />
                           </div>
-                          <h3 className="text-lg font-bold text-slate-200">لا توجد فصول حالياً</h3>
-                          <p className="text-xs text-slate-400 max-w-sm mx-auto mt-2 leading-relaxed">
+                          <h3 className="text-lg font-bold text-ink">لا توجد فصول حالياً</h3>
+                          <p className="text-xs text-ink-muted max-w-sm mx-auto mt-2 leading-relaxed">
                             أنشئ فصولاً لهذا الVolume للبدء فوراً في إرفاق صفحات المانجا وCleaning وملاءمة الفقاعات عبر الاستوديو الأساسي.
                           </p>
                           <button
                             onClick={handleAddChapterPrompt}
-                            className="mt-5 bg-indigo-600 hover:bg-indigo-550 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition-all"
+                            className="mt-5 bg-accent hover:brightness-110 text-white font-bold text-xs py-2.5 px-6 rounded-xl transition-all"
                           >
                             + Add Chapter جديد للTranslation (Add Chapter)
                           </button>
@@ -3305,20 +2995,20 @@ export default function App() {
                         currentVolume.chapters.map(chap => {
                           const coverPage = chap.images[0]?.dataUrl;
                           return (
-                            <div 
+                            <div
                               key={chap.id}
                               onClick={() => handleOpenChapter(chap)}
-                              className="relative aspect-[3/4] bg-gradient-to-tr from-[#0b0424] via-[#050212] to-black rounded-2xl overflow-hidden border border-purple-500/10 hover:border-purple-500/35 transition-all duration-300 cursor-pointer flex flex-col justify-end p-6 group text-left"
+                              className="relative aspect-[3/4] bg-elevated rounded-2xl overflow-hidden border border-hairline hover:border-accent/35 transition-all duration-300 cursor-pointer flex flex-col justify-end p-6 group text-left"
                             >
                               {coverPage ? (
-                                <img 
-                                  src={coverPage} 
-                                  alt={chap.name} 
+                                <img
+                                  src={coverPage}
+                                  alt={chap.name}
                                   className="absolute inset-0 w-full h-full object-cover opacity-45 group-hover:scale-105 transition-all duration-300"
                                 />
                               ) : (
-                                <div className="absolute inset-0 bg-gradient-to-br from-[#120731] via-black to-[#050214] flex flex-col items-center justify-center p-6 text-center opacity-30">
-                                  <svg className="w-12 h-12 text-slate-500 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1}>
+                                <div className="absolute inset-0 bg-elevated flex flex-col items-center justify-center p-6 text-center opacity-30">
+                                  <svg className="w-12 h-12 text-ink-faint mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1}>
                                     <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                                     <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
                                   </svg>
@@ -3329,17 +3019,17 @@ export default function App() {
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  if (chap.images.length === 0) return Swal.fire('Empty', 'No images to compress', 'info');
-                                  Swal.fire({ title: 'Compressing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+                                  if (chap.images.length === 0) return swal({ title: 'Empty', text: 'No images to compress', icon: 'info' });
+                                  swal({ title: 'Compressing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                                   try {
                                     await downloadProcessedZip(chap.images, undefined, `${chap.name}.zip`);
                                   } catch (err: any) {
-                                    Swal.fire('Error', err?.message || 'Failed to generate ZIP', 'error');
+                                    swal({ title: 'Error', text: err?.message || 'Failed to generate ZIP', icon: 'error' });
                                   } finally {
                                     Swal.close();
                                   }
                                 }}
-                                className="absolute top-4 left-4 bg-purple-950/85 hover:bg-purple-750 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-purple-500/20"
+                                className="absolute top-4 left-4 bg-accent-soft hover:bg-accent text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-accent/20"
                                 title="Download all chapter images as ZIP"
                               >
                                 <Download size={13} />
@@ -3351,20 +3041,20 @@ export default function App() {
                                   e.stopPropagation();
                                   handleDeleteChapter(chap.id);
                                 }}
-                                className="absolute top-4 right-4 bg-red-950/85 hover:bg-red-750 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-red-500/20"
+                                className="absolute top-4 right-4 bg-danger/85 hover:bg-danger text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-20 shadow-md border border-danger/20"
                                 title="Delete هذا الChapter كلياً"
                               >
                                 <Trash2 size={13} />
                               </button>
 
                               {/* Bottom Liquid Glass display inside the Chapter Card */}
-                              <div className="absolute bottom-0 left-0 right-0 p-5 bg-black/85 backdrop-blur-md border-t border-purple-500/15 flex flex-col gap-1 transition-all group-hover:bg-[#120733]/90 z-10 text-left">
-                                <span className="text-[10px] text-indigo-400 tracking-wider font-mono font-bold">MANGA CHAPTER</span>
+                              <div className="absolute bottom-0 left-0 right-0 p-5 bg-black/85 backdrop-blur-md border-t border-accent/15 flex flex-col gap-1 transition-all group-hover:bg-black/90 z-10 text-left">
+                                <span className="text-[10px] text-accent tracking-wider font-mono font-bold">MANGA CHAPTER</span>
                                 <h3 className="text-base font-display font-bold text-white tracking-tight leading-none mb-1">{chap.name}</h3>
-                                <p className="text-[11px] text-slate-350 leading-normal line-clamp-1 font-sans">
+                                <p className="text-[11px] text-ink-muted leading-normal line-clamp-1 font-sans">
                                   {chap.images.length > 0 ? `يحتوي على ${chap.images.length} صفحة مجهزة.` : 'Chapter Empty. انقر للدخول وUpload الImages.'}
                                 </p>
-                                <div className="flex justify-between items-center text-[10px] text-indigo-300 font-mono mt-1.5 pt-1.5 border-t border-purple-500/10 w-full">
+                                <div className="flex justify-between items-center text-[10px] text-accent font-mono mt-1.5 pt-1.5 border-t border-accent/10 w-full">
                                   <span>🚀 فتح بالاستوديو</span>
                                   <span>{chap.images.length} Pages</span>
                                 </div>
@@ -3382,34 +3072,34 @@ export default function App() {
         )}
 
         {activeNavigationTab === 'library' && activeChapterId !== null && images.length === 0 && (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#04020a] relative">
+          <div className="flex-1 flex flex-col items-center justify-center p-8 bg-base relative">
             {/* Ambient spotlights */}
-            <div className="absolute top-1/4 left-1/3 w-80 h-80 bg-purple-650/5 rounded-full blur-[140px] pointer-events-none" />
-            <div className="absolute bottom-1/4 right-1/3 w-80 h-80 bg-indigo-650/5 rounded-full blur-[140px] pointer-events-none" />
-            
-            <div className="liquid-glass p-12 rounded-3xl max-w-xl w-full flex flex-col items-center gap-6 shadow-[0_15px_40px_rgba(168,85,247,0.2)] text-slate-200 text-center border border-purple-500/15 relative z-10">
-              <div className="w-20 h-20 bg-purple-950/20 rounded-2xl border border-purple-500/25 flex items-center justify-center text-purple-400 shadow-inner">
+            <div className="absolute top-1/4 left-1/3 w-80 h-80 bg-accent/5 rounded-full blur-[140px] pointer-events-none" />
+            <div className="absolute bottom-1/4 right-1/3 w-80 h-80 bg-accent/5 rounded-full blur-[140px] pointer-events-none" />
+
+            <div className="liquid-glass p-12 rounded-3xl max-w-xl w-full flex flex-col items-center gap-6 shadow-[0_15px_40px_var(--color-accent-soft)] text-ink text-center border border-hairline relative z-10">
+              <div className="w-20 h-20 bg-accent-soft rounded-2xl border border-accent/25 flex items-center justify-center text-accent shadow-inner">
                 <svg className="w-10 h-10 animate-bounce" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
                   <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
                   <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
                 </svg>
               </div>
               <div className="flex flex-col gap-1.5">
-                <h3 className="text-2xl font-display font-bold text-white tracking-tight">هذا الفصل Empty حالياً (Chapter is Empty)</h3>
-                <p className="text-sm text-slate-400 max-w-md mt-1 mx-auto leading-relaxed font-sans">
+                <h3 className="text-2xl font-display font-bold text-ink tracking-tight">هذا الفصل Empty حالياً (Chapter is Empty)</h3>
+                <p className="text-sm text-ink-muted max-w-md mt-1 mx-auto leading-relaxed font-sans">
                   قم بإنشاء مساحتك داخل هدا الفصل عن طريق سحب وإسقاط ملف ZIP، أو Upload الصفحات واحدة تلو الأخرى، أو Loading Project تجريبي لتجربته فوراً.
                 </p>
               </div>
               <div className="flex flex-col sm:flex-row items-center gap-3 w-full mt-2">
-                <button 
+                <button
                   onClick={() => setShowCreateProjectModal(true)}
-                  className="w-full sm:w-auto flex-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-purple-950/30 transition-all active:scale-95 cursor-pointer text-sm"
+                  className="w-full sm:w-auto flex-1 bg-accent hover:brightness-110 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-[0_0_20px_var(--color-accent-soft)] transition-all active:scale-95 cursor-pointer text-sm"
                 >
                   + Upload وتجهيز الImages (Load Media)
                 </button>
-                <button 
+                <button
                   onClick={loadDemoProject}
-                  className="w-full sm:w-auto flex-1 bg-black/60 hover:bg-black/90 border border-purple-500/20 hover:border-purple-500/40 text-slate-350 font-bold py-3.5 px-6 rounded-xl transition-all active:scale-95 cursor-pointer text-sm"
+                  className="w-full sm:w-auto flex-1 bg-elevated hover:bg-ink/10 border border-hairline hover:border-accent/40 text-ink-muted font-bold py-3.5 px-6 rounded-xl transition-all active:scale-95 cursor-pointer text-sm"
                 >
                   Loading الصفحات النموذجية (Load Sample)
                 </button>
@@ -3429,73 +3119,73 @@ export default function App() {
             )}
 
             {/* Left Sidebar (Thumbnails): static column on desktop, off-canvas drawer below lg */}
-            <aside className={`fixed inset-y-0 left-0 z-40 w-64 border-r border-purple-500/10 bg-black/95 lg:bg-black/30 backdrop-blur-md flex flex-col overflow-y-auto glass-noise transition-transform duration-300 lg:static lg:translate-x-0 ${showLeftPanel ? 'translate-x-0' : '-translate-x-full'}`}>
+            <aside className={`fixed inset-y-0 left-0 z-40 w-64 border-r border-hairline bg-elevated lg:bg-surface/30 backdrop-blur-md flex flex-col overflow-y-auto glass-noise transition-transform duration-300 lg:static lg:translate-x-0 ${showLeftPanel ? 'translate-x-0' : '-translate-x-full'}`}>
               <button
                 onClick={() => setShowLeftPanel(false)}
-                className="lg:hidden flex items-center gap-1.5 m-2 self-end bg-white/5 border border-white/10 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg"
+                className="lg:hidden flex items-center gap-1.5 m-2 self-end bg-ink/5 border border-hairline text-ink-muted text-xs px-2.5 py-1.5 rounded-lg"
               >
                 ✕ Close
               </button>
               {images.length === 0 && (
-                <div className="p-8 text-center text-slate-500 text-sm">
+                <div className="p-8 text-center text-ink-faint text-sm">
                   Upload a ZIP file to get started.
                 </div>
               )}
           {images.map((img, i) => (
             <div
               key={img.id}
-              className={`relative flex flex-col gap-2 p-3 border-b border-[#333]/50 text-left transition-colors cursor-pointer group ${selectedImageId === img.id ? 'bg-[#111]' : 'hover:bg-[#111]/50'}`}
+              className={`relative flex flex-col gap-2 p-3 border-b border-hairline/50 text-left transition-colors cursor-pointer group ${selectedImageId === img.id ? 'bg-accent-soft' : 'hover:bg-ink/5'}`}
               onClick={() => setSelectedImageId(img.id)}
             >
-              <div className="relative aspect-[3/4] w-full bg-black rounded overflow-hidden flex">
+              <div className="relative aspect-[3/4] w-full bg-elevated rounded overflow-hidden flex">
                 {img.originalDataUrl && (
-                  <img src={img.originalDataUrl} alt={`${img.filename} original`} loading="lazy" className="w-1/2 h-full object-cover opacity-80 border-r border-[#444]" />
+                  <img src={img.originalDataUrl} alt={`${img.filename} original`} loading="lazy" className="w-1/2 h-full object-cover opacity-80 border-r border-hairline" />
                 )}
                 <img src={img.dataUrl} alt={img.filename} loading="lazy" className={`${img.originalDataUrl ? 'w-1/2' : 'w-full'} h-full object-cover opacity-80`} />
                 {img.status === 'processing' && (
                   <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                    <Loader2 className="animate-spin text-indigo-400" />
+                    <Loader2 className="animate-spin text-accent" />
                   </div>
                 )}
                 {img.status === 'done' && (
                   <div className="absolute top-2 right-2 flex gap-1">
-                    <span className="bg-emerald-500 text-white text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Done</span>
+                    <span className="bg-success text-white text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">Done</span>
                   </div>
                 )}
-                
+
                 {img.status !== 'done' && (
                   <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
-                    <input 
+                    <input
                       type="checkbox"
                       checked={selectedForProcess.has(img.id)}
                       onChange={(e) => toggleSelectForProcess(img.id, e as any)}
-                      className="w-4 h-4 rounded border-[#444] bg-[#111] text-indigo-600 focus:ring-indigo-500"
+                      className="w-4 h-4 rounded border-hairline bg-elevated text-accent focus:ring-accent"
                       title="Select for batch processing (Max 5)"
                     />
                   </div>
                 )}
-                
+
                 {/* Overlays for ordering and deletion */}
                 <div className="absolute top-2 left-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                   <button 
+                   <button
                      onClick={(e) => { e.stopPropagation(); moveImageUp(i); }}
-                     className="bg-black/80 hover:bg-[#111] text-white p-1 rounded"
+                     className="bg-black/80 hover:bg-black text-white p-1 rounded"
                      title="Move Up"
                    >
                      <ChevronUp size={14} />
                    </button>
-                   <button 
+                   <button
                      onClick={(e) => { e.stopPropagation(); moveImageDown(i); }}
-                     className="bg-black/80 hover:bg-[#111] text-white p-1 rounded"
+                     className="bg-black/80 hover:bg-black text-white p-1 rounded"
                      title="Move Down"
                    >
                      <ChevronDown size={14} />
                    </button>
                 </div>
-                
+
                 <button
                    onClick={(e) => deleteImage(img.id, e)}
-                   className="absolute bottom-2 right-2 bg-red-900/80 hover:bg-red-700 text-white p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                   className="absolute bottom-2 right-2 bg-danger/80 hover:bg-danger text-white p-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                    title="Delete Image"
                 >
                    <Trash2 size={14} />
@@ -3514,97 +3204,97 @@ export default function App() {
                 <div className="flex items-center gap-3 flex-wrap">
                   <button
                     onClick={() => setShowLeftPanel(true)}
-                    className="lg:hidden flex items-center gap-1.5 bg-[#111] border border-purple-500/25 text-purple-300 text-xs font-semibold px-2.5 py-1.5 rounded-lg"
+                    className="lg:hidden flex items-center gap-1.5 bg-elevated border border-accent/25 text-accent text-xs font-semibold px-2.5 py-1.5 rounded-lg"
                     title="Show page thumbnails"
                   >
                     <LayoutGrid size={13} /> Pages
                   </button>
-                  <h2 className="font-medium text-slate-300 text-sm max-w-[200px] truncate">{selectedImage.filename}</h2>
+                  <h2 className="font-medium text-ink-muted text-sm max-w-[200px] truncate">{selectedImage.filename}</h2>
                   <button
                     onClick={() => setShowRightPanel(true)}
-                    className="lg:hidden flex items-center gap-1.5 bg-[#111] border border-purple-500/25 text-purple-300 text-xs font-semibold px-2.5 py-1.5 rounded-lg"
+                    className="lg:hidden flex items-center gap-1.5 bg-elevated border border-accent/25 text-accent text-xs font-semibold px-2.5 py-1.5 rounded-lg"
                     title="Show properties panel"
                   >
                     <Settings size={13} /> Properties
                   </button>
                   <button
                     onClick={() => setShowExternalAIModal(true)}
-                    className="flex items-center gap-1.5 bg-[#090615] hover:bg-[#130d2a] border border-purple-500/30 text-purple-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all shadow-[0_4px_12px_rgba(168,85,247,0.15)]"
+                    className="flex items-center gap-1.5 bg-accent-soft hover:opacity-80 border border-accent/30 text-accent text-xs font-semibold px-3 py-1.5 rounded-xl transition-all shadow-[0_4px_12px_var(--color-accent-soft)]"
                     title="Loading وطرح الTranslation عبر الذكاء الاصطناعي الخارجي المساعد"
                   >
-                    <Sparkles size={13} className="text-purple-300 animate-bounce" /> كوكتيل الذكاء الاصطناعي الخارجي ✦
+                    <Sparkles size={13} className="text-accent animate-bounce" /> كوكتيل الذكاء الاصطناعي الخارجي ✦
                   </button>
-                  
+
                   {/* Tool selection */}
-                  <div className="flex bg-black rounded-lg p-1 border border-[#333] ml-4">
-                    <button 
+                  <div className="flex bg-elevated rounded-lg p-1 border border-hairline ml-4">
+                    <button
                       onClick={() => setActiveTool('select')}
-                      className={`p-1.5 rounded-md ${activeTool === 'select' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`p-1.5 rounded-md ${activeTool === 'select' ? 'bg-accent text-white' : 'text-ink-faint hover:text-ink-muted'}`}
                       title="Select/Move"
                     >
                       <MousePointer2 size={16} />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveTool('draw')}
-                      className={`p-1.5 rounded-md ${activeTool === 'draw' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`p-1.5 rounded-md ${activeTool === 'draw' ? 'bg-accent text-white' : 'text-ink-faint hover:text-ink-muted'}`}
                       title="Draw"
                     >
                       <Brush size={16} />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveTool('erase')}
-                      className={`p-1.5 rounded-md ${activeTool === 'erase' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`p-1.5 rounded-md ${activeTool === 'erase' ? 'bg-accent text-white' : 'text-ink-faint hover:text-ink-muted'}`}
                       title="Erase (White Brush)"
                     >
                       <Eraser size={16} />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveTool('fill_poly')}
-                      className={`p-1.5 rounded-md ${activeTool === 'fill_poly' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`p-1.5 rounded-md ${activeTool === 'fill_poly' ? 'bg-accent text-white' : 'text-ink-faint hover:text-ink-muted'}`}
                       title="Fill Polygon (4 points)"
                     >
                       <Palette size={16} />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveTool('bg_erase')}
-                      className={`p-1.5 rounded-md ${activeTool === 'bg_erase' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`p-1.5 rounded-md ${activeTool === 'bg_erase' ? 'bg-accent text-white' : 'text-ink-faint hover:text-ink-muted'}`}
                       title="Remove Text Box Background"
                     >
                       <Scissors size={16} />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveTool('smart_sfx')}
-                      className={`p-1.5 rounded-md ${activeTool === 'smart_sfx' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`p-1.5 rounded-md ${activeTool === 'smart_sfx' ? 'bg-accent text-white' : 'text-ink-faint hover:text-ink-muted'}`}
                       title="Smart Auto-Color (SFX Whitening)"
                     >
                       <Sparkles size={16} />
                      </button>
-                     <button 
+                     <button
                       onClick={() => setActiveTool('gen_erase')}
-                      className={`p-1.5 rounded-md ${activeTool === 'gen_erase' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                      className={`p-1.5 rounded-md ${activeTool === 'gen_erase' ? 'bg-accent text-white' : 'text-ink-faint hover:text-ink-muted'}`}
                       title="AI Generative Inpaint (Smart Whitening)"
                     >
                       <Wand2 size={16} />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveTool('crop')}
-                      className={`p-1.5 rounded-md ${activeTool === 'crop' ? 'bg-indigo-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200 hover:text-indigo-300'}`}
+                      className={`p-1.5 rounded-md ${activeTool === 'crop' ? 'bg-accent text-white font-bold' : 'text-ink-faint hover:text-ink-muted hover:text-accent'}`}
                       title="اقتصاص جزء للTranslation (AI Crop & Translate Panel)"
                     >
-                      <Scissors size={16} className="-rotate-90 text-indigo-400" />
+                      <Scissors size={16} className="-rotate-90 text-accent" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => setActiveTool('scribble_bubble')}
-                      className={`p-1.5 rounded-md ${activeTool === 'scribble_bubble' ? 'bg-indigo-600 text-white' : 'text-purple-400 hover:text-purple-300 hover:bg-purple-950/20'}`}
+                      className={`p-1.5 rounded-md ${activeTool === 'scribble_bubble' ? 'bg-accent text-white' : 'text-accent hover:text-accent hover:bg-accent-soft'}`}
                       title="Select الفقاعة بالشخبطة الذكية (Scribble Bubble)"
                     >
                       <PenTool size={16} />
                     </button>
-                    <div className="w-px bg-slate-700 mx-1 my-1"></div>
-                    <button 
+                    <div className="w-px bg-hairline mx-1 my-1"></div>
+                    <button
                       onClick={() => undo(selectedImage.id)}
                       disabled={!(selectedImage.history && selectedImage.history.length > 0)}
-                      className="p-1.5 rounded-md text-slate-400 hover:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="p-1.5 rounded-md text-ink-faint hover:text-ink-muted disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Undo Action"
                     >
                       <Undo size={16} />
@@ -3612,14 +3302,14 @@ export default function App() {
                   </div>
 
                   {/* Zoom controls */}
-                  <div className="flex bg-black rounded-lg p-1 border border-[#333]">
-                    <button onClick={() => setZoom(z => Math.max(0.2, z - 0.2))} className="p-1.5 text-slate-400 hover:text-slate-200">
+                  <div className="flex bg-elevated rounded-lg p-1 border border-hairline">
+                    <button onClick={() => setZoom(z => Math.max(0.2, z - 0.2))} className="p-1.5 text-ink-faint hover:text-ink-muted">
                       <ZoomOut size={16} />
                     </button>
-                    <span className="text-xs font-mono w-10 text-center flex items-center justify-center text-slate-400">
+                    <span className="text-xs font-mono w-10 text-center flex items-center justify-center text-ink-faint">
                       {Math.round(zoom * 100)}%
                     </span>
-                    <button onClick={() => setZoom(z => Math.min(3, z + 0.2))} className="p-1.5 text-slate-400 hover:text-slate-200">
+                    <button onClick={() => setZoom(z => Math.min(3, z + 0.2))} className="p-1.5 text-ink-faint hover:text-ink-muted">
                       <ZoomIn size={16} />
                     </button>
                   </div>
@@ -3631,12 +3321,12 @@ export default function App() {
                       setManhwaMode(next);
                       localStorage.setItem('manhwa_mode', String(next));
                     }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border transition-all ${manhwaMode ? 'bg-[#7c3aed]/20 border-[#7c3aed] text-[#a78bfa] shadow-lg font-bold' : 'bg-[#111] border-[#333] text-slate-400 hover:text-slate-200 hover:bg-[#1f1f1f]'}`}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border transition-all ${manhwaMode ? 'bg-accent-soft border-accent text-accent shadow-lg font-bold' : 'bg-elevated border-hairline text-ink-faint hover:text-ink-muted hover:bg-ink/5'}`}
                     title="Adapt layout height to render stacked long strip Manhwa webtoons with scrolling support"
                   >
                     <span className="relative flex h-2 w-2">
-                      {manhwaMode && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#a78bfa] opacity-75"></span>}
-                      <span className={`relative inline flex rounded-full h-2 w-2 ${manhwaMode ? 'bg-purple-400' : 'bg-slate-500'}`}></span>
+                      {manhwaMode && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>}
+                      <span className={`relative inline flex rounded-full h-2 w-2 ${manhwaMode ? 'bg-accent' : 'bg-ink-faint'}`}></span>
                     </span>
                     Manhwa Mode
                   </button>
@@ -3644,50 +3334,50 @@ export default function App() {
                   {selectedImage.status !== 'processing' && (
                     <div className="flex items-center gap-2 ml-4 animate-fade-in">
                       {isGeneratingPreviews ? (
-                        <div className="flex items-center gap-1.5 bg-blue-950/40 border border-blue-800 text-blue-400 px-3 py-1.5 rounded text-xs font-medium">
+                        <div className="flex items-center gap-1.5 bg-accent-soft border border-accent/40 text-accent px-3 py-1.5 rounded text-xs font-medium">
                           <Loader2 size={12} className="animate-spin" /> Detecting bubble boxes...
                         </div>
                       ) : showBubblePreviews ? (
-                        <div className="flex items-center gap-1.5 bg-blue-950/30 border border-blue-900 px-2 py-1 rounded">
+                        <div className="flex items-center gap-1.5 bg-accent-soft border border-accent/30 px-2 py-1 rounded">
                           <button
                             onClick={() => applyBubblePreviews(selectedImage.id)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1 rounded font-medium transition-colors"
+                            className="bg-success hover:opacity-90 text-white text-xs px-3 py-1 rounded font-medium transition-colors"
                             title="Apply the safe centered alignment to all detected bubbles"
                           >
                             Apply Centering
                           </button>
                           <button
                             onClick={() => setShowBubblePreviews(false)}
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1 rounded font-medium transition-colors"
+                            className="bg-ink/10 hover:bg-ink/15 text-ink-muted text-xs px-3 py-1 rounded font-medium transition-colors"
                           >
                             Cancel
                           </button>
                         </div>
                       ) : (
-                        <button 
+                        <button
                           onClick={() => generateBubblePreviews(selectedImage.id)}
-                          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                          className="flex items-center gap-1.5 bg-accent hover:opacity-90 text-white px-3 py-1.5 rounded text-xs font-medium transition-colors"
                           title="Generate interactive bounds previews highlighted in blue to inspect before alignment"
                         >
                           <Wand2 size={14} /> Preview Bounds
                         </button>
                       )}
-                      
-                      <button 
+
+                      <button
                         onClick={() => handleSmartBubbleFillAll(selectedImage.id)}
-                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-xs font-medium transition-colors text-white"
+                        className="flex items-center gap-1.5 bg-accent hover:opacity-90 px-3 py-1.5 rounded text-xs font-medium transition-colors text-white"
                         title="Smart Center All Text Bubbles"
                       >
                         <Wand2 size={14} /> Center All Bubbles
                       </button>
-                      <button 
+                      <button
                         onClick={handleDownloadCurrentPage}
-                        className="flex items-center gap-1.5 bg-[#111] hover:bg-[#222] px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                        className="flex items-center gap-1.5 bg-elevated hover:bg-ink/10 px-3 py-1.5 rounded text-xs font-medium transition-colors"
                         title="Download this page as PNG"
                       >
                         <Download size={14} /> Download Page
                       </button>
-                      <button 
+                      <button
                         onClick={() => {
                           if (confirm("Are you sure you want to remove all texts and paint strokes from this page?")) {
                             saveHistory(selectedImage.id);
@@ -3695,7 +3385,7 @@ export default function App() {
                             setSelectedRegionId(null);
                           }
                         }}
-                        className="flex items-center gap-1.5 bg-red-900/50 hover:bg-red-800 px-3 py-1.5 rounded text-xs font-medium transition-colors text-red-200"
+                        className="flex items-center gap-1.5 bg-danger/20 hover:bg-danger/30 px-3 py-1.5 rounded text-xs font-medium transition-colors text-danger"
                         title="Clear all generated texts and paint strokes"
                       >
                         <Trash2 size={14} /> Clear All
@@ -3732,11 +3422,11 @@ export default function App() {
                           updateImage(selectedImage.id, { regions: [...selectedImage.regions, newRegion] });
                           setSelectedRegionId(newRegion.id);
                         }}
-                        className="flex items-center gap-1.5 bg-[#111] hover:bg-[#222] px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                        className="flex items-center gap-1.5 bg-elevated hover:bg-ink/10 px-3 py-1.5 rounded text-xs font-medium transition-colors"
                       >
                         <Plus size={14} /> Add Text
                       </button>
-                      <button 
+                      <button
                         onClick={() => {
                           if (selectedForProcess.size > 0) {
                             processSelectedImages();
@@ -3744,7 +3434,7 @@ export default function App() {
                             processImage(selectedImage);
                           }
                         }}
-                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded text-xs font-medium transition-colors"
+                        className="flex items-center gap-1.5 bg-accent hover:opacity-90 px-3 py-1.5 rounded text-xs font-medium transition-colors text-white"
                       >
                         <Play size={14} /> {selectedForProcess.size > 0 ? `Process Selected (${selectedForProcess.size})` : 'Process Image'}
                       </button>
@@ -3754,14 +3444,14 @@ export default function App() {
               </div>
               {isProcessingCrop && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-                  <div className="bg-black border border-[#444] rounded-xl p-8 flex flex-col items-center gap-4 max-w-sm w-full shadow-2xl animate-fade-in text-center">
-                    <Loader2 size={42} className="animate-spin text-indigo-500" />
-                    <h3 className="text-sm font-bold text-white tracking-tight">Translating and Processing Manga with AI...</h3>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">يقوم Gemini الآن بتحليل وCleaning ومحاذاة القطاع المقتطع تلقائياً ومطابقته على الImagesة الكاملة بدقة فائقة.</p>
+                  <div className="bg-elevated border border-hairline rounded-xl p-8 flex flex-col items-center gap-4 max-w-sm w-full shadow-2xl animate-fade-in text-center">
+                    <Loader2 size={42} className="animate-spin text-accent" />
+                    <h3 className="text-sm font-bold text-ink tracking-tight">Translating and Processing Manga with AI...</h3>
+                    <p className="text-[11px] text-ink-muted leading-relaxed">يقوم Gemini الآن بتحليل وCleaning ومحاذاة القطاع المقتطع تلقائياً ومطابقته على الImagesة الكاملة بدقة فائقة.</p>
                   </div>
                 </div>
               )}
-              <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-slate-500"><Loader2 className="animate-spin mr-2"/> Loading Editor...</div>}>
+              <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-ink-faint"><Loader2 className="animate-spin mr-2"/> Loading Editor...</div>}>
                 <ImageEditor
                   image={selectedImage}
                   selectedRegionId={selectedRegionId}
@@ -3791,27 +3481,27 @@ export default function App() {
               </Suspense>
 
               {cropsQueue.length > 0 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl bg-black/85 backdrop-blur-xl border border-purple-500/30 rounded-2xl shadow-[0_10px_30px_rgba(147,51,234,0.3)] p-3.5 z-40 flex items-center justify-between gap-4 animate-fade-in">
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl bg-elevated/85 backdrop-blur-xl border border-accent/30 rounded-2xl shadow-2xl shadow-accent/30 p-3.5 z-40 flex items-center justify-between gap-4 animate-fade-in">
                   <div className="flex flex-col gap-1 max-w-[45%]">
-                    <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5 leading-none">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="text-xs font-bold text-ink flex items-center gap-1.5 leading-none">
+                      <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse"></span>
                       AI Batch Crop Queue ({cropsQueue.length} segments)
                     </span>
-                    <span className="text-[10px] text-slate-400 leading-tight">
+                    <span className="text-[10px] text-ink-muted leading-tight">
                       Selected segments will be stitched together, translated at once, and mapped back to their original coordinates.
                     </span>
                   </div>
-                  
-                  <div className="flex items-center gap-2 overflow-x-auto max-w-[35%] py-1 border-x border-slate-800/80 px-3 scrollbar-none">
+
+                  <div className="flex items-center gap-2 overflow-x-auto max-w-[35%] py-1 border-x border-hairline px-3 scrollbar-none">
                     {cropsQueue.map((crop) => (
-                      <div key={crop.id} className="relative group shrink-0 w-11 h-11 rounded bg-black/50 border border-slate-700/60 overflow-hidden shadow-md">
+                      <div key={crop.id} className="relative group shrink-0 w-11 h-11 rounded bg-elevated/50 border border-hairline overflow-hidden shadow-md">
                         <img src={crop.cropUrl} className="w-full h-full object-cover" />
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setCropsQueue(prev => prev.filter(c => c.id !== crop.id));
                           }}
-                          className="absolute top-0 right-0 bg-red-600 hover:bg-red-500 text-white p-0.5 rounded-bl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-4.5 h-4.5 text-[9px] font-bold"
+                          className="absolute top-0 right-0 bg-danger hover:opacity-90 text-white p-0.5 rounded-bl opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center w-4.5 h-4.5 text-[9px] font-bold"
                         >
                           ✕
                         </button>
@@ -3822,13 +3512,13 @@ export default function App() {
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => setCropsQueue([])}
-                      className="text-xs text-slate-400 hover:text-slate-200 px-2 py-1.5 rounded transition-all cursor-pointer font-medium"
+                      className="text-xs text-ink-faint hover:text-ink-muted px-2 py-1.5 rounded transition-all cursor-pointer font-medium"
                     >
                       Clear
                     </button>
                     <button
                       onClick={handleTranslateCropQueue}
-                      className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer"
+                      className="flex items-center gap-1.5 bg-accent hover:opacity-90 text-white font-bold text-xs px-4 py-2 rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer"
                     >
                       <Sparkles size={12} className="text-white shrink-0 animate-pulse" /> Translation مجمعة
                     </button>
@@ -3837,7 +3527,7 @@ export default function App() {
               )}
             </div>
           ) : (
-            <div className="text-slate-500 flex flex-col items-center gap-4">
+            <div className="text-ink-faint flex flex-col items-center gap-4">
               <ImageIcon size={48} className="opacity-50" />
               <p>Select an image to edit</p>
             </div>
@@ -3845,10 +3535,10 @@ export default function App() {
         </main>
 
         {/* Right Sidebar (Properties): static column on desktop, off-canvas drawer below lg */}
-        <aside className={`fixed inset-y-0 right-0 z-40 w-80 max-w-[85vw] border-l border-[#333] bg-black flex flex-col overflow-y-auto transition-transform duration-300 lg:static lg:max-w-none lg:translate-x-0 ${showRightPanel ? 'translate-x-0' : 'translate-x-full'}`}>
+        <aside className={`fixed inset-y-0 right-0 z-40 w-80 max-w-[85vw] border-l border-hairline bg-elevated flex flex-col overflow-y-auto transition-transform duration-300 lg:static lg:max-w-none lg:translate-x-0 ${showRightPanel ? 'translate-x-0' : 'translate-x-full'}`}>
           <button
             onClick={() => setShowRightPanel(false)}
-            className="lg:hidden flex items-center gap-1.5 m-2 self-start bg-white/5 border border-white/10 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg"
+            className="lg:hidden flex items-center gap-1.5 m-2 self-start bg-ink/5 border border-hairline text-ink-muted text-xs px-2.5 py-1.5 rounded-lg"
           >
             ✕ Close
           </button>
@@ -3856,8 +3546,8 @@ export default function App() {
             <div className="p-5 flex flex-col gap-6">
               <div>
                 <div className="flex justify-between items-center mb-1">
-                  <h3 className="font-semibold text-slate-300 flex items-center gap-2">
-                    Edit Text <span className="text-[10px] bg-[#111] px-1.5 py-0.5 rounded uppercase tracking-wider text-slate-400">{selectedRegion.type}</span>
+                  <h3 className="font-semibold text-ink-muted flex items-center gap-2">
+                    Edit Text <span className="text-[10px] bg-elevated px-1.5 py-0.5 rounded uppercase tracking-wider text-ink-muted">{selectedRegion.type}</span>
                   </h3>
                   <button
                     onClick={() => {
@@ -3867,17 +3557,17 @@ export default function App() {
                       });
                       setSelectedRegionId(null);
                     }}
-                    className="text-red-400 hover:text-red-300 bg-red-950/30 p-1.5 rounded transition-colors"
+                    className="text-danger hover:opacity-80 bg-danger/15 p-1.5 rounded transition-colors"
                     title="Delete Region"
                   >
                     <Trash2 size={14} />
                   </button>
                 </div>
-                <p className="text-xs text-slate-500 mb-4">{selectedRegion.originalText}</p>
+                <p className="text-xs text-ink-faint mb-4">{selectedRegion.originalText}</p>
                 <textarea
                   value={selectedRegion.translatedText}
                   onChange={(e) => updateRegion(selectedRegion.id, { translatedText: e.target.value })}
-                  className="w-full h-24 bg-black border border-[#444] rounded-md p-3 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none resize-none"
+                  className="w-full h-24 bg-ink/5 border border-hairline rounded-md p-3 text-sm focus:border-accent focus:ring-1 focus:ring-accent outline-none resize-none"
                   dir="ltr"
                 />
               </div>
@@ -3886,28 +3576,28 @@ export default function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5 col-span-2">
                     <div className="flex justify-between items-center">
-                      <label className="text-xs font-semibold text-purple-300">الخط المستخدم (Font Family)</label>
-                      <button 
+                      <label className="text-xs font-semibold text-accent">الخط المستخدم (Font Family)</label>
+                      <button
                         onClick={() => fontInputRef.current?.click()}
-                        className="text-[10px] text-purple-400 hover:text-purple-300 transition-colors flex items-center gap-1 font-sans bg-purple-950/20 px-1.5 py-0.5 rounded border border-purple-800/30"
+                        className="text-[10px] text-accent hover:opacity-80 transition-colors flex items-center gap-1 font-sans bg-accent-soft px-1.5 py-0.5 rounded border border-accent/30"
                         title="Upload خط مخصص (.ttf, .otf, .zip)"
                       >
                         <Plus size={10} /> Upload خطوط مخصصة
                       </button>
-                      <input 
-                        type="file" 
-                        ref={fontInputRef} 
-                        onChange={handleFontUpload} 
-                        accept=".zip,.ttf,.otf" 
-                        className="hidden" 
-                        multiple 
+                      <input
+                        type="file"
+                        ref={fontInputRef}
+                        onChange={handleFontUpload}
+                        accept=".zip,.ttf,.otf"
+                        className="hidden"
+                        multiple
                       />
                     </div>
-                    
+
                     <select
                       value={selectedRegion.fontFamily}
                       onChange={(e) => updateRegion(selectedRegion.id, { fontFamily: e.target.value })}
-                      className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none font-sans"
+                      className="w-full bg-ink/5 border border-hairline rounded-md p-2 text-sm outline-none font-sans"
                     >
                       {customFonts.map(font => (
                         <option key={font} value={font} style={{ fontFamily: font }}>{font.replace('MET-', '')} (مرفوع) ✦</option>
@@ -3918,42 +3608,42 @@ export default function App() {
                     </select>
 
                     {/* Highly Elegant Visual Font Live Preview List */}
-                    <div className="bg-[#0b0718]/80 border border-purple-900/30 rounded-xl p-2.5 mt-2 max-h-40 overflow-y-auto space-y-1.5 scrollbar-thin">
-                      <p className="text-[10px] text-slate-400 font-sans tracking-tight mb-2 border-b border-purple-900/20 pb-1 flex justify-between">
+                    <div className="bg-elevated/80 border border-accent/20 rounded-xl p-2.5 mt-2 max-h-40 overflow-y-auto space-y-1.5 scrollbar-thin">
+                      <p className="text-[10px] text-ink-muted font-sans tracking-tight mb-2 border-b border-hairline pb-1 flex justify-between">
                         <span>قائمة المعاينة المباشرة للخطوط</span>
-                        <span className="text-purple-400">اسم الخط بمظهره ✦</span>
+                        <span className="text-accent">اسم الخط بمظهره ✦</span>
                       </p>
                       {customFonts.concat(["Cairo", "Tajawal", "Marhey", "Aref Ruqaa", "Almarai", "El Messiri", "Amiri", "Changa", "Harmattan", "Katibeh", "Lalezar", "Lemonada", "Mada", "Reem Kufi", "Rakkas"]).map((font) => (
                         <button
                           key={font}
                           onClick={() => updateRegion(selectedRegion.id, { fontFamily: font })}
                           style={{ fontFamily: font }}
-                          className={`w-full text-left hover:bg-purple-950/40 p-2 rounded-lg text-xs transition-all flex justify-between items-center ${selectedRegion.fontFamily === font ? 'bg-purple-950/60 text-purple-300 border border-purple-700/50' : 'text-slate-300'}`}
+                          className={`w-full text-left hover:bg-accent-soft p-2 rounded-lg text-xs transition-all flex justify-between items-center ${selectedRegion.fontFamily === font ? 'bg-accent-soft text-accent border border-accent/50' : 'text-ink-muted'}`}
                         >
-                          <span className="text-[9px] text-slate-500 font-mono select-none">{font.replace('MET-', '')}</span>
+                          <span className="text-[9px] text-ink-faint font-mono select-none">{font.replace('MET-', '')}</span>
                           <span className="text-sm tracking-wide truncate max-w-[70%] text-left font-semibold">تصفيف: مانجا {font.replace('MET-', '')}</span>
                         </button>
                       ))}
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-400">Font Size</label>
+                    <label className="text-xs font-medium text-ink-muted">Font Size</label>
                     <input
                       type="number"
                       value={Math.round(selectedRegion.fontSize)}
                       onChange={(e) => updateRegion(selectedRegion.id, { fontSize: Number(e.target.value), autoFitText: false })}
-                      className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none"
+                      className="w-full bg-ink/5 border border-hairline rounded-md p-2 text-sm outline-none"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-400">Text Align</label>
+                    <label className="text-xs font-medium text-ink-muted">Text Align</label>
                     <select
                       value={selectedRegion.textAlign}
                       onChange={(e) => updateRegion(selectedRegion.id, { textAlign: e.target.value })}
-                      className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none"
+                      className="w-full bg-ink/5 border border-hairline rounded-md p-2 text-sm outline-none"
                     >
                       <option value="center">Center</option>
                       <option value="right">Right</option>
@@ -3961,17 +3651,17 @@ export default function App() {
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-400">Style</label>
+                    <label className="text-xs font-medium text-ink-muted">Style</label>
                     <div className="flex gap-2">
-                       <button onClick={() => updateRegion(selectedRegion.id, { fontWeight: selectedRegion.fontWeight === 'bold' ? 'normal' : 'bold' })} className={`flex-1 p-2 border rounded-md text-sm font-bold ${selectedRegion.fontWeight === 'bold' ? 'bg-indigo-600 border-indigo-600' : 'bg-black border-[#444]'}`}>B</button>
-                       <button onClick={() => updateRegion(selectedRegion.id, { fontStyle: selectedRegion.fontStyle === 'italic' ? 'normal' : 'italic' })} className={`flex-1 p-2 border rounded-md text-sm italic ${selectedRegion.fontStyle === 'italic' ? 'bg-indigo-600 border-indigo-600' : 'bg-black border-[#444]'}`}>I</button>
+                       <button onClick={() => updateRegion(selectedRegion.id, { fontWeight: selectedRegion.fontWeight === 'bold' ? 'normal' : 'bold' })} className={`flex-1 p-2 border rounded-md text-sm font-bold ${selectedRegion.fontWeight === 'bold' ? 'bg-accent border-accent text-white' : 'bg-ink/5 border-hairline'}`}>B</button>
+                       <button onClick={() => updateRegion(selectedRegion.id, { fontStyle: selectedRegion.fontStyle === 'italic' ? 'normal' : 'italic' })} className={`flex-1 p-2 border rounded-md text-sm italic ${selectedRegion.fontStyle === 'italic' ? 'bg-accent border-accent text-white' : 'bg-ink/5 border-hairline'}`}>I</button>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-400">Text Color</label>
+                    <label className="text-xs font-medium text-ink-muted">Text Color</label>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
@@ -3983,13 +3673,13 @@ export default function App() {
                         type="text"
                         value={selectedRegion.textColor}
                         onChange={(e) => updateRegion(selectedRegion.id, { textColor: e.target.value })}
-                        className="w-full bg-black border border-[#444] rounded-md p-1.5 text-xs outline-none uppercase"
+                        className="w-full bg-ink/5 border border-hairline rounded-md p-1.5 text-xs outline-none uppercase"
                       />
                     </div>
                   </div>
-                  
+
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-400">Outline (Stroke)</label>
+                    <label className="text-xs font-medium text-ink-muted">Outline (Stroke)</label>
                     <div className="flex items-center gap-2">
                       <input
                         type="color"
@@ -4009,7 +3699,7 @@ export default function App() {
                             if (val === 0) updateRegion(selectedRegion.id, { strokeColor: 'transparent', strokeWidth: 0 });
                             else updateRegion(selectedRegion.id, { strokeColor: selectedRegion.strokeColor === 'transparent' ? '#ffffff' : selectedRegion.strokeColor, strokeWidth: val });
                           }}
-                          className="w-full accent-indigo-500"
+                          className="w-full accent-accent"
                         />
                         <span className="text-xs font-mono">{selectedRegion.strokeColor === 'transparent' ? 0 : selectedRegion.strokeWidth}</span>
                       </div>
@@ -4018,7 +3708,7 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-400">Background Color</label>
+                  <label className="text-xs font-medium text-ink-muted">Background Color</label>
                   <div className="flex items-center gap-2">
                     <input
                       type="color"
@@ -4027,9 +3717,9 @@ export default function App() {
                       className="w-8 h-8 rounded shrink-0 bg-transparent border-0 p-0 cursor-pointer"
                       disabled={selectedRegion.bgColor === 'transparent'}
                     />
-                    <button 
+                    <button
                       onClick={() => updateRegion(selectedRegion.id, { bgColor: selectedRegion.bgColor === 'transparent' ? '#ffffff' : 'transparent' })}
-                      className="text-[10px] bg-[#111] px-2 py-1.5 rounded text-slate-300 w-full"
+                      className="text-[10px] bg-elevated px-2 py-1.5 rounded text-ink-muted w-full"
                     >
                       {selectedRegion.bgColor === 'transparent' ? 'No BG' : 'Clear BG'}
                     </button>
@@ -4042,7 +3732,7 @@ export default function App() {
                             updateRegion(selectedRegion.id, { bgColor: result.sRGBHex });
                           } catch (e) {}
                         }}
-                        className="p-1 px-2 bg-[#111] hover:bg-[#222] rounded-md text-slate-300 shrink-0 h-[28px]"
+                        className="p-1 px-2 bg-elevated hover:bg-ink/10 rounded-md text-ink-muted shrink-0 h-[28px]"
                         title="Pick Color from Screen"
                       >
                         <Pipette size={14} />
@@ -4052,7 +3742,7 @@ export default function App() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-slate-400">Angle (Rotation)</label>
+                  <label className="text-xs font-medium text-ink-muted">Angle (Rotation)</label>
                   <div className="flex items-center gap-3">
                     <input
                       type="range"
@@ -4060,7 +3750,7 @@ export default function App() {
                       max="180"
                       value={Math.round(selectedRegion.angle)}
                       onChange={(e) => updateRegion(selectedRegion.id, { angle: Number(e.target.value) })}
-                      className="flex-1 accent-indigo-500"
+                      className="flex-1 accent-accent"
                     />
                     <span className="text-xs w-8 text-left font-mono">{Math.round(selectedRegion.angle)}°</span>
                   </div>
@@ -4068,7 +3758,7 @@ export default function App() {
 
                 <div className="grid grid-cols-2 gap-4 mt-2">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-400">Letter Spacing</label>
+                    <label className="text-xs font-medium text-ink-muted">Letter Spacing</label>
                     <div className="flex items-center gap-3">
                       <input
                         type="range"
@@ -4077,13 +3767,13 @@ export default function App() {
                         step="0.5"
                         value={selectedRegion.letterSpacing || 0}
                         onChange={(e) => updateRegion(selectedRegion.id, { letterSpacing: Number(e.target.value) })}
-                        className="flex-1 accent-indigo-500"
+                        className="flex-1 accent-accent"
                       />
                       <span className="text-xs w-6 text-left font-mono">{selectedRegion.letterSpacing || 0}</span>
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-400">Opacity (All)</label>
+                    <label className="text-xs font-medium text-ink-muted">Opacity (All)</label>
                     <div className="flex items-center gap-3">
                       <input
                         type="range"
@@ -4092,26 +3782,26 @@ export default function App() {
                         step="0.05"
                         value={selectedRegion.opacity ?? 1}
                         onChange={(e) => updateRegion(selectedRegion.id, { opacity: Number(e.target.value) })}
-                        className="flex-1 accent-indigo-500"
+                        className="flex-1 accent-accent"
                       />
                       <span className="text-xs w-8 text-left font-mono">{Math.round((selectedRegion.opacity ?? 1) * 100)}%</span>
                     </div>
                   </div>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4 mt-2">
                   <div className="space-y-1.5 flex flex-col justify-end">
-                    <label className="flex items-center gap-2 text-xs font-medium text-slate-300 cursor-pointer mb-2">
-                      <input 
-                        type="checkbox" 
-                        checked={!!selectedRegion.autoFitText} 
+                    <label className="flex items-center gap-2 text-xs font-medium text-ink-muted cursor-pointer mb-2">
+                      <input
+                        type="checkbox"
+                        checked={!!selectedRegion.autoFitText}
                         onChange={(e) => updateRegion(selectedRegion.id, { autoFitText: e.target.checked })}
-                        className="rounded border-[#444] bg-black accent-indigo-500"
+                        className="rounded border-hairline bg-elevated accent-accent"
                       />
                       Auto-fit Text
                     </label>
                     <div className="flex items-center gap-2">
-                      <label className="text-xs font-medium text-slate-400">Shadow Color</label>
+                      <label className="text-xs font-medium text-ink-muted">Shadow Color</label>
                       <input
                         type="color"
                         value={selectedRegion.shadowColor === 'transparent' ? '#000000' : (selectedRegion.shadowColor || '#000000')}
@@ -4121,77 +3811,77 @@ export default function App() {
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-slate-400">Shadow Blur ({selectedRegion.shadowBlur || 0})</label>
+                    <label className="text-xs font-medium text-ink-muted">Shadow Blur ({selectedRegion.shadowBlur || 0})</label>
                     <input
                       type="range"
                       min="0"
                       max="20"
                       value={selectedRegion.shadowBlur || 0}
                       onChange={(e) => updateRegion(selectedRegion.id, { shadowBlur: Number(e.target.value) })}
-                      className="w-full accent-indigo-500"
+                      className="w-full accent-accent"
                     />
                   </div>
                 </div>
 
                 {/* Dimensions and Coordinates manual inputs in Arabic/English */}
-                <div className="space-y-2 border-t border-[#333] pt-4 mt-2">
-                  <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">الإحداثيات والأبعاد (Dimensions)</h4>
+                <div className="space-y-2 border-t border-hairline pt-4 mt-2">
+                  <h4 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">الإحداثيات والأبعاد (Dimensions)</h4>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <label className="text-[10px] text-slate-500">X (موضع أفقي)</label>
-                      <input 
+                      <label className="text-[10px] text-ink-faint">X (موضع أفقي)</label>
+                      <input
                         type="number"
                         value={Math.round(selectedRegion.x)}
                         onChange={(e) => updateRegion(selectedRegion.id, { x: Number(e.target.value) })}
-                        className="w-full bg-black border border-[#444] rounded-md p-1.5 text-xs text-white outline-none"
+                        className="w-full bg-ink/5 border border-hairline rounded-md p-1.5 text-xs text-ink outline-none"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-slate-500">Y (موضع رأسي)</label>
-                      <input 
+                      <label className="text-[10px] text-ink-faint">Y (موضع رأسي)</label>
+                      <input
                         type="number"
                         value={Math.round(selectedRegion.y)}
                         onChange={(e) => updateRegion(selectedRegion.id, { y: Number(e.target.value) })}
-                        className="w-full bg-black border border-[#444] rounded-md p-1.5 text-xs text-white outline-none"
+                        className="w-full bg-ink/5 border border-hairline rounded-md p-1.5 text-xs text-ink outline-none"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-slate-500">Width (العرض)</label>
-                      <input 
+                      <label className="text-[10px] text-ink-faint">Width (العرض)</label>
+                      <input
                         type="number"
                         value={Math.round(selectedRegion.width)}
                         onChange={(e) => updateRegion(selectedRegion.id, { width: Number(e.target.value) })}
-                        className="w-full bg-black border border-[#444] rounded-md p-1.5 text-xs text-white outline-none"
+                        className="w-full bg-ink/5 border border-hairline rounded-md p-1.5 text-xs text-ink outline-none"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] text-slate-500">Height (الارتفاع)</label>
-                      <input 
+                      <label className="text-[10px] text-ink-faint">Height (الارتفاع)</label>
+                      <input
                         type="number"
                         value={Math.round(selectedRegion.height)}
                         onChange={(e) => updateRegion(selectedRegion.id, { height: Number(e.target.value) })}
-                        className="w-full bg-black border border-[#444] rounded-md p-1.5 text-xs text-white outline-none"
+                        className="w-full bg-ink/5 border border-hairline rounded-md p-1.5 text-xs text-ink outline-none"
                       />
                     </div>
                   </div>
                   <div className="space-y-1 mt-2">
-                    <label className="text-[10px] text-slate-500">Angle (الزاوية: {selectedRegion.angle || 0}°)</label>
-                    <input 
+                    <label className="text-[10px] text-ink-faint">Angle (الزاوية: {selectedRegion.angle || 0}°)</label>
+                    <input
                       type="range"
                       min="-180"
                       max="180"
                       value={selectedRegion.angle || 0}
                       onChange={(e) => updateRegion(selectedRegion.id, { angle: Number(e.target.value) })}
-                      className="w-full accent-indigo-500"
+                      className="w-full accent-accent"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-1.5 mt-2">
-                  <label className="text-xs font-medium text-slate-400">Layer Order</label>
+                  <label className="text-xs font-medium text-ink-muted">Layer Order</label>
                   <div className="flex gap-2">
-                    <button 
-                      className="flex-1 bg-[#111] hover:bg-[#222] py-1 rounded text-xs text-slate-300 flex items-center justify-center gap-1"
+                    <button
+                      className="flex-1 bg-elevated hover:bg-ink/10 py-1 rounded text-xs text-ink-muted flex items-center justify-center gap-1"
                       onClick={() => {
                         saveHistory(selectedImage.id);
                         const arr = [...selectedImage.regions];
@@ -4204,8 +3894,8 @@ export default function App() {
                     >
                       <ChevronUp size={14} /> Bring Forward
                     </button>
-                    <button 
-                      className="flex-1 bg-[#111] hover:bg-[#222] py-1 rounded text-xs text-slate-300 flex items-center justify-center gap-1"
+                    <button
+                      className="flex-1 bg-elevated hover:bg-ink/10 py-1 rounded text-xs text-ink-muted flex items-center justify-center gap-1"
                       onClick={() => {
                         saveHistory(selectedImage.id);
                         const arr = [...selectedImage.regions];
@@ -4221,16 +3911,16 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-[#333] space-y-3 mt-4">
+                <div className="pt-4 border-t border-hairline space-y-3 mt-4">
                   <div className="flex gap-2">
-                    <button 
-                      className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs py-2 rounded transition-colors flex items-center justify-center gap-2 font-medium"
+                    <button
+                      className="flex-1 bg-accent hover:opacity-90 text-white text-xs py-2 rounded transition-colors flex items-center justify-center gap-2 font-medium"
                       onClick={() => handleSmartBubbleFill(selectedImage.id, selectedRegion)}
                     >
                       <Wand2 size={14} /> Smart Detect
                     </button>
-                    <button 
-                      className="bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-800/50 text-xs py-2 px-3 rounded transition-colors flex items-center justify-center gap-1.5"
+                    <button
+                      className="bg-accent-soft hover:opacity-80 text-accent border border-accent/40 text-xs py-2 px-3 rounded transition-colors flex items-center justify-center gap-1.5"
                       onClick={handleSplitBubble}
                       title="فصل هندسي لفقاعتين دائرية مدمجة"
                     >
@@ -4239,29 +3929,29 @@ export default function App() {
                   </div>
 
                   {/* Kashida layouts */}
-                  <div className="bg-purple-950/10 p-2 text-left rounded-lg border border-purple-900/20 space-y-1.5">
-                    <label className="text-[10px] font-semibold text-purple-300 flex items-center justify-between">
+                  <div className="bg-accent-soft p-2 text-left rounded-lg border border-accent/20 space-y-1.5">
+                    <label className="text-[10px] font-semibold text-accent flex items-center justify-between">
                       <span>كشيدة تمديد السطور العربية (Kashida)</span>
                       <span>✦</span>
                     </label>
                     <div className="flex gap-2">
-                      <button 
+                      <button
                         onClick={() => applyKashidaHarmony('oval')}
-                        className="flex-1 bg-purple-950/30 hover:bg-purple-900/55 border border-purple-800/40 text-[9px] py-1 px-1.5 rounded transition-all text-slate-200 font-sans"
+                        className="flex-1 bg-accent-soft hover:opacity-80 border border-accent/40 text-[9px] py-1 px-1.5 rounded transition-all text-ink-muted font-sans"
                         title="تمديد الخط للملاءمة الدائرية بالمنتصف"
                       >
                         كشيدة دائرية (ـ)
                       </button>
-                      <button 
+                      <button
                         onClick={() => applyKashidaHarmony('rectangular')}
-                        className="flex-1 bg-black hover:bg-[#111] border border-[#333] text-[9px] py-1 px-1.5 rounded transition-all text-slate-400 font-sans"
+                        className="flex-1 bg-elevated hover:bg-ink/10 border border-hairline text-[9px] py-1 px-1.5 rounded transition-all text-ink-muted font-sans"
                       >
                         مستطيل عادي
                       </button>
                     </div>
                   </div>
-                   <button 
-                     className="w-full bg-[#111] hover:bg-[#222] text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
+                   <button
+                     className="w-full bg-elevated hover:bg-ink/10 text-ink-muted text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
                      onClick={() => {
                        saveHistory(selectedImage.id);
                        updateImage(selectedImage.id, {
@@ -4276,7 +3966,7 @@ export default function App() {
                      <Plus size={14} /> Duplicate text region
                    </button>
                    <button 
-                     className="w-full bg-[#111] hover:bg-[#222] text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
+                     className="w-full bg-elevated hover:bg-ink/10 text-ink-muted text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
                      onClick={() => {
                        saveHistory(selectedImage.id);
                        updateImage(selectedImage.id, {
@@ -4297,7 +3987,7 @@ export default function App() {
                      <TypeIcon size={14} /> Apply text styles to this page
                    </button>
                    <button 
-                     className="w-full bg-[#111] hover:bg-[#222] text-slate-200 text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
+                     className="w-full bg-elevated hover:bg-ink/10 text-ink-muted text-xs py-2 rounded transition-colors flex items-center justify-center gap-2"
                      onClick={() => {
                        if (confirm('Apply these font settings to all text regions across ALL pages?')) {
                          setImages(prev => prev.map(img => ({
@@ -4325,13 +4015,13 @@ export default function App() {
           ) : activeTool !== 'select' ? (
              <div className="p-5 flex flex-col gap-6">
                 <div>
-                  <h3 className="font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                  <h3 className="font-semibold text-ink-muted mb-4 flex items-center gap-2">
                     Brush Settings
                   </h3>
-                  
+
                   <div className="space-y-6">
                     <div className="space-y-2">
-                      <label className="text-xs font-medium text-slate-400 flex justify-between">
+                      <label className="text-xs font-medium text-ink-muted flex justify-between">
                         <span>Size</span>
                         <span>{brushSize}px</span>
                       </label>
@@ -4341,13 +4031,13 @@ export default function App() {
                         max="100"
                         value={brushSize}
                         onChange={(e) => setBrushSize(Number(e.target.value))}
-                        className="w-full accent-indigo-500"
+                        className="w-full accent-accent"
                       />
                     </div>
-                    
+
                     {(activeTool === 'draw' || activeTool === 'fill_poly') && (
                       <div className="space-y-2">
-                        <label className="text-xs font-medium text-slate-400">Color</label>
+                        <label className="text-xs font-medium text-ink-muted">Color</label>
                         <div className="flex items-center gap-2">
                            <input
                             type="color"
@@ -4359,7 +4049,7 @@ export default function App() {
                             type="text"
                             value={brushColor}
                             onChange={(e) => setBrushColor(e.target.value)}
-                            className="w-full bg-black border border-[#444] rounded-md p-2 text-sm outline-none uppercase"
+                            className="w-full bg-ink/5 border border-hairline rounded-md p-2 text-sm outline-none uppercase"
                            />
                            {('EyeDropper' in window) && (
                              <button
@@ -4370,7 +4060,7 @@ export default function App() {
                                    setBrushColor(result.sRGBHex);
                                  } catch (e) {}
                                }}
-                               className="p-2 bg-[#111] hover:bg-[#222] rounded-md text-slate-300 shrink-0"
+                               className="p-2 bg-elevated hover:bg-ink/10 rounded-md text-ink-muted shrink-0"
                                title="Pick Color from Screen"
                              >
                                <Pipette size={16} />
@@ -4379,34 +4069,34 @@ export default function App() {
                         </div>
                       </div>
                     )}
-                    
+
                     {activeTool === 'erase' && (
-                      <div className="p-3 bg-black rounded border border-[#333] text-xs text-slate-400 text-center">
+                      <div className="p-3 bg-elevated rounded border border-hairline text-xs text-ink-muted text-center">
                         Eraser paints with white color to match manga background.
                       </div>
                     )}
                     {activeTool === 'bg_erase' && (
-                      <div className="p-3 bg-black rounded border border-[#333] text-xs text-slate-400 text-center">
+                      <div className="p-3 bg-elevated rounded border border-hairline text-xs text-ink-muted text-center">
                         Erase parts of a Text's Background square without affecting the text or background image.
                       </div>
                     )}
                     {activeTool === 'smart_sfx' && (
-                      <div className="p-3 bg-black rounded border border-[#333] text-xs text-slate-400 text-center">
+                      <div className="p-3 bg-elevated rounded border border-hairline text-xs text-ink-muted text-center">
                         Click on the image. It will automatically pick the background color below the cursor and paint with it! Great for whitening SFX.
                       </div>
                     )}
                     {activeTool === 'gen_erase' && (
-                      <div className="p-3 bg-emerald-950/20 rounded border border-emerald-800/30 text-xs text-emerald-400 text-center">
+                      <div className="p-3 bg-success/10 rounded border border-success/30 text-xs text-success text-center">
                         AI Generative Inpaint: Draw over a region. The AI algorithm will automatically analyze the surrounding background and cleanly remove text.
                       </div>
                     )}
 
-                    <button 
+                    <button
                       onClick={() => {
                         saveHistory(selectedImage!.id);
                         updateImage(selectedImage!.id, { paintStrokes: [] });
                       }}
-                      className="w-full mt-4 bg-red-950/50 hover:bg-red-900/50 border border-red-900/50 text-red-400 py-2 rounded text-sm transition-colors"
+                      className="w-full mt-4 bg-danger/15 hover:bg-danger/25 border border-danger/40 text-danger py-2 rounded text-sm transition-colors"
                       disabled={!selectedImage || selectedImage.paintStrokes.length === 0}
                     >
                       Clear All Strokes
@@ -4415,7 +4105,7 @@ export default function App() {
                 </div>
              </div>
           ) : (
-             <div className="p-8 text-center text-slate-500 flex flex-col items-center gap-4">
+             <div className="p-8 text-center text-ink-faint flex flex-col items-center gap-4">
                {selectedImage && <p className="text-sm">Click on any text or bubble in the editor to modify it, or select a drawing tool from the top toolbar.</p>}
              </div>
           )}
@@ -4424,151 +4114,89 @@ export default function App() {
         )}
       </div>
 
-      {/* iOS-style Liquid Glass floating tab bar */}
+      {/* iOS-style bottom tab bar (mobile/tablet) */}
       {activeChapterId === null && (
-        <div className="fixed bottom-safe left-1/2 -translate-x-1/2 z-50 w-[calc(100%-1.5rem)] max-w-sm sm:w-auto sm:max-w-none flex justify-center">
-          <div className="liquid-glass-nav w-full sm:w-auto px-3 xs:px-5 sm:px-6 py-2.5 rounded-[28px] flex items-center justify-between gap-2 xs:gap-5 sm:gap-8 md:gap-10 transition-all">
-
-            {/* Left Side Tab Actions (Settings, Scheduler) */}
-            <div className="flex items-center gap-2 xs:gap-4 sm:gap-6">
-              <button
-                type="button"
-                onClick={() => setActiveNavigationTab('settings')}
-                className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'settings' ? 'text-purple-300 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-              >
-                <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'settings' ? 'bg-purple-500/20 shadow-[0_0_14px_rgba(168,85,247,0.35)]' : 'group-hover:bg-white/8'}`}>
-                  <Settings size={19} strokeWidth={1.8} />
-                </div>
-                <span className="hidden xs:block text-[10px] font-medium tracking-wide">Settings</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveNavigationTab('scheduler')}
-                className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'scheduler' ? 'text-purple-300 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-              >
-                <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'scheduler' ? 'bg-purple-500/20 shadow-[0_0_14px_rgba(168,85,247,0.35)]' : 'group-hover:bg-white/8'}`}>
-                  <CalendarClock size={19} strokeWidth={1.8} />
-                </div>
-                <span className="hidden xs:block text-[10px] font-medium tracking-wide">Scheduler</span>
-              </button>
-            </div>
-
-            {/* Central Standalone Liquid Glass Plus Button */}
-            <div className="relative -mt-7 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  if (activeMangaId) {
-                    if (activeVolumeId) {
-                      handleAddChapterPrompt();
-                    } else {
-                      handleAddVolumePrompt();
-                    }
-                  } else {
-                    setShowCreateSeriesModal(true);
-                  }
-                }}
-                className="w-14 h-14 bg-gradient-to-b from-purple-500 to-fuchsia-700 rounded-full flex items-center justify-center shadow-[0_6px_24px_rgba(168,85,247,0.65)] ring-1 ring-white/25 cursor-pointer text-white hover:scale-110 active:scale-95 transition-all duration-300"
-                title="أنشئ Projectاً جديداً"
-              >
-                <Plus size={26} strokeWidth={2.6} />
-              </button>
-            </div>
-
-            {/* Right Side Tab Actions (Cloud Storage, Library) */}
-            <div className="flex items-center gap-2 xs:gap-4 sm:gap-6">
-              <button
-                type="button"
-                onClick={() => setActiveNavigationTab('cloud')}
-                className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'cloud' ? 'text-purple-300 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-              >
-                <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'cloud' ? 'bg-purple-500/20 shadow-[0_0_14px_rgba(168,85,247,0.35)]' : 'group-hover:bg-white/8'}`}>
-                  <CloudCog size={19} strokeWidth={1.8} />
-                </div>
-                <span className="hidden xs:block text-[10px] font-medium tracking-wide">Cloud</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveNavigationTab('library')}
-                className={`flex flex-col items-center gap-1 transition-all group ${activeNavigationTab === 'library' ? 'text-purple-300 scale-105 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
-              >
-                <div className={`p-1.5 rounded-xl transition-all ${activeNavigationTab === 'library' ? 'bg-purple-500/20 shadow-[0_0_14px_rgba(168,85,247,0.35)]' : 'group-hover:bg-white/8'}`}>
-                  <LayoutGrid size={19} strokeWidth={1.8} />
-                </div>
-                <span className="hidden xs:block text-[10px] font-medium tracking-wide">My Library</span>
-              </button>
-            </div>
-
-          </div>
-        </div>
+        <BottomTabBar
+          activeTab={activeNavigationTab}
+          onTabChange={setActiveNavigationTab}
+          onCreatePress={() => {
+            if (activeMangaId) {
+              if (activeVolumeId) {
+                handleAddChapterPrompt();
+              } else {
+                handleAddVolumePrompt();
+              }
+            } else {
+              setShowCreateSeriesModal(true);
+            }
+          }}
+        />
       )}
 
       {/* Stunning Create Project Modular popup */}
       {showCreateProjectModal && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-md animate-fade-in">
-          <div className="liquid-glass p-8 rounded-3xl max-w-xl w-full mx-4 shadow-[0_20px_50px_rgba(168,85,247,0.3)] border border-purple-500/25 relative text-slate-105 flex flex-col gap-6">
-            <button 
+          <div className="liquid-glass p-8 rounded-3xl max-w-xl w-full mx-4 shadow-[0_20px_50px_var(--color-accent-soft)] border border-accent/25 relative text-ink flex flex-col gap-6">
+            <button
               onClick={() => setShowCreateProjectModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 rounded-full hover:bg-white/5 transition-all text-sm font-bold"
+              className="absolute top-4 right-4 text-ink-muted hover:text-ink p-2 rounded-full hover:bg-ink/5 transition-all text-sm font-bold"
             >
               ✕
             </button>
             <div className="flex flex-col gap-1.5 text-left">
-              <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2">
-                <span className="text-purple-400">✧</span> Create Translation Project
+              <h2 className="text-2xl font-display font-bold text-ink flex items-center gap-2">
+                <span className="text-accent">✧</span> Create Translation Project
               </h2>
-              <p className="text-xs text-slate-400 leading-normal">
+              <p className="text-xs text-ink-muted leading-normal">
                 Kickstart a new translation stream from local folders, archived chapters, or restore previous sessions.
               </p>
             </div>
-            
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
-              <button 
+              <button
                 onClick={() => {
                   setShowCreateProjectModal(false);
                   fileInputRef.current?.click();
                 }}
-                className="p-5 rounded-2xl bg-[#080512]/60 hover:bg-purple-950/20 border border-purple-500/15 hover:border-purple-500/45 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
+                className="p-5 rounded-2xl bg-elevated hover:bg-accent-soft border border-hairline hover:border-accent/45 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
               >
-                <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20 text-purple-400">
+                <div className="w-10 h-10 rounded-xl bg-accent-soft flex items-center justify-center border border-accent/20 text-accent">
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
                   </svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-white group-hover:text-purple-300">Upload ZIP Chapter</h4>
-                  <p className="text-[11px] text-slate-400 mt-1">Accepts raw comic image files inside any ZIP.</p>
+                  <h4 className="text-sm font-semibold text-ink group-hover:text-accent">Upload ZIP Chapter</h4>
+                  <p className="text-[11px] text-ink-muted mt-1">Accepts raw comic image files inside any ZIP.</p>
                 </div>
               </button>
 
-              <button 
+              <button
                 onClick={() => {
                   setShowCreateProjectModal(false);
                   cleanZipInputRef.current?.click();
                 }}
-                className="p-5 rounded-2xl bg-[#080512]/60 hover:bg-purple-950/20 border border-purple-500/15 hover:border-purple-500/40 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
+                className="p-5 rounded-2xl bg-elevated hover:bg-accent-soft border border-hairline hover:border-accent/40 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
               >
-                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400">
+                <div className="w-10 h-10 rounded-xl bg-accent-soft flex items-center justify-center border border-accent/20 text-accent">
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                   </svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-white group-hover:text-indigo-300">Cleaned Plates ZIP</h4>
-                  <p className="text-[11px] text-slate-400 mt-1">Superimpose text directly on white-cleaned pages.</p>
+                  <h4 className="text-sm font-semibold text-ink group-hover:text-accent">Cleaned Plates ZIP</h4>
+                  <p className="text-[11px] text-ink-muted mt-1">Superimpose text directly on white-cleaned pages.</p>
                 </div>
               </button>
 
-              <button 
+              <button
                 onClick={() => {
                   setShowCreateProjectModal(false);
                   appendImagesInputRef.current?.click();
                 }}
-                className="p-5 rounded-2xl bg-[#080512]/60 hover:bg-purple-950/20 border border-purple-500/15 hover:border-purple-500/40 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
+                className="p-5 rounded-2xl bg-elevated hover:bg-accent-soft border border-hairline hover:border-accent/40 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
               >
-                <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20 text-purple-400">
+                <div className="w-10 h-10 rounded-xl bg-accent-soft flex items-center justify-center border border-accent/20 text-accent">
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                     <rect x={3} y={3} width={18} height={18} rx={2} ry={2} />
                     <circle cx={8.5} cy={8.5} r={1.5} />
@@ -4576,19 +4204,19 @@ export default function App() {
                   </svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-white group-hover:text-purple-300">Add Raw Pages</h4>
-                  <p className="text-[11px] text-slate-400 mt-1">Select and append raw comic files individually.</p>
+                  <h4 className="text-sm font-semibold text-ink group-hover:text-accent">Add Raw Pages</h4>
+                  <p className="text-[11px] text-ink-muted mt-1">Select and append raw comic files individually.</p>
                 </div>
               </button>
 
-              <button 
+              <button
                 onClick={() => {
                   setShowCreateProjectModal(false);
                   projectInputRef.current?.click();
                 }}
-                className="p-5 rounded-2xl bg-[#080512]/60 hover:bg-purple-950/20 border border-purple-500/15 hover:border-purple-500/45 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
+                className="p-5 rounded-2xl bg-elevated hover:bg-accent-soft border border-hairline hover:border-accent/45 transition-all flex flex-col gap-2.5 text-left group cursor-pointer"
               >
-                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 text-indigo-400">
+                <div className="w-10 h-10 rounded-xl bg-accent-soft flex items-center justify-center border border-accent/20 text-accent">
                   <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
@@ -4597,20 +4225,20 @@ export default function App() {
                   </svg>
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-white group-hover:text-indigo-300">Restore Session State</h4>
-                  <p className="text-[11px] text-slate-400 mt-1">Re-import previous workspace state (.json).</p>
+                  <h4 className="text-sm font-semibold text-ink group-hover:text-accent">Restore Session State</h4>
+                  <p className="text-[11px] text-ink-muted mt-1">Re-import previous workspace state (.json).</p>
                 </div>
               </button>
             </div>
-            
-            <div className="border-t border-purple-500/10 pt-4 flex items-center justify-between gap-4 flex-col sm:flex-row mt-2 text-left animate-fade-in">
-              <span className="text-[11px] text-slate-400 font-mono">💡 No chapters offline? Try the interactive playground.</span>
-              <button 
+
+            <div className="border-t border-hairline pt-4 flex items-center justify-between gap-4 flex-col sm:flex-row mt-2 text-left animate-fade-in">
+              <span className="text-[11px] text-ink-muted font-mono">💡 No chapters offline? Try the interactive playground.</span>
+              <button
                 onClick={() => {
                   setShowCreateProjectModal(false);
                   loadDemoProject();
                 }}
-                className="px-4 py-2 text-xs font-bold text-white rounded-xl bg-purple-600 hover:bg-purple-500 shadow-lg shadow-purple-900/30 transition-all active:scale-95 cursor-pointer"
+                className="px-4 py-2 text-xs font-bold text-white rounded-xl bg-accent hover:brightness-110 shadow-lg shadow-[0_0_20px_var(--color-accent-soft)] transition-all active:scale-95 cursor-pointer"
               >
                 Load Sample Demo Project
               </button>
@@ -4622,19 +4250,19 @@ export default function App() {
       {/* Stunning Create Series Modal */}
       {showCreateSeriesModal && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/90 backdrop-blur-md animate-fade-in text-left" dir="ltr">
-          <div className="liquid-glass p-8 rounded-3xl max-w-lg w-full mx-4 shadow-[0_20px_50px_rgba(168,85,247,0.3)] border border-purple-500/25 relative text-slate-200 flex flex-col gap-5">
-            <button 
+          <div className="liquid-glass p-8 rounded-3xl max-w-lg w-full mx-4 shadow-[0_20px_50px_var(--color-accent-soft)] border border-accent/25 relative text-ink flex flex-col gap-5">
+            <button
               onClick={() => setShowCreateSeriesModal(false)}
-              className="absolute top-4 left-4 text-slate-400 hover:text-white p-2 rounded-full hover:bg-white/5 transition-all text-sm font-bold"
+              className="absolute top-4 left-4 text-ink-muted hover:text-ink p-2 rounded-full hover:bg-ink/5 transition-all text-sm font-bold"
             >
               ✕
             </button>
-            
-            <div className="flex flex-col gap-1.5 text-left border-b border-purple-500/10 pb-4">
-              <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2 justify-start">
-                <span className="text-purple-400">✧</span> Add سلسلة جديدة لمكتبتك
+
+            <div className="flex flex-col gap-1.5 text-left border-b border-hairline pb-4">
+              <h2 className="text-2xl font-display font-bold text-ink flex items-center gap-2 justify-start">
+                <span className="text-accent">✧</span> Add سلسلة جديدة لمكتبتك
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-ink-muted">
                 أنشئ عملاً أو سلسلة مانجا/مانهوا جديدة لتنظيم وإتباع الVolumeات وفصول الTranslation بداخلها.
               </p>
             </div>
@@ -4642,59 +4270,59 @@ export default function App() {
             <div className="space-y-4 text-left">
               {/* Cover Upload / URL Preview inline */}
               <div className="space-y-1.5 text-start">
-                <label className="text-xs font-semibold text-purple-300 block text-left">Imagesة غلاف السلسلة (PNG أو JPG):</label>
+                <label className="text-xs font-semibold text-accent block text-left">Imagesة غلاف السلسلة (PNG أو JPG):</label>
                 <div className="flex items-center gap-4 flex-row-reverse">
-                  <div className="w-20 h-24 rounded-lg border border-purple-500/10 bg-[#0c061c] overflow-hidden flex items-center justify-center shrink-0">
+                  <div className="w-20 h-24 rounded-lg border border-hairline bg-elevated overflow-hidden flex items-center justify-center shrink-0">
                     {newSeriesCoverUrl ? (
                       <img src={newSeriesCoverUrl} alt="Cover Preview" className="w-full h-full object-cover" />
                     ) : (
-                      <ImageIcon size={20} className="text-purple-500/40" />
+                      <ImageIcon size={20} className="text-accent/40" />
                     )}
                   </div>
                   <div className="flex flex-col gap-2 w-full text-left">
-                    <input 
-                      type="file" 
+                    <input
+                      type="file"
                       accept="image/*"
                       onChange={handleCoverUpload}
                       id="series-cover-file"
                       className="hidden"
                     />
-                    <label 
+                    <label
                       htmlFor="series-cover-file"
-                      className="cursor-pointer bg-purple-950/40 hover:bg-purple-900 border border-purple-500/30 text-purple-300 px-4 py-2 rounded-xl text-xs font-bold text-center transition-all block"
+                      className="cursor-pointer bg-accent-soft hover:bg-accent/30 border border-accent/30 text-accent px-4 py-2 rounded-xl text-xs font-bold text-center transition-all block"
                     >
                       اختر Imagesة من جهازك
                     </label>
-                    <span className="text-[10px] text-slate-500 text-center font-mono block">(الموصى به: نسبة طول إلى عرض 4:3)</span>
+                    <span className="text-[10px] text-ink-faint text-center font-mono block">(الموصى به: نسبة طول إلى عرض 4:3)</span>
                   </div>
                 </div>
               </div>
 
               {/* Series Title */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-purple-300 block text-left">عنوان السلسلة:</label>
-                <input 
+                <label className="text-xs font-semibold text-accent block text-left">عنوان السلسلة:</label>
+                <input
                   type="text"
                   placeholder="مثال: Solo Leveling أو مانهوا سولو ليفنج..."
                   value={newSeriesTitle}
                   onChange={(e) => setNewSeriesTitle(e.target.value)}
-                  className="w-full bg-black/60 border border-purple-500/20 hover:border-purple-500/40 focus:border-purple-400 rounded-xl p-3 text-sm text-white outline-none font-sans text-left"
+                  className="w-full bg-elevated border border-hairline hover:border-accent/40 focus:border-accent rounded-xl p-3 text-sm text-ink outline-none font-sans text-left"
                 />
               </div>
 
               {/* Series Type */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-purple-300 block text-left">النوع (Classification):</label>
+                <label className="text-xs font-semibold text-accent block text-left">النوع (Classification):</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setNewSeriesType('manga')}
-                    className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${newSeriesType === 'manga' ? 'bg-amber-600/35 border-amber-500 text-amber-200' : 'bg-[#080512]/60 border-purple-500/10 text-slate-404'}`}
+                    className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${newSeriesType === 'manga' ? 'bg-warning/35 border-warning text-warning' : 'bg-elevated border-hairline text-ink-faint'}`}
                   >
                     Manga (مانجا صفراء)
                   </button>
                   <button
                     onClick={() => setNewSeriesType('manhwa')}
-                    className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${newSeriesType === 'manhwa' ? 'bg-indigo-600/35 border-indigo-500 text-blue-200' : 'bg-[#080512]/60 border-[#555]/10 text-slate-405'}`}
+                    className={`p-3 rounded-xl border text-xs font-bold transition-all text-center ${newSeriesType === 'manhwa' ? 'bg-accent/35 border-accent text-accent' : 'bg-elevated border-hairline text-ink-faint'}`}
                   >
                     Manhwa (مانهوا ملونة)
                   </button>
@@ -4703,27 +4331,27 @@ export default function App() {
 
               {/* Series Description */}
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-purple-300 block text-left">نبذة أو وصف مختصر:</label>
-                <textarea 
+                <label className="text-xs font-semibold text-accent block text-left">نبذة أو وصف مختصر:</label>
+                <textarea
                   rows={3}
                   placeholder="اكتب وصفاً مختصراً لقصة المانجا أو Details المترجمين..."
                   value={newSeriesDesc}
                   onChange={(e) => setNewSeriesDesc(e.target.value)}
-                  className="w-full bg-black/60 border border-purple-500/20 hover:border-purple-500/40 focus:border-purple-400 rounded-xl p-3 text-sm text-white outline-none resize-none font-sans text-left"
+                  className="w-full bg-elevated border border-hairline hover:border-accent/40 focus:border-accent rounded-xl p-3 text-sm text-ink outline-none resize-none font-sans text-left"
                 />
               </div>
             </div>
 
-            <div className="border-t border-purple-500/10 pt-4 flex justify-end gap-3 mt-2">
+            <div className="border-t border-hairline pt-4 flex justify-end gap-3 mt-2">
               <button
                 onClick={() => setShowCreateSeriesModal(false)}
-                className="bg-black/60 hover:bg-black border border-purple-500/15 hover:border-purple-500/30 text-slate-350 font-bold py-2.5 px-6 rounded-xl text-xs transition-all cursor-pointer"
+                className="bg-elevated hover:bg-ink/10 border border-hairline hover:border-accent/30 text-ink-muted font-bold py-2.5 px-6 rounded-xl text-xs transition-all cursor-pointer"
               >
                 Cancel (Cancel)
               </button>
               <button
                 onClick={handleCreateSeries}
-                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-2.5 px-7 rounded-xl text-xs transition-all shadow-lg shadow-purple-950/45 cursor-pointer"
+                className="bg-accent hover:brightness-110 text-white font-bold py-2.5 px-7 rounded-xl text-xs transition-all shadow-lg shadow-[0_0_20px_var(--color-accent-soft)] cursor-pointer"
               >
                 ✓ إنشاء وAdd السلسلة
               </button>
@@ -4735,31 +4363,31 @@ export default function App() {
       {/* Stunning External AI Prompt & Paste Modal */}
       {showExternalAIModal && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/95 backdrop-blur-md animate-fade-in text-left" dir="ltr">
-          <div className="liquid-glass p-8 rounded-3xl max-w-2xl w-full mx-4 shadow-[0_20px_50px_rgba(168,85,247,0.35)] border border-purple-500/25 relative text-slate-200 flex flex-col gap-6 max-h-[90vh] overflow-y-auto">
-            <button 
+          <div className="liquid-glass p-8 rounded-3xl max-w-2xl w-full mx-4 shadow-[0_20px_50px_var(--color-accent-soft)] border border-accent/25 relative text-ink flex flex-col gap-6 max-h-[90vh] overflow-y-auto">
+            <button
               onClick={() => setShowExternalAIModal(false)}
-              className="absolute top-4 left-4 text-slate-400 hover:text-white p-2 rounded-full hover:bg-white/5 transition-all text-sm font-bold"
+              className="absolute top-4 left-4 text-ink-muted hover:text-ink p-2 rounded-full hover:bg-ink/5 transition-all text-sm font-bold"
             >
               ✕
             </button>
-            
-            <div className="flex flex-col gap-1.5 text-left border-b border-purple-500/10 pb-4">
-              <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2 justify-start">
-                <span className="text-purple-400">✧</span> معالج الTranslation المساعد عبر الذكاء الاصطناعي الخارجي
+
+            <div className="flex flex-col gap-1.5 text-left border-b border-hairline pb-4">
+              <h2 className="text-2xl font-display font-bold text-ink flex items-center gap-2 justify-start">
+                <span className="text-accent">✧</span> معالج الTranslation المساعد عبر الذكاء الاصطناعي الخارجي
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-ink-muted">
                 إذا لم تكن تمتلك مفاتيح API خاصة داخل التطبيق، يمكنك تزويد أي نموذج ذكاء اصطناعي خارجي (مثل Claude 3.5 Sonnet أو Gemini 1.5 Pro) بImagesة الصفحة والطلب التفصيلي أدناه ليعود لك بملف الTranslation وتطبيقه بلحظة واحدة!
               </p>
             </div>
 
             <div className="space-y-4">
               {/* Step 1 */}
-              <div className="space-y-2 border border-purple-500/10 p-4 rounded-2xl bg-purple-950/5">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center">١</span>
+              <div className="space-y-2 border border-hairline p-4 rounded-2xl bg-accent-soft">
+                <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-accent text-white text-[10px] flex items-center justify-center">١</span>
                   الخطوة الأولى: نسخ باقة الطلب (AI Request Cocktail)
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-ink-muted">
                   انسخ المطالبة التفصيلية الجاهزة وأرسلها للـ AI الخارجي مع Imagesة الصفحة المفتوحة حالياً للCleaning بالذكاء الاصطناعي:
                 </p>
                 <div className="relative">
@@ -4778,7 +4406,7 @@ Please locate speech balloons and output exactly in this JSON format ONLY (No ot
     "translatedText": "الTranslation العربية البديلة والمحاذاة للوسط"
   }
 ]`}
-                    className="w-full h-28 bg-black/60 border border-[#444] rounded-xl p-3 text-xs text-slate-350 font-mono resize-none text-left"
+                    className="w-full h-28 bg-elevated border border-hairline rounded-xl p-3 text-xs text-ink-muted font-mono resize-none text-left"
                     dir="ltr"
                   />
                   <button
@@ -4796,17 +4424,15 @@ Please locate speech balloons and output exactly in this JSON format ONLY (No ot
     "translatedText": "الTranslation العربية البديلة والمحاذاة للوسط"
   }
 ]`);
-                      Swal.fire({
+                      swal({
                         icon: 'success',
                         title: 'تم نسخ برومبت الكوكتيل!',
                         text: 'يمكنك الآن لصقه وتزويد كلاود أو جيمناي به بالخارج.',
                         timer: 1500,
-                        showConfirmButton: false,
-                        background: '#090615',
-                        color: '#ffffff'
+                        showConfirmButton: false
                       });
                     }}
-                    className="absolute bottom-3 left-3 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg transition-all"
+                    className="absolute bottom-3 left-3 bg-accent hover:brightness-110 text-white text-[10px] font-bold py-1.5 px-3 rounded-lg transition-all"
                   >
                     نسخ الطلب (Copy)
                   </button>
@@ -4814,34 +4440,34 @@ Please locate speech balloons and output exactly in this JSON format ONLY (No ot
               </div>
 
               {/* Step 2 */}
-              <div className="space-y-2 border border-purple-500/10 p-4 rounded-2xl bg-purple-950/5">
-                <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-purple-600 text-white text-[10px] flex items-center justify-center">٢</span>
+              <div className="space-y-2 border border-hairline p-4 rounded-2xl bg-accent-soft">
+                <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+                  <span className="w-5 h-5 rounded-full bg-accent text-white text-[10px] flex items-center justify-center">٢</span>
                   الخطوة الثانية: لصق الاستجابة المسترجعة (Pasted Response JSON)
                 </h3>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-ink-muted">
                   الصق الاستجابة التي صاغها لك الذكاء الاصطناعي الخارجي وسنقوم بتوزيع الTranslation على إحداثيات الصفحة فوراً:
                 </p>
                 <textarea
                   placeholder="[ ... مصفوفة الـ JSON المسترجعة ... ]"
                   value={externalAIPasteData}
                   onChange={(e) => setExternalAIPasteData(e.target.value)}
-                  className="w-full h-32 bg-black border border-purple-500/20 focus:border-purple-400 rounded-xl p-3 text-xs text-slate-205 outline-none resize-none font-mono text-left"
+                  className="w-full h-32 bg-elevated border border-hairline focus:border-accent rounded-xl p-3 text-xs text-ink outline-none resize-none font-mono text-left"
                   dir="ltr"
                 />
               </div>
             </div>
 
-            <div className="border-t border-purple-500/10 pt-4 flex justify-end gap-3 mt-2">
+            <div className="border-t border-hairline pt-4 flex justify-end gap-3 mt-2">
               <button
                 onClick={() => setShowExternalAIModal(false)}
-                className="bg-black/60 hover:bg-black border border-purple-500/15 hover:border-purple-500/30 text-slate-350 font-bold py-2.5 px-6 rounded-xl text-xs transition-all cursor-pointer"
+                className="bg-elevated hover:bg-ink/10 border border-hairline hover:border-accent/30 text-ink-muted font-bold py-2.5 px-6 rounded-xl text-xs transition-all cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleApplyExternalAICocktail}
-                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold py-2.5 px-7 rounded-xl text-xs transition-all shadow-lg shadow-purple-950/45 cursor-pointer"
+                className="bg-accent hover:brightness-110 text-white font-bold py-2.5 px-7 rounded-xl text-xs transition-all shadow-lg shadow-[0_0_20px_var(--color-accent-soft)] cursor-pointer"
               >
                 ✓ تطبيق الTranslation الذكي على الصفحة
               </button>

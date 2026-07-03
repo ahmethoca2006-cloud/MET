@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Bell, User, Search } from 'lucide-react';
+import { Clock, Bell, User, Search, Sun, Moon } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
+import { IconButton } from './ui';
 
 export function TopBar() {
   const [time, setTime] = useState(new Date());
   const [searchOpen, setSearchOpen] = useState(false);
   const [profile, setProfile] = useState<{name: string, avatar: string}>({ name: '', avatar: '' });
+  const { resolvedTheme, toggleTheme } = useTheme();
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
@@ -31,56 +34,64 @@ export function TopBar() {
   }, []);
 
   return (
-    <div className="relative w-full h-14 sm:h-16 bg-black/50 backdrop-blur-xl border-b border-purple-500/20 px-2.5 sm:px-6 flex items-center justify-between gap-2 shrink-0 z-40 sticky top-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+    <div className="relative w-full h-14 sm:h-16 bg-surface/70 backdrop-blur-xl border-b border-hairline px-2.5 sm:px-6 flex items-center justify-between gap-2 shrink-0 z-40 sticky top-0">
       {/* Search & Utility */}
       <div className="flex items-center gap-4 min-w-0">
         {/* Compact icon-only trigger on narrow screens */}
-        <button
+        <IconButton
           onClick={() => setSearchOpen(v => !v)}
-          className="sm:hidden w-9 h-9 shrink-0 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 text-slate-300"
+          className="sm:hidden"
           aria-label="Search"
         >
           <Search size={16} />
-        </button>
+        </IconButton>
         <div className={`relative group ${searchOpen ? 'absolute left-2.5 right-2.5 top-1/2 -translate-y-1/2 z-10' : 'hidden'} sm:static sm:block sm:translate-y-0`}>
           <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-            <Search size={16} className="text-slate-500 group-focus-within:text-purple-400 transition-colors" />
+            <Search size={16} className="text-ink-faint group-focus-within:text-accent transition-colors" />
           </div>
           <input
             type="text"
             placeholder="Search workspace..."
             autoFocus={searchOpen}
             onBlur={() => setSearchOpen(false)}
-            className="w-full sm:w-64 bg-black/90 sm:bg-white/5 border border-white/10 hover:border-purple-500/30 focus:border-purple-500/50 rounded-xl pl-10 pr-4 py-2 text-sm text-white outline-none transition-all placeholder:text-slate-600 focus:bg-purple-950/20 focus:shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+            className="w-full sm:w-64 bg-elevated sm:bg-ink/5 border border-hairline hover:border-accent/30 focus:border-accent rounded-xl pl-10 pr-4 py-2 text-sm text-ink outline-none transition-all placeholder:text-ink-faint focus:bg-accent-soft focus:shadow-[0_0_15px_var(--color-accent-soft)]"
           />
         </div>
       </div>
 
-      {/* Right Side: Profile & Time */}
+      {/* Right Side: Theme toggle, Profile & Time */}
       <div className={`items-center gap-2 sm:gap-6 ${searchOpen ? 'hidden sm:flex' : 'flex'}`}>
+        {/* Theme toggle */}
+        <IconButton
+          onClick={toggleTheme}
+          aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {resolvedTheme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+        </IconButton>
+
         {/* Clock */}
-        <div className="hidden xs:flex items-center gap-2 text-slate-300 bg-white/5 border border-white/10 px-2.5 sm:px-4 py-2 rounded-xl">
-          <Clock size={16} className="text-purple-400" />
+        <div className="hidden xs:flex items-center gap-2 text-ink-muted bg-ink/5 border border-hairline px-2.5 sm:px-4 py-2 rounded-xl">
+          <Clock size={16} className="text-accent" />
           <span className="hidden sm:inline font-mono text-sm tracking-widest">{time.toLocaleTimeString('en-US', { hour12: true, hour: '2-digit', minute:'2-digit' })}</span>
         </div>
 
         {/* Notifications */}
-        <button className="relative w-9 h-9 sm:w-10 sm:h-10 shrink-0 flex items-center justify-center rounded-xl bg-white/5 border border-white/10 hover:bg-purple-900/30 hover:border-purple-500/30 text-slate-300 hover:text-purple-300 transition-all">
+        <IconButton aria-label="Notifications" className="relative hover:bg-accent-soft hover:border-accent/30 hover:text-accent">
           <Bell size={18} />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-[#120D1D]"></span>
-        </button>
+          <span className="absolute top-2 right-2 w-2 h-2 bg-danger rounded-full border-2 border-elevated"></span>
+        </IconButton>
 
         {/* Profile */}
-        <div className="flex items-center gap-3 pl-1 sm:pr-2 sm:border-r border-white/10">
+        <div className="flex items-center gap-3 pl-1 sm:pr-2 sm:border-r border-hairline">
           <div className="hidden md:flex flex-col text-right items-start">
-            <span className="text-sm font-bold text-white leading-none mb-1">{profile.name || "New User"}</span>
-            <span className="text-[10px] text-purple-400 font-mono leading-none">Manga Team</span>
+            <span className="text-sm font-bold text-ink leading-none mb-1">{profile.name || "New User"}</span>
+            <span className="text-[10px] text-accent font-mono leading-none">Manga Team</span>
           </div>
-          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-full border-2 border-purple-500/30 overflow-hidden bg-purple-950/50 flex items-center justify-center p-0.5 sm:ml-2">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-full border-2 border-accent/30 overflow-hidden bg-accent-soft flex items-center justify-center p-0.5 sm:ml-2">
             {profile.avatar ? (
                <img src={profile.avatar} alt="Profile" className="w-full h-full object-cover rounded-full" />
             ) : (
-               <User size={20} className="text-purple-400" />
+               <User size={20} className="text-accent" />
             )}
           </div>
         </div>

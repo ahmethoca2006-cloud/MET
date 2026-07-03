@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useLayoutEffect, useRef, useState, useMemo } from 'react';
 import Konva from 'konva';
 import { Stage, Layer, Image as KonvaImage, Rect, Text, Group, Transformer, Line } from 'react-konva';
 import useImage from 'use-image';
 import { ProcessedImage, Region, PaintStroke } from '../types';
 import { calculateAutoFitFontSize } from '../utils/textUtils';
 import { Sparkles, Plus } from 'lucide-react';
+import { CANVAS_COLORS } from '../lib/canvasColors';
 
 interface ImageEditorProps {
   image: ProcessedImage;
@@ -122,7 +123,7 @@ export function ImageEditor({
   const [cropRect, setCropRect] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
   const [isDrawingCrop, setIsDrawingCrop] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (containerRef.current) {
       const resize = () => {
         if (containerRef.current) {
@@ -132,14 +133,14 @@ export function ImageEditor({
           });
         }
       };
-      
+
       resize();
       window.addEventListener('resize', resize);
       return () => window.removeEventListener('resize', resize);
     }
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (selectedRegionId && shapeRefs.current[selectedRegionId]) {
       trRef.current?.nodes([shapeRefs.current[selectedRegionId]]);
       trRef.current?.getLayer()?.batchDraw();
@@ -372,7 +373,7 @@ export function ImageEditor({
   return (
     <div 
       ref={containerRef} 
-      className={`w-full h-full bg-slate-900 rounded-lg overflow-auto relative ${activeTool !== 'select' ? 'cursor-crosshair' : 'cursor-default'}`}
+      className={`w-full h-full bg-elevated rounded-lg overflow-auto relative ${activeTool !== 'select' ? 'cursor-crosshair' : 'cursor-default'}`}
     >
       <div 
         style={{ 
@@ -384,7 +385,7 @@ export function ImageEditor({
         {isGenerating && (
           <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm rounded-lg" style={{ width: stageWidth, height: stageHeight, left: '50%', top: '50%', transform: 'translate(-50%, -50%)' }}>
             <div className="flex flex-col items-center gap-3 text-white">
-              <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-8 h-8 border-4 border-accent border-t-transparent rounded-full animate-spin"></div>
               <p className="font-medium text-sm">AI Inpainting in progress...</p>
             </div>
           </div>
@@ -450,8 +451,8 @@ export function ImageEditor({
                         key={region.id}
                         points={contour}
                         closed={true}
-                        fill={isSelected ? 'rgba(59, 130, 246, 0.4)' : region.bgColor}
-                        stroke={isSelected ? '#3b82f6' : region.bgColor}
+                        fill={isSelected ? CANVAS_COLORS.selectionFill : region.bgColor}
+                        stroke={isSelected ? CANVAS_COLORS.selectionStroke : region.bgColor}
                         strokeWidth={isSelected ? 3.0 : 1.5}
                         lineJoin="round"
                         lineCap="round"
@@ -562,8 +563,8 @@ export function ImageEditor({
                         <Line
                           points={preview.contour}
                           closed={true}
-                          fill="rgba(59, 130, 246, 0.38)"
-                          stroke="#2563eb"
+                          fill={CANVAS_COLORS.previewFill}
+                          stroke={CANVAS_COLORS.previewStroke}
                           strokeWidth={2.5}
                           lineJoin="round"
                           lineCap="round"
@@ -577,7 +578,7 @@ export function ImageEditor({
                         y={preview.safeTextBounds.y}
                         width={preview.safeTextBounds.width}
                         height={preview.safeTextBounds.height}
-                        stroke="#10b981"
+                        stroke={CANVAS_COLORS.safeBoundsStroke}
                         strokeWidth={1.5}
                         dash={[3, 3]}
                         opacity={0.85}
@@ -589,7 +590,7 @@ export function ImageEditor({
                         y={labelY}
                         width={82}
                         height={16}
-                        fill="#2563eb"
+                        fill={CANVAS_COLORS.previewLabelBg}
                         cornerRadius={3}
                         shadowBlur={2}
                         shadowColor="black"
@@ -602,7 +603,7 @@ export function ImageEditor({
                         fontFamily="Cairo"
                         fontSize={8.5}
                         fontWeight="bold"
-                        fill="#ffffff"
+                        fill={CANVAS_COLORS.previewLabelText}
                       />
                     </Group>
                   );
@@ -628,10 +629,10 @@ export function ImageEditor({
                   y={cropRect.h < 0 ? cropRect.y + cropRect.h : cropRect.y}
                   width={Math.abs(cropRect.w)}
                   height={Math.abs(cropRect.h)}
-                  stroke="#3b82f6"
+                  stroke={CANVAS_COLORS.cropSelectionStroke}
                   strokeWidth={2}
                   dash={[4, 4]}
-                  fill="rgba(59, 130, 246, 0.15)"
+                  fill={CANVAS_COLORS.cropSelectionFill}
                 />
               </Layer>
             )}
@@ -657,7 +658,7 @@ export function ImageEditor({
                   transform: 'translateX(-50%)',
                   pointerEvents: 'auto'
                 }}
-                className="flex items-center gap-2 bg-[#14141d]/95 backdrop-blur-md p-2 border border-slate-700/60 rounded-xl shadow-2xl z-[90] animate-fade-in whitespace-nowrap"
+                className="flex items-center gap-2 bg-elevated/95 backdrop-blur-md p-2 border border-hairline rounded-xl shadow-2xl z-[90] animate-fade-in whitespace-nowrap"
               >
                 <button
                   onClick={() => {
@@ -666,11 +667,11 @@ export function ImageEditor({
                     }
                     setCropRect(null);
                   }}
-                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-1.5 rounded font-bold transition-all active:scale-95 shadow-md cursor-pointer"
+                  className="flex items-center gap-1.5 bg-success hover:opacity-90 text-white text-xs px-3 py-1.5 rounded font-bold transition-all active:scale-95 shadow-md cursor-pointer"
                 >
-                  <Plus size={12} className="text-emerald-200" /> إضافة لطابور التجميع (Add to Batch Queue)
+                  <Plus size={12} /> إضافة لطابور التجميع (Add to Batch Queue)
                 </button>
-                <div className="w-px bg-slate-800 h-5"></div>
+                <div className="w-px bg-hairline h-5"></div>
                 <button
                   onClick={() => {
                     if (onProcessCropSection) {
@@ -678,14 +679,14 @@ export function ImageEditor({
                     }
                     setCropRect(null);
                   }}
-                  className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 py-1.5 rounded font-bold transition-all active:scale-95 shadow-md cursor-pointer"
+                  className="flex items-center gap-1.5 bg-accent hover:opacity-90 text-white text-xs px-3 py-1.5 rounded font-bold transition-all active:scale-95 shadow-md cursor-pointer"
                 >
-                  <Sparkles size={12} className="text-indigo-200 animate-pulse" /> ترجمة فورية (Direct Translate)
+                  <Sparkles size={12} className="animate-pulse" /> ترجمة فورية (Direct Translate)
                 </button>
-                <div className="w-px bg-slate-800 h-5"></div>
+                <div className="w-px bg-hairline h-5"></div>
                 <button
                   onClick={() => setCropRect(null)}
-                  className="text-slate-400 hover:text-white text-xs px-2.5 py-1.5 rounded transition-all font-medium cursor-pointer"
+                  className="text-ink-muted hover:text-ink text-xs px-2.5 py-1.5 rounded transition-all font-medium cursor-pointer"
                 >
                   إلغاء (Cancel)
                 </button>

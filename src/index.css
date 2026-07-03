@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Space Grotesk", sans-serif;
@@ -8,41 +10,98 @@
   --breakpoint-xs: 26rem;
 }
 
+/* iOS System Blue theme tokens. :root = light, .dark = dark. */
+:root {
+  color-scheme: light;
+  --color-bg-base: #F2F2F7;
+  --color-bg-elevated: #FFFFFF;
+  --color-surface: #FFFFFF;
+  --color-text-primary: #1C1C1E;
+  --color-text-secondary: rgba(60, 60, 67, 0.6);
+  --color-text-tertiary: rgba(60, 60, 67, 0.3);
+  --color-accent: #007AFF;
+  --color-accent-soft: rgba(0, 122, 255, 0.12);
+  --color-border: rgba(60, 60, 67, 0.29);
+  --color-danger: #FF3B30;
+  --color-success: #34C759;
+  --color-warning: #FF9500;
+}
+
+.dark {
+  color-scheme: dark;
+  --color-bg-base: #000000;
+  --color-bg-elevated: #1C1C1E;
+  --color-surface: #1C1C1E;
+  --color-text-primary: #F2F2F2;
+  --color-text-secondary: rgba(235, 235, 245, 0.6);
+  --color-text-tertiary: rgba(235, 235, 245, 0.3);
+  --color-accent: #0A84FF;
+  --color-accent-soft: rgba(10, 132, 255, 0.16);
+  --color-border: rgba(84, 84, 88, 0.65);
+  --color-danger: #FF453A;
+  --color-success: #30D158;
+  --color-warning: #FF9F0A;
+}
+
+@theme inline {
+  --color-base: var(--color-bg-base);
+  --color-elevated: var(--color-bg-elevated);
+  --color-surface: var(--color-surface);
+  --color-ink: var(--color-text-primary);
+  --color-ink-muted: var(--color-text-secondary);
+  --color-ink-faint: var(--color-text-tertiary);
+  --color-accent: var(--color-accent);
+  --color-accent-soft: var(--color-accent-soft);
+  --color-hairline: var(--color-border);
+  --color-danger: var(--color-danger);
+  --color-success: var(--color-success);
+  --color-warning: var(--color-warning);
+}
+
 @layer utilities {
+  /* Glassmorphism materials, tinted from --color-surface so they read as
+     white-based frosted glass in light mode and black-based in dark mode
+     from the same rule. */
   .liquid-glass {
-    background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01) 45%, rgba(0,0,0,0.12)), rgba(6, 4, 12, 0.72);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, white 8%, transparent), color-mix(in srgb, white 2%, transparent) 45%, color-mix(in srgb, black 8%, transparent)),
+      color-mix(in srgb, var(--color-surface) 72%, transparent);
     backdrop-filter: blur(28px) saturate(180%);
     -webkit-backdrop-filter: blur(28px) saturate(180%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255,255,255,0.09), inset 0 0 0 1px rgba(168,85,247,0.06);
+    border: 1px solid var(--color-hairline);
+    box-shadow: 0 4px 30px color-mix(in srgb, black 20%, transparent), inset 0 1px 0 color-mix(in srgb, white 10%, transparent), inset 0 0 0 1px var(--color-accent-soft);
   }
   .liquid-glass-heavy {
-    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015) 45%, rgba(0,0,0,0.15)), rgba(6, 4, 12, 0.87);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, white 9%, transparent), color-mix(in srgb, white 2%, transparent) 45%, color-mix(in srgb, black 10%, transparent)),
+      color-mix(in srgb, var(--color-surface) 87%, transparent);
     backdrop-filter: blur(40px) saturate(200%);
     -webkit-backdrop-filter: blur(40px) saturate(200%);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255,255,255,0.1), inset 0 0 0 1px rgba(168,85,247,0.1);
+    border: 1px solid var(--color-hairline);
+    box-shadow: 0 8px 32px color-mix(in srgb, black 30%, transparent), inset 0 1px 0 color-mix(in srgb, white 10%, transparent), inset 0 0 0 1px var(--color-accent-soft);
   }
   /* iOS-style "Liquid Glass" tab bar material: brighter specular top edge and
      a soft traveling sheen, tuned for a floating pill nav rather than a modal. */
   .liquid-glass-nav {
     position: relative;
-    background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.02) 40%, rgba(0,0,0,0.25)), rgba(8, 6, 16, 0.6);
+    background:
+      linear-gradient(180deg, color-mix(in srgb, white 12%, transparent), color-mix(in srgb, white 3%, transparent) 40%, color-mix(in srgb, black 15%, transparent)),
+      color-mix(in srgb, var(--color-surface) 65%, transparent);
     backdrop-filter: blur(30px) saturate(190%);
     -webkit-backdrop-filter: blur(30px) saturate(190%);
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--color-hairline);
     box-shadow:
-      0 14px 45px -8px rgba(147, 51, 234, 0.45),
-      0 2px 10px rgba(0, 0, 0, 0.5),
-      inset 0 1px 0 rgba(255, 255, 255, 0.16),
-      inset 0 0 0 1px rgba(168, 85, 247, 0.08);
+      0 14px 45px -8px color-mix(in srgb, var(--color-accent) 45%, transparent),
+      0 2px 10px color-mix(in srgb, black 20%, transparent),
+      inset 0 1px 0 color-mix(in srgb, white 16%, transparent),
+      inset 0 0 0 1px var(--color-accent-soft);
   }
   .liquid-glass-nav::before {
     content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    background: linear-gradient(115deg, transparent 15%, rgba(255,255,255,0.14) 32%, transparent 48%);
+    background: linear-gradient(115deg, transparent 15%, color-mix(in srgb, white 14%, transparent) 32%, transparent 48%);
     pointer-events: none;
     mix-blend-mode: overlay;
   }
@@ -72,6 +131,16 @@
 .dynamic-bg {
   background-size: 200% 200%;
   animation: dynamicGradient 15s ease infinite;
+}
+/* App shell background: a faint accent-tinted gradient derived from the
+   current theme's base color, so it stays subtle in both light and dark. */
+.app-shell-bg {
+  background-image: linear-gradient(
+    135deg,
+    var(--color-bg-base),
+    color-mix(in srgb, var(--color-bg-base) 85%, var(--color-accent) 15%) 50%,
+    var(--color-bg-base)
+  );
 }
 
 /* Blur Up Loading */
@@ -120,12 +189,12 @@
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(0,0,0,0.3);
+  background: color-mix(in srgb, var(--color-ink) 8%, transparent);
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(168, 85, 247, 0.3);
+  background: color-mix(in srgb, var(--color-accent) 40%, transparent);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(168, 85, 247, 0.5);
+  background: color-mix(in srgb, var(--color-accent) 60%, transparent);
 }

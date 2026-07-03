@@ -5,12 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#000000" />
     <title>MangaAI Translator</title>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('met_theme_mode');
+          var isDark = stored === 'dark' || (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.classList.toggle('dark', isDark);
+        } catch (e) {}
+      })();
+    </script>
     <link rel="icon" type="image/jpeg" href="/favicon.jpg" />
     <link rel="apple-touch-icon" href="/favicon.jpg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@200..1000&family=Marhey:wght@300..700&family=Tajawal:wght@200;300;400;500;700;800;900&family=Almarai:wght@300;400;700;800&family=El+Messiri:wght@400..700&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Changa:wght@200..800&family=Harmattan:wght@400;700&family=Katibeh&family=Lalezar&family=Lemonada:wght@300..700&family=Mada:wght@200..900&family=Markazi+Text:wght@400..700&family=Reem+Kufi:wght@400..700&family=Rakkas&display=swap" rel="stylesheet">
-    <style>html,body{background:#000;}</style>
+    <style>html,body{background:#F2F2F7;} html.dark,body.dark{background:#000;}</style>
   </head>
   <body>
     <!-- Hidden container to eagerly trigger full download of Google Fonts immediately upon loading -->
