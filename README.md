@@ -51,7 +51,7 @@ MET is a passion project, and it wouldn't be where it is without the people who 
 
 **Special thanks to:**
 
-- 🧡 **Othman**
+- 🧡 **Slash**
 - 🧡 **Abdo**
 - 🧡 **Stark**
 
