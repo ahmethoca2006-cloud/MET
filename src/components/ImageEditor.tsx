@@ -444,7 +444,7 @@ export function ImageEditor({
                   if (region.bgColor === 'transparent') return null;
 
                   const contour = (region as any).bubbleContour;
-                  if (region.type === 'bubble' && contour && contour.length > 0) {
+                  if ((region.type === 'bubble' || region.type === 'sfx') && contour && contour.length > 0) {
                     const isSelected = region.id === selectedRegionId;
                     return (
                       <Line

@@ -86,7 +86,7 @@ async function renderImageToDataUrl(img: ProcessedImage, format: 'jpeg' | 'png' 
   img.regions.forEach(region => {
     if (region.bgColor !== 'transparent') {
       const contour = (region as any).bubbleContour;
-      if (region.type === 'bubble' && contour && contour.length > 0) {
+      if ((region.type === 'bubble' || region.type === 'sfx') && contour && contour.length > 0) {
         layer2.add(new Konva.Line({
           points: contour,
           closed: true,

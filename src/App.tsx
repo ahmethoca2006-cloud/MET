@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, Suspense } from 'react
 import { Upload, Download, Play, Save, Loader2, Image as ImageIcon, Type as TypeIcon, MousePointer2, Brush, Eraser, PenTool, ZoomIn, ZoomOut, Maximize, Palette, Plus, Pipette, Trash2, ChevronUp, ChevronDown, ImagePlus, Key, Sparkles, Scissors, Undo, Wand2, Settings, LayoutGrid } from 'lucide-react';
 import { extractImagesFromZip, downloadProcessedZip, downloadPdf, downloadSingleImage } from './lib/zip';
 import { processMangaPages, generateInpaint, RawRegion } from './lib/gemini';
-import { floodFillBubble, floodFillBubbleDetailed } from './lib/bubbleDetect';
+import { floodFillBubble, floodFillBubbleDetailed, detectSfxDetailed } from './lib/bubbleDetect';
 import { createTranslationDoc, parseTranslationDoc } from './lib/translationDoc';
 import { ProcessedImage, Region, PaintStroke, CropSelection, MangaSeries, Volume, Chapter } from './types';
 import { get, set } from 'idb-keyval';
@@ -1001,15 +1001,14 @@ export default function App() {
   };
 
   const handleSmartBubbleFill = async (imgId: string, region: Region) => {
-    if (region.type === 'sfx') {
-      alert("خوارزمية التعرف الذكي على الفقاعات مخصصة للفقاعات فقط وتتجاهل المؤثرات الصوتية (SFX).");
-      return;
-    }
     const img = images.find(i => i.id === imgId);
     if (!img) return;
 
-    // Use the whitened/inpainted image dataUrl strictly so text strokes don't block flood fill
-    const imgSrc = img.dataUrl;
+    // Bubbles are traced on the whitened/inpainted layer so leftover text strokes
+    // don't block the flood fill; SFX tracing needs the original lettering intact.
+    const imgSrc = region.type === 'sfx'
+      ? (img.originalDataUrl || img.dataUrl)
+      : img.dataUrl;
     const imageObj = new Image();
     imageObj.src = imgSrc;
     await new Promise(resolve => imageObj.onload = resolve);
@@ -1019,17 +1018,19 @@ export default function App() {
     canvas.height = imageObj.height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    
+
     ctx.drawImage(imageObj, 0, 0);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    
+
     const startX = Math.floor(region.x + region.width / 2);
     const startY = Math.floor(region.y + region.height / 2);
 
     const avoidPoints = img.regions
       .filter(r => r.type === 'bubble' && r.id !== region.id)
       .map(r => ({ x: r.x + r.width / 2, y: r.y + r.height / 2 }));
-    const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
+    const result = region.type === 'sfx'
+      ? detectSfxDetailed(imageData, startX, startY, region.width, region.height)
+      : floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
 
     if (result) {
       saveHistory(img.id);
@@ -1039,7 +1040,9 @@ export default function App() {
         textAlign: 'center'
       });
     } else {
-      alert("تعذر التعرف التلقائي على حدود الفقاعة.");
+      alert(region.type === 'sfx'
+        ? "تعذر التعرف على حدود المؤثر الصوتي (SFX). ضع مركز الصندوق فوق حروف المؤثر مباشرة ثم أعد المحاولة."
+        : "تعذر التعرف التلقائي على حدود الفقاعة.");
     }
   };
 
@@ -1455,7 +1458,24 @@ export default function App() {
     
     ctx.drawImage(imageObj, 0, 0);
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    
+
+    // SFX lettering is erased on the whitened layer, so SFX regions are traced
+    // on the original artwork instead.
+    let sfxImageData: ImageData | null = null;
+    if (img.regions.some(r => r.type === 'sfx')) {
+      const origObj = new Image();
+      origObj.src = img.originalDataUrl || img.dataUrl;
+      await new Promise(resolve => { origObj.onload = resolve; origObj.onerror = resolve; });
+      const origCanvas = document.createElement('canvas');
+      origCanvas.width = origObj.width;
+      origCanvas.height = origObj.height;
+      const origCtx = origCanvas.getContext('2d');
+      if (origCtx) {
+        origCtx.drawImage(origObj, 0, 0);
+        sfxImageData = origCtx.getImageData(0, 0, origCanvas.width, origCanvas.height);
+      }
+    }
+
     const newRegions = [...img.regions];
     let changed = false;
 
@@ -1467,28 +1487,31 @@ export default function App() {
 
     for (let i = 0; i < newRegions.length; i++) {
        const region = newRegions[i];
-       if (region.type === 'bubble') { // ignores SFX completely
-         const startX = Math.floor(region.x + region.width / 2);
-         const startY = Math.floor(region.y + region.height / 2);
+       const startX = Math.floor(region.x + region.width / 2);
+       const startY = Math.floor(region.y + region.height / 2);
+       let result: ReturnType<typeof floodFillBubbleDetailed> = null;
+       if (region.type === 'bubble') {
          const avoidPoints = allBubbleCenters.filter(p => p.id !== region.id);
-         const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
-         if (result) {
-           newRegions[i] = { 
-             ...region, 
-             ...result.safeTextBounds,
-             bubbleContour: result.contour,
-             textAlign: 'center'
-           };
-           changed = true;
-         }
+         result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
+       } else if (region.type === 'sfx' && sfxImageData) {
+         result = detectSfxDetailed(sfxImageData, startX, startY, region.width, region.height);
+       }
+       if (result) {
+         newRegions[i] = {
+           ...region,
+           ...result.safeTextBounds,
+           bubbleContour: result.contour,
+           textAlign: 'center'
+         };
+         changed = true;
        }
     }
-    
+
     if (changed) {
       saveHistory(img.id);
       updateImage(img.id, { regions: newRegions });
     } else {
-      alert("No text bubbles were detected for dynamic improvement on this page.");
+      alert("No text bubbles or SFX regions were detected for dynamic improvement on this page.");
     }
   };
 
@@ -1512,7 +1535,24 @@ export default function App() {
       
       ctx.drawImage(imageObj, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      
+
+      // SFX lettering is erased on the whitened layer, so SFX regions preview
+      // against the original artwork instead.
+      let sfxImageData: ImageData | null = null;
+      if (img.regions.some(r => r.type === 'sfx')) {
+        const origObj = new Image();
+        origObj.src = img.originalDataUrl || img.dataUrl;
+        await new Promise(resolve => { origObj.onload = resolve; origObj.onerror = resolve; });
+        const origCanvas = document.createElement('canvas');
+        origCanvas.width = origObj.width;
+        origCanvas.height = origObj.height;
+        const origCtx = origCanvas.getContext('2d');
+        if (origCtx) {
+          origCtx.drawImage(origObj, 0, 0);
+          sfxImageData = origCtx.getImageData(0, 0, origCanvas.width, origCanvas.height);
+        }
+      }
+
       const previews: any[] = [];
 
       // Fixed snapshot of every bubble's original center, taken before any of
@@ -1522,18 +1562,21 @@ export default function App() {
         .map(r => ({ id: r.id, x: r.x + r.width / 2, y: r.y + r.height / 2 }));
 
       for (const region of img.regions) {
-        if (region.type === 'bubble') { // ignore SFX regions
-          const startX = Math.floor(region.x + region.width / 2);
-          const startY = Math.floor(region.y + region.height / 2);
+        const startX = Math.floor(region.x + region.width / 2);
+        const startY = Math.floor(region.y + region.height / 2);
+        let result: ReturnType<typeof floodFillBubbleDetailed> = null;
+        if (region.type === 'bubble') {
           const avoidPoints = allBubbleCenters.filter(p => p.id !== region.id);
-          const result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
-          if (result) {
-            previews.push({
-              regionId: region.id,
-              contour: result.contour, // exact fluid polygon outline points
-              safeTextBounds: result.safeTextBounds
-            });
-          }
+          result = floodFillBubbleDetailed(imageData, startX, startY, region.width, region.height, avoidPoints);
+        } else if (region.type === 'sfx' && sfxImageData) {
+          result = detectSfxDetailed(sfxImageData, startX, startY, region.width, region.height);
+        }
+        if (result) {
+          previews.push({
+            regionId: region.id,
+            contour: result.contour, // exact fluid polygon outline points
+            safeTextBounds: result.safeTextBounds
+          });
         }
       }
       
