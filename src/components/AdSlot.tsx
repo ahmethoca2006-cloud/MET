@@ -9,13 +9,27 @@ interface Ad {
 const ADS = (adsConfig as { ads: Ad[] }).ads.filter(ad => ad.imageUrl);
 const ROTATE_MS = 10000;
 
+// Shared across every AdSlot instance so a broken image (bad URL, 404,
+// offline host) is skipped everywhere instead of leaving an empty
+// liquid-glass box in its place.
+const brokenAds = new Set<number>();
+
 function currentIndex() {
   if (ADS.length === 0) return 0;
   return Math.floor(Date.now() / ROTATE_MS) % ADS.length;
 }
 
+function nextValidIndex(start: number): number {
+  for (let i = 0; i < ADS.length; i++) {
+    const candidate = (start + i) % ADS.length;
+    if (!brokenAds.has(candidate)) return candidate;
+  }
+  return -1;
+}
+
 export function AdSlot({ placement, className }: { placement?: string; className?: string }) {
   const [index, setIndex] = useState(currentIndex());
+  const [, bump] = useState(0);
 
   useEffect(() => {
     if (ADS.length < 2) return;
@@ -30,8 +44,9 @@ export function AdSlot({ placement, className }: { placement?: string; className
     };
   }, []);
 
-  if (ADS.length === 0) return null;
-  const ad = ADS[index];
+  const validIndex = nextValidIndex(index);
+  if (validIndex === -1) return null;
+  const ad = ADS[validIndex];
 
   return (
     <a
@@ -43,11 +58,15 @@ export function AdSlot({ placement, className }: { placement?: string; className
       className={`liquid-glass block w-full overflow-hidden rounded-2xl aspect-[16/5] xs:aspect-[21/6] sm:aspect-[24/5] ${className || ''}`}
     >
       <img
-        key={index}
+        key={validIndex}
         src={ad.imageUrl}
         alt="Advertisement"
         className="w-full h-full object-cover animate-ad-fade"
         draggable={false}
+        onError={() => {
+          brokenAds.add(validIndex);
+          bump(n => n + 1);
+        }}
       />
     </a>
   );
