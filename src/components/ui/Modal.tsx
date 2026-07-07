@@ -25,13 +25,13 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', cla
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-md p-4"
+      className="animate-modal-backdrop fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-md p-4"
       onClick={onClose}
     >
       <GlassCard
         variant="heavy"
         radius="2xl"
-        className={cn('w-full max-h-[85vh] flex flex-col overflow-hidden', SIZE_CLASSES[size], className)}
+        className={cn('animate-modal-in w-full max-h-[85vh] flex flex-col overflow-hidden', SIZE_CLASSES[size], className)}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (

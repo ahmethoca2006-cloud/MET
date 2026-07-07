@@ -9,7 +9,7 @@ interface SidebarRailProps {
 
 export function SidebarRail({ activeTab, onTabChange, onCreatePress }: SidebarRailProps) {
   return (
-    <div className="hidden lg:flex fixed left-0 top-14 sm:top-16 bottom-0 z-30 w-20 flex-col items-center gap-2 py-6 bg-surface/70 backdrop-blur-xl border-r border-hairline">
+    <div className="liquid-glass-bar hidden lg:flex fixed left-0 top-14 sm:top-16 bottom-0 z-30 w-20 flex-col items-center gap-2 py-6 border-r border-hairline">
       <button
         type="button"
         onClick={onCreatePress}

@@ -35,7 +35,7 @@ export function TopBar() {
   }, []);
 
   return (
-    <div className="relative w-full h-14 sm:h-16 bg-surface/70 backdrop-blur-xl border-b border-hairline px-2.5 sm:px-6 flex items-center justify-between gap-2 shrink-0 z-40 sticky top-0">
+    <div className="liquid-glass-bar relative w-full h-14 sm:h-16 border-b border-hairline px-2.5 sm:px-6 flex items-center justify-between gap-2 shrink-0 z-40 sticky top-0">
       {/* Brand */}
       <div className={`flex items-center gap-2.5 min-w-0 shrink-0 ${searchOpen ? 'hidden sm:flex' : 'flex'}`}>
         <img src={logo} alt="MET" className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl object-cover shrink-0 ring-1 ring-hairline" draggable={false} />

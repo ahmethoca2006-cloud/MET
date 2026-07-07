@@ -1,9 +1,8 @@
-import { useState } from 'react';
-import { Sun, Moon, Laptop, Megaphone, Trash2, Info, ShieldCheck, FileText } from 'lucide-react';
+import { Sun, Moon, Laptop, Trash2, Info, ShieldCheck, FileText } from 'lucide-react';
 import { clear } from 'idb-keyval';
 import { useTheme, type ThemeMode } from '../contexts/ThemeContext';
-import { GlassCard, Switch, Button } from './ui';
-import { AdSlot, adsGloballyEnabled } from './AdSlot';
+import { GlassCard, Button } from './ui';
+import { AdSlot } from './AdSlot';
 import { swal } from '../lib/swalTheme';
 
 interface SettingsPanelProps {
@@ -21,13 +20,6 @@ const APP_VERSION = '0.1.0';
 
 export function SettingsPanel({ onShowPrivacy, onShowTerms }: SettingsPanelProps) {
   const { mode, setMode } = useTheme();
-  const [adsEnabled, setAdsEnabled] = useState(adsGloballyEnabled());
-
-  const handleAdsToggle = (val: boolean) => {
-    setAdsEnabled(val);
-    localStorage.setItem('met_ads_enabled', String(val));
-    window.dispatchEvent(new Event('met-ads-toggle'));
-  };
 
   const handleClearData = async () => {
     const result = await swal({
@@ -73,12 +65,6 @@ export function SettingsPanel({ onShowPrivacy, onShowTerms }: SettingsPanelProps
             </span>
             <span className="text-xs font-mono text-ink-faint">{APP_VERSION}</span>
           </div>
-          <label className="flex items-center justify-between gap-3 cursor-pointer border-t border-hairline pt-4">
-            <span className="flex items-center gap-2 text-sm font-medium text-ink">
-              <Megaphone size={16} className="text-ink-faint" /> Show Ad Placeholders
-            </span>
-            <Switch checked={adsEnabled} onChange={handleAdsToggle} />
-          </label>
           <div className="flex items-center justify-between gap-3 border-t border-hairline pt-4">
             <span className="flex flex-col">
               <span className="flex items-center gap-2 text-sm font-medium text-ink">
