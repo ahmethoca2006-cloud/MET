@@ -345,7 +345,7 @@ export default function App() {
       <SidebarRail activeTab={activeNavigationTab} onTabChange={setActiveNavigationTab} onCreatePress={handleCreatePress} />
 
       <div className="flex flex-1 lg:pl-20">
-        <main key={activeNavigationTab} className="animate-view-fade flex-1 min-w-0 px-4 sm:px-6 lg:px-10 py-6 sm:py-8 pb-32 lg:pb-10 max-w-6xl mx-auto w-full">
+        <main key={activeNavigationTab} className="animate-view-fade flex-1 min-w-0 px-4 sm:px-6 lg:px-10 py-6 sm:py-8 pb-28 lg:pb-10 max-w-6xl mx-auto w-full">
           {activeNavigationTab === 'settings' && (
             <SettingsPanel onShowPrivacy={() => setShowPrivacyModal(true)} onShowTerms={() => setShowTermsModal(true)} />
           )}
@@ -615,9 +615,6 @@ export default function App() {
         </main>
       </div>
 
-      <div className="lg:hidden fixed bottom-[6.5rem] left-1/2 -translate-x-1/2 z-40 w-[calc(100%-1.5rem)] max-w-sm">
-        <AdSlot placement="bottom-nav" />
-      </div>
       <BottomTabBar activeTab={activeNavigationTab} onTabChange={setActiveNavigationTab} onCreatePress={handleCreatePress} />
 
       {/* Create Workspace Modal */}
