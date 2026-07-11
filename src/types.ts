@@ -7,11 +7,19 @@ export interface ProcessedImage {
   height: number;
 }
 
+/** A single manga page: the original scan plus an optional synced "cleaned" (bleached) version. */
+export interface Page {
+  id: string;
+  order: number;
+  original: ProcessedImage;
+  cleaned: ProcessedImage | null;
+}
+
 export interface Chapter {
   id: string;
   name: string;
   coverUrl: string;
-  images: ProcessedImage[];
+  pages: Page[];
 }
 
 export interface Volume {

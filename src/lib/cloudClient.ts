@@ -3,6 +3,7 @@ import { Api, TelegramClient } from 'telegram';
 import { StringSession } from 'telegram/sessions';
 import { swal, swalToast, Swal } from './swalTheme';
 import { genId } from './id';
+import { migrateWorkspace } from './migrate';
 import type { Profile, Workspace } from '../types';
 
 export interface CloudFile {
@@ -437,7 +438,8 @@ export function useCloudClient() {
         return null;
       }
       const text = new TextDecoder('utf-8').decode(buffer as Uint8Array);
-      const parsed = JSON.parse(text) as Workspace;
+      // Normalize older backups (flat `images: ProcessedImage[]`) to the current `pages: Page[]` shape.
+      const parsed = migrateWorkspace(JSON.parse(text) as Workspace);
 
       // Regenerate every id so restoring doesn't collide with existing local data.
       const restored: Workspace = {
@@ -452,7 +454,12 @@ export function useCloudClient() {
             chapters: (v.chapters || []).map(c => ({
               ...c,
               id: genId('chapter'),
-              images: (c.images || []).map(img => ({ ...img, id: genId('image') })),
+              pages: (c.pages || []).map(page => ({
+                ...page,
+                id: genId('page'),
+                original: { ...page.original, id: genId('image') },
+                cleaned: page.cleaned ? { ...page.cleaned, id: genId('image') } : null,
+              })),
             })),
           })),
         })),

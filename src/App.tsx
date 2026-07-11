@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Plus, Trash2, Upload, BookOpen, Layers, FileStack, ImagePlus, Sparkles, Boxes
+  Plus, Trash2, BookOpen, Layers, FileStack, ImagePlus, Sparkles, Boxes
 } from 'lucide-react';
 import { get, set } from 'idb-keyval';
-import { extractImagesFromZip } from './lib/zip';
-import { MangaSeries, Volume, Chapter, Workspace } from './types';
+import { MangaSeries, Volume, Chapter, Workspace, Page } from './types';
 import { swal, swalToast } from './lib/swalTheme';
 import { readImageFile } from './lib/image';
 import { genId } from './lib/id';
@@ -21,9 +20,12 @@ import { AutomationPanel } from './components/AutomationPanel';
 import { PrivacyPolicy } from './components/legal/PrivacyPolicy';
 import { UserAgreement } from './components/legal/UserAgreement';
 import { Modal, Button, Input, Textarea, GlassCard } from './components/ui';
+import { PageManager } from './components/studio/PageManager';
+import { Studio } from './components/studio/Studio';
 import { useAutomationEngine } from './lib/automationEngine';
 import { useCloudClient } from './lib/cloudClient';
 import { hasProfile, getProfile } from './lib/profile';
+import { migrateWorkspace } from './lib/migrate';
 import type { NavTabId } from './config/navTabs';
 
 export default function App() {
@@ -79,18 +81,18 @@ export default function App() {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
 
-  const chapterZipInputRef = useRef<HTMLInputElement>(null);
+  const [chapterView, setChapterView] = useState<'manage' | 'studio'>('manage');
 
   useEffect(() => {
     get('workspaces_library').then(async (saved) => {
       if (saved && Array.isArray(saved) && saved.length > 0) {
-        setWorkspaces(saved);
+        setWorkspaces(saved.map(migrateWorkspace));
         return;
       }
       // One-time migration from the pre-workspace flat manga library.
       const legacyMangas = await get('mangas_library');
       if (legacyMangas && Array.isArray(legacyMangas) && legacyMangas.length > 0) {
-        setWorkspaces([{ id: genId('workspace'), name: 'My Workspace', description: '', coverUrl: '', mangas: legacyMangas }]);
+        setWorkspaces([migrateWorkspace({ id: genId('workspace'), name: 'My Workspace', description: '', coverUrl: '', mangas: legacyMangas })]);
       }
     }).catch(console.error);
   }, []);
@@ -109,6 +111,10 @@ export default function App() {
   const activeManga = mangas.find(m => m.id === activeMangaId) || null;
   const activeVolume = activeManga?.volumes.find(v => v.id === activeVolumeId) || null;
   const activeChapter = activeVolume?.chapters.find(c => c.id === activeChapterId) || null;
+
+  useEffect(() => {
+    if (activeChapter) setChapterView(activeChapter.pages.length > 0 ? 'studio' : 'manage');
+  }, [activeChapterId]);
 
   const resetToWorkspaceRoot = () => {
     setActiveWorkspaceId(null);
@@ -219,7 +225,7 @@ export default function App() {
       swal({ icon: 'error', title: 'Name Required', text: 'Please enter a name for this chapter.' });
       return;
     }
-    const newChapter: Chapter = { id: genId('chapter'), name: newChapterName.trim(), coverUrl: newChapterCoverUrl, images: [] };
+    const newChapter: Chapter = { id: genId('chapter'), name: newChapterName.trim(), coverUrl: newChapterCoverUrl, pages: [] };
     updateActiveWorkspaceMangas(prev => prev.map(m => {
       if (m.id !== activeManga.id) return m;
       return { ...m, volumes: m.volumes.map(v => v.id === activeVolume.id ? { ...v, chapters: [...v.chapters, newChapter] } : v) };
@@ -303,37 +309,21 @@ export default function App() {
     if (activeChapterId === chapter.id) setActiveChapterId(null);
   };
 
-  const handleChapterZipUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !activeManga || !activeVolume || !activeChapter) return;
-
-    swal({
-      title: 'Importing Pages...',
-      text: 'Unpacking the archive and preparing pages.',
-      allowOutsideClick: false,
-    });
-
-    try {
-      const extracted = await extractImagesFromZip(file);
-      updateActiveWorkspaceMangas(prev => prev.map(m => {
-        if (m.id !== activeManga.id) return m;
-        return {
-          ...m,
-          volumes: m.volumes.map(v => {
-            if (v.id !== activeVolume.id) return v;
-            return {
-              ...v,
-              chapters: v.chapters.map(c => c.id === activeChapter.id ? { ...c, images: [...c.images, ...extracted] } : c),
-            };
-          }),
-        };
-      }));
-      swalToast({ icon: 'success', title: `Imported ${extracted.length} pages!` });
-    } catch (err) {
-      console.error(err);
-      swal({ icon: 'error', title: 'Import Failed', text: 'The archive might be corrupted or in an unsupported format.' });
-    }
-    if (chapterZipInputRef.current) chapterZipInputRef.current.value = '';
+  const handleChapterPagesChange = (pages: Page[]) => {
+    if (!activeManga || !activeVolume || !activeChapter) return;
+    updateActiveWorkspaceMangas(prev => prev.map(m => {
+      if (m.id !== activeManga.id) return m;
+      return {
+        ...m,
+        volumes: m.volumes.map(v => {
+          if (v.id !== activeVolume.id) return v;
+          return {
+            ...v,
+            chapters: v.chapters.map(c => c.id === activeChapter.id ? { ...c, pages } : c),
+          };
+        }),
+      };
+    }));
   };
 
   return (
@@ -413,43 +403,30 @@ export default function App() {
                 </div>
               )}
 
-              {/* Chapter view: studio placeholder */}
+              {/* Chapter view: page manager + studio */}
               {activeWorkspace && activeChapter && activeVolume && activeManga && (
-                <div className="space-y-4">
-                  <GlassCard className="p-8 flex flex-col items-center text-center gap-3">
-                    {activeChapter.coverUrl ? (
-                      <img src={activeChapter.coverUrl} alt={activeChapter.name} className="w-20 h-28 rounded-xl object-cover ring-1 ring-hairline" />
-                    ) : (
-                      <Sparkles className="text-accent" size={30} />
-                    )}
-                    <h2 className="text-lg font-display font-semibold text-ink">Studio Coming Soon</h2>
-                    <p className="text-sm text-ink-muted max-w-md">The new editing studio for "{activeChapter.name}" is being rebuilt. For now you can import and manage pages here.</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Button variant="secondary" size="sm" onClick={() => chapterZipInputRef.current?.click()}>
-                        <Upload size={14} /> Import Pages (ZIP)
-                      </Button>
+                chapterView === 'manage' ? (
+                  <div className="space-y-4">
+                    <div className="flex justify-end">
                       <Button variant="ghost" size="sm" onClick={() => handleDeleteChapter(activeChapter)}>
                         <Trash2 size={14} /> Delete Chapter
                       </Button>
                     </div>
-                    <input ref={chapterZipInputRef} type="file" accept=".zip" className="hidden" onChange={handleChapterZipUpload} />
-                  </GlassCard>
-
-                  <AdSlot placement="studio-placeholder" />
-
-                  {activeChapter.images.length > 0 && (
-                    <GlassCard className="p-5">
-                      <h3 className="text-sm font-semibold text-ink mb-3">{activeChapter.images.length} Page(s)</h3>
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                        {activeChapter.images.map(img => (
-                          <div key={img.id} className="aspect-[2/3] rounded-lg overflow-hidden border border-hairline bg-ink/5">
-                            <img src={img.dataUrl} alt={img.filename} className="w-full h-full object-cover" />
-                          </div>
-                        ))}
-                      </div>
-                    </GlassCard>
-                  )}
-                </div>
+                    <AdSlot placement="studio-placeholder" />
+                    <PageManager
+                      chapterName={activeChapter.name}
+                      pages={activeChapter.pages}
+                      onChange={handleChapterPagesChange}
+                      onEnterStudio={() => setChapterView('studio')}
+                    />
+                  </div>
+                ) : (
+                  <Studio
+                    chapterName={activeChapter.name}
+                    pages={activeChapter.pages}
+                    onBack={() => setChapterView('manage')}
+                  />
+                )
               )}
 
               {/* Chapter list within volume */}
@@ -483,7 +460,7 @@ export default function App() {
                           </div>
                           <div className="p-3">
                             <p className="text-sm font-semibold text-ink truncate">{chap.name}</p>
-                            <p className="text-[11px] text-ink-faint">{chap.images.length} page(s)</p>
+                            <p className="text-[11px] text-ink-faint">{chap.pages.length} page(s)</p>
                           </div>
                         </GlassCard>
                         <button
