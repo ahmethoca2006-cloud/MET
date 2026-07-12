@@ -8,8 +8,8 @@ interface Ad {
 }
 
 const ADS: Ad[] = [
-  { imageUrl: adImage1, linkUrl: 'www.example.com' },
-  { imageUrl: adImage2, linkUrl: 'www.example.com' },
+  { imageUrl: adImage1, linkUrl: 'https://www.example.com' },
+  { imageUrl: adImage2, linkUrl: 'https://www.example.com' },
 ];
 const ROTATE_MS = 10000;
 
@@ -75,7 +75,7 @@ export function AdSlot({ placement, className }: { placement?: string; className
       rel="noopener noreferrer sponsored"
       aria-label="Advertisement"
       data-placement={placement}
-      className={`liquid-glass relative block w-full overflow-hidden rounded-2xl transition-[padding-top] duration-500 ease-out ${className || ''}`}
+      className={`relative block w-full overflow-hidden transition-[padding-top] duration-500 ease-out ${className || ''}`}
       style={{ paddingTop: `${ratio ?? 20.4}%` }}
     >
       <img
