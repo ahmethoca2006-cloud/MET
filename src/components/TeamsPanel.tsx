@@ -93,65 +93,70 @@ function TeamRoster({
   };
 
   return (
-    <GlassCard className="p-6 space-y-4 max-w-md">
-      <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded-2xl overflow-hidden bg-ink/5 border border-hairline shrink-0 flex items-center justify-center">
-          {team.logo ? <img src={team.logo} alt={team.name} className="w-full h-full object-cover" /> : <Users size={18} className="text-ink-faint" />}
+    <GlassCard className="overflow-hidden max-w-md">
+      <div className="p-6 flex items-center gap-4 border-b border-hairline bg-ink/[0.02]">
+        <div className="w-16 h-16 rounded-2xl overflow-hidden bg-accent-soft border border-hairline shrink-0 flex items-center justify-center">
+          {team.logo ? <img src={team.logo} alt={team.name} className="w-full h-full object-cover" /> : <Users size={22} className="text-accent" />}
         </div>
-        <div>
-          <h3 className="text-base font-semibold text-ink font-display">{team.name}</h3>
-          <p className="text-xs text-ink-muted">{isOwner ? 'You are the admin' : 'You are a leader'}</p>
+        <div className="min-w-0">
+          <h3 className="text-lg font-semibold text-ink font-display truncate">{team.name}</h3>
+          <p className="text-xs font-semibold text-accent flex items-center gap-1 mt-0.5">
+            {isOwner ? <ShieldCheck size={12} /> : <Crown size={12} />}
+            {isOwner ? 'Admin' : 'Leader'}
+          </p>
         </div>
       </div>
 
-      {canManageMembers && (
-        <div className="flex gap-2">
-          <Input placeholder="member@email.com" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
-          <Button onClick={handleInvite} disabled={inviting}>
-            <Mail size={14} /> Invite
-          </Button>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {members.length === 0 && <p className="text-xs text-ink-faint">No members yet.</p>}
-        {members.map(m => (
-          <div key={m.id} className="flex items-center justify-between gap-2 p-2 rounded-lg border border-hairline">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-full overflow-hidden bg-ink/5 border border-hairline shrink-0 flex items-center justify-center">
-                {m.profile?.avatar ? <img src={m.profile.avatar} alt="" className="w-full h-full object-cover" /> : <span className="text-[10px] text-ink-faint">?</span>}
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold text-ink truncate flex items-center gap-1">
-                  {m.profile?.name || m.invited_email}
-                  {m.role === 'leader' && <Crown size={11} className="text-accent shrink-0" />}
-                </p>
-                <p className="text-[10px] text-ink-faint truncate">{m.invited_email}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${m.status === 'active' ? 'bg-accent-soft text-accent' : 'bg-ink/5 text-ink-faint'}`}>
-                {m.status === 'active' ? 'Active' : 'Pending'}
-              </span>
-              {isOwner && m.status === 'active' && (
-                m.role === 'leader' ? (
-                  <button onClick={() => handleDemote(m.id)} disabled={busyId === m.id} aria-label="Demote to member" className="text-ink-faint hover:text-accent transition-colors">
-                    <ArrowDownCircle size={15} />
-                  </button>
-                ) : (
-                  <button onClick={() => handlePromote(m.id)} disabled={busyId === m.id} aria-label="Promote to leader" className="text-ink-faint hover:text-accent transition-colors">
-                    <ArrowUpCircle size={15} />
-                  </button>
-                )
-              )}
-              {canManageMembers && (
-                <button onClick={() => handleRemove(m.id)} disabled={busyId === m.id} aria-label="Remove member" className="text-ink-faint hover:text-danger transition-colors">
-                  <UserMinus size={15} />
-                </button>
-              )}
-            </div>
+      <div className="p-6 space-y-4">
+        {canManageMembers && (
+          <div className="flex gap-2">
+            <Input placeholder="member@email.com" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} className="flex-1" />
+            <Button onClick={handleInvite} disabled={inviting}>
+              <Mail size={14} /> Invite
+            </Button>
           </div>
-        ))}
+        )}
+
+        <div className="space-y-2">
+          {members.length === 0 && <p className="text-xs text-ink-faint text-center py-3">No members yet.</p>}
+          {members.map(m => (
+            <div key={m.id} className="flex items-center justify-between gap-2 p-2.5 rounded-xl border border-hairline hover:border-accent/20 transition-colors">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-full overflow-hidden bg-ink/5 border border-hairline shrink-0 flex items-center justify-center">
+                  {m.profile?.avatar ? <img src={m.profile.avatar} alt="" className="w-full h-full object-cover" /> : <span className="text-[10px] text-ink-faint font-semibold">{(m.profile?.name || m.invited_email)[0]?.toUpperCase()}</span>}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-ink truncate flex items-center gap-1">
+                    {m.profile?.name || m.invited_email}
+                    {m.role === 'leader' && <Crown size={11} className="text-accent shrink-0" />}
+                  </p>
+                  <p className="text-[10px] text-ink-faint truncate">{m.invited_email}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${m.status === 'active' ? 'bg-accent-soft text-accent' : 'bg-ink/5 text-ink-faint'}`}>
+                  {m.status === 'active' ? 'Active' : 'Pending'}
+                </span>
+                {isOwner && m.status === 'active' && (
+                  m.role === 'leader' ? (
+                    <button onClick={() => handleDemote(m.id)} disabled={busyId === m.id} aria-label="Demote to member" title="Demote to member" className="p-1.5 rounded-lg text-ink-faint hover:text-accent hover:bg-accent-soft transition-colors">
+                      <ArrowDownCircle size={14} />
+                    </button>
+                  ) : (
+                    <button onClick={() => handlePromote(m.id)} disabled={busyId === m.id} aria-label="Promote to leader" title="Promote to leader" className="p-1.5 rounded-lg text-ink-faint hover:text-accent hover:bg-accent-soft transition-colors">
+                      <ArrowUpCircle size={14} />
+                    </button>
+                  )
+                )}
+                {canManageMembers && (
+                  <button onClick={() => handleRemove(m.id)} disabled={busyId === m.id} aria-label="Remove member" title="Remove member" className="p-1.5 rounded-lg text-ink-faint hover:text-danger hover:bg-danger/10 transition-colors">
+                    <UserMinus size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </GlassCard>
   );
@@ -196,27 +201,35 @@ function AdminTeamSection() {
 
   if (!team) {
     return (
-      <GlassCard className="p-6 space-y-4 max-w-md">
-        <h3 className="text-base font-semibold text-ink font-display flex items-center gap-2">
-          <ShieldCheck size={16} className="text-accent" /> Create Your Team
-        </h3>
-        <div className="flex items-center gap-4">
-          <button
-            type="button"
-            onClick={() => logoInputRef.current?.click()}
-            className="w-16 h-16 rounded-2xl border border-dashed border-hairline bg-ink/5 flex items-center justify-center overflow-hidden shrink-0 hover:border-accent transition-colors"
-          >
-            {logo ? <img src={logo} alt="Logo" className="w-full h-full object-cover" /> : <ImagePlus size={18} className="text-ink-faint" />}
-          </button>
-          <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) readAvatarFile(f, setLogo); }} />
-          <div className="flex-1 space-y-1">
-            <label className="text-xs text-accent font-semibold">Team Name</label>
-            <Input placeholder="e.g. Nightfall Scans" value={teamName} onChange={(e) => setTeamName(e.target.value)} />
+      <GlassCard className="overflow-hidden max-w-md">
+        <div className="p-6 border-b border-hairline bg-ink/[0.02] flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/20 flex items-center justify-center shrink-0">
+            <ShieldCheck size={18} className="text-accent" />
+          </div>
+          <div>
+            <h3 className="text-base font-semibold text-ink font-display">Create Your Team</h3>
+            <p className="text-xs text-ink-muted mt-0.5">Set a name and logo to get started</p>
           </div>
         </div>
-        <Button onClick={handleCreate} disabled={creating} className="w-full">
-          <Plus size={14} /> {creating ? 'Creating...' : 'Create Team'}
-        </Button>
+        <div className="p-6 space-y-4">
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              className="w-16 h-16 rounded-2xl border border-dashed border-hairline bg-ink/5 flex items-center justify-center overflow-hidden shrink-0 hover:border-accent transition-colors"
+            >
+              {logo ? <img src={logo} alt="Logo" className="w-full h-full object-cover" /> : <ImagePlus size={18} className="text-ink-faint" />}
+            </button>
+            <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) readAvatarFile(f, setLogo); }} />
+            <div className="flex-1 space-y-1">
+              <label className="text-xs text-accent font-semibold">Team Name</label>
+              <Input placeholder="e.g. Nightfall Scans" value={teamName} onChange={(e) => setTeamName(e.target.value)} />
+            </div>
+          </div>
+          <Button onClick={handleCreate} disabled={creating} className="w-full">
+            <Plus size={14} /> {creating ? 'Creating...' : 'Create Team'}
+          </Button>
+        </div>
       </GlassCard>
     );
   }
@@ -286,17 +299,17 @@ function MemberTeamSection() {
     return (
       <div className="space-y-3 max-w-md">
         {invites.map(inv => (
-          <GlassCard key={inv.id} className="p-5 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl overflow-hidden bg-ink/5 border border-hairline shrink-0 flex items-center justify-center">
-                {inv.team.logo ? <img src={inv.team.logo} alt={inv.team.name} className="w-full h-full object-cover" /> : <Users size={16} className="text-ink-faint" />}
+          <GlassCard key={inv.id} className="overflow-hidden border-accent/30">
+            <div className="p-5 flex items-center gap-3 bg-accent-soft">
+              <div className="w-11 h-11 rounded-xl overflow-hidden bg-elevated border border-accent/30 shrink-0 flex items-center justify-center">
+                {inv.team?.logo ? <img src={inv.team.logo} alt={inv.team?.name || 'Team'} className="w-full h-full object-cover" /> : <Mail size={18} className="text-accent" />}
               </div>
-              <div>
-                <p className="text-sm font-semibold text-ink">{inv.team.name}</p>
-                <p className="text-xs text-ink-muted">invited you to join</p>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold text-accent uppercase tracking-wide">Team Invitation</p>
+                <p className="text-sm font-semibold text-ink truncate">{inv.team?.name || 'Unknown team'}</p>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="p-4 flex gap-2">
               <Button onClick={() => handleAccept(inv.id)} disabled={busyId === inv.id} className="flex-1">
                 <Check size={14} /> Accept
               </Button>
@@ -311,9 +324,12 @@ function MemberTeamSection() {
   }
 
   return (
-    <GlassCard className="p-6 max-w-md text-center">
-      <Users size={22} className="text-ink-faint mx-auto mb-2" />
-      <p className="text-sm text-ink-muted">Ask your leader to sign you up.</p>
+    <GlassCard className="p-8 max-w-md text-center">
+      <div className="w-12 h-12 mx-auto rounded-full bg-ink/5 border border-hairline flex items-center justify-center mb-3">
+        <Users size={20} className="text-ink-faint" />
+      </div>
+      <p className="text-sm font-semibold text-ink">No team yet</p>
+      <p className="text-xs text-ink-muted mt-1">Ask your leader to sign you up.</p>
     </GlassCard>
   );
 }

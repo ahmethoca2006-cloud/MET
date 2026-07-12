@@ -1,10 +1,33 @@
 import { useRef, useState } from 'react';
-import { UserPlus, LogIn, Mail, Lock, User, ImagePlus, MailCheck } from 'lucide-react';
+import { UserPlus, LogIn, Mail, Lock, User, ImagePlus, MailCheck, Check, X } from 'lucide-react';
 import { GlassCard, Button, Input } from './ui';
 import { swal } from '../lib/swalTheme';
 import { readAvatarFile } from '../lib/image';
 import { useTeamAuth, getKnownEmails } from '../lib/teamAuth';
 import logo from '../assets/logo-new.jpg';
+
+const PASSWORD_RULES: { label: string; test: (pw: string) => boolean }[] = [
+  { label: 'At least 8 characters', test: pw => pw.length >= 8 },
+  { label: 'One uppercase letter', test: pw => /[A-Z]/.test(pw) },
+  { label: 'One lowercase letter', test: pw => /[a-z]/.test(pw) },
+  { label: 'One number', test: pw => /[0-9]/.test(pw) },
+];
+
+function PasswordChecklist({ password }: { password: string }) {
+  return (
+    <div className="space-y-1 pt-1">
+      {PASSWORD_RULES.map(rule => {
+        const passed = rule.test(password);
+        return (
+          <div key={rule.label} className={`flex items-center gap-1.5 text-[11px] ${passed ? 'text-success' : 'text-ink-faint'}`}>
+            {passed ? <Check size={11} /> : <X size={11} />}
+            {rule.label}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { session, loading, signIn, signUp } = useTeamAuth();
@@ -12,6 +35,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [avatar, setAvatar] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
@@ -54,8 +78,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       swal({ icon: 'error', title: 'Missing details', text: 'Name, email, and password are all required.' });
       return;
     }
-    if (password.length < 6) {
-      swal({ icon: 'error', title: 'Weak Password', text: 'Use at least 6 characters.' });
+    if (!PASSWORD_RULES.every(rule => rule.test(password))) {
+      swal({ icon: 'error', title: 'Weak Password', text: 'Your password must meet all the requirements below.' });
+      return;
+    }
+    if (password !== confirmPassword) {
+      swal({ icon: 'error', title: 'Passwords don\'t match', text: 'Re-enter your password to confirm it.' });
       return;
     }
     setSubmitting(true);
@@ -124,9 +152,28 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') (mode === 'signup' ? handleSignUp() : handleSignIn()); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && mode === 'signin') handleSignIn(); }}
             />
+            {mode === 'signup' && <PasswordChecklist password={password} />}
           </div>
+          {mode === 'signup' && (
+            <div className="space-y-1">
+              <label className="text-xs text-accent font-semibold flex items-center gap-1"><Lock size={12} /> Confirm Password</label>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSignUp(); }}
+              />
+              {confirmPassword && (
+                <p className={`text-[11px] flex items-center gap-1.5 ${confirmPassword === password ? 'text-success' : 'text-danger'}`}>
+                  {confirmPassword === password ? <Check size={11} /> : <X size={11} />}
+                  {confirmPassword === password ? 'Passwords match' : "Passwords don't match"}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <Button onClick={mode === 'signup' ? handleSignUp : handleSignIn} disabled={submitting} className="w-full">
