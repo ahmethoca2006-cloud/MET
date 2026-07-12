@@ -1,7 +1,7 @@
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useState } from 'react';
 import { motion } from 'motion/react';
 import {
-  Upload as UploadIcon, File, RefreshCw, Download, ChevronDown, ImagePlus,
+  Upload as UploadIcon, File, RefreshCw, ChevronDown,
   Tag, X, HardDrive, Boxes, FolderInput, CalendarClock, Play, Trash2, FolderOutput
 } from 'lucide-react';
 import { Input, Button, GlassCard, Modal, Switch } from '../ui';
@@ -9,7 +9,6 @@ import { AdSlot } from '../AdSlot';
 import { CloudFolders } from './CloudFolders';
 import { ScheduleTransferModal } from './ScheduleTransferModal';
 import { swal, swalToast } from '../../lib/swalTheme';
-import { readImageFile } from '../../lib/image';
 import type { CloudClient, CloudFile } from '../../lib/cloudClient';
 import type { AutomationEngine } from '../../lib/automationEngine';
 import type { Workspace } from '../../types';
@@ -46,12 +45,8 @@ function formatDate(iso: string | null): string {
 
 export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine }: CloudFilesProps) {
   const [showUploadPanel, setShowUploadPanel] = useState(true);
-  const [uploadSource, setUploadSource] = useState<'device' | 'workspace'>('device');
 
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadName, setUploadName] = useState('');
   const [uploadDesc, setUploadDesc] = useState('');
-  const [coverDataUrl, setCoverDataUrl] = useState<string | null>(null);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('');
 
   const [tags, setTags] = useState<string[]>([]);
@@ -64,9 +59,6 @@ export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const coverInputRef = useRef<HTMLInputElement>(null);
-
   const knownTags: string[] = Array.from(new Set<string>(cc.files.flatMap(f => f.tags))).sort();
 
   const addTag = () => {
@@ -76,55 +68,19 @@ export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine
   };
 
   const resetUploadForm = () => {
-    setUploadFile(null);
-    setUploadName('');
     setUploadDesc('');
-    setCoverDataUrl(null);
     setTags([]);
     setSelectedWorkspaceId('');
   };
 
-  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadFile(file);
-    if (!uploadName) setUploadName(file.name);
-
-    if (file.name.toLowerCase().endsWith('.zip')) {
-      try {
-        const jszip = new (await import('jszip')).default();
-        const zip = await jszip.loadAsync(file);
-        const imageFiles = Object.keys(zip.files).filter(name => !zip.files[name].dir && name.match(/\.(png|jpe?g|webp)$/i));
-        if (imageFiles.length > 0) {
-          imageFiles.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-          const base64 = await zip.files[imageFiles[0]].async('base64');
-          setCoverDataUrl(`data:image/jpeg;base64,${base64}`);
-          swalToast({ icon: 'success', title: 'Cover suggested from ZIP — you can still change it' });
-        }
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  };
-
   const handleUpload = async () => {
-    if (uploadSource === 'device') {
-      if (!uploadFile) {
-        swal({ icon: 'error', title: 'No File', text: 'Choose a file to upload first.' });
-        return;
-      }
-      await cc.uploadFile(uploadFile, { name: uploadName, notes: uploadDesc, tags, coverDataUrl, folderId: currentFolderId });
-      resetUploadForm();
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    } else {
-      const workspace = workspaces.find(w => w.id === selectedWorkspaceId);
-      if (!workspace) {
-        swal({ icon: 'error', title: 'No Workspace', text: 'Pick a workspace to back up.' });
-        return;
-      }
-      await cc.uploadWorkspaceBackup(workspace, { notes: uploadDesc, tags, folderId: currentFolderId });
-      resetUploadForm();
+    const workspace = workspaces.find(w => w.id === selectedWorkspaceId);
+    if (!workspace) {
+      swal({ icon: 'error', title: 'No Workspace', text: 'Pick a workspace to back up.' });
+      return;
     }
+    await cc.uploadWorkspaceBackup(workspace, { notes: uploadDesc, tags, folderId: currentFolderId });
+    resetUploadForm();
   };
 
   const handleRestore = async (file: CloudFile) => {
@@ -196,75 +152,22 @@ export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine
         </button>
         {showUploadPanel && (
           <div className="px-6 pb-6 border-t border-hairline pt-5 space-y-4">
-            <div className="grid grid-cols-2 gap-2 max-w-xs">
-              <button
-                onClick={() => setUploadSource('device')}
-                className={`py-2 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${uploadSource === 'device' ? 'bg-accent-soft border-accent text-accent' : 'bg-ink/5 border-hairline text-ink-muted'}`}
-              >
-                <HardDrive size={13} /> From Device
-              </button>
-              <button
-                onClick={() => setUploadSource('workspace')}
-                className={`py-2 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${uploadSource === 'workspace' ? 'bg-accent-soft border-accent text-accent' : 'bg-ink/5 border-hairline text-ink-muted'}`}
-              >
-                <FolderInput size={13} /> From Workspace
-              </button>
-            </div>
-
-            {uploadSource === 'device' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <Input type="text" placeholder="File name (e.g. Solo Leveling Ch.12)" value={uploadName} onChange={e => setUploadName(e.target.value)} />
-                  <Input type="text" placeholder="Notes for the team..." value={uploadDesc} onChange={e => setUploadDesc(e.target.value)} />
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => coverInputRef.current?.click()}
-                      className="w-14 h-14 rounded-xl border border-dashed border-hairline bg-ink/5 flex items-center justify-center overflow-hidden shrink-0 hover:border-accent transition-colors"
-                    >
-                      {coverDataUrl ? <img src={coverDataUrl} alt="Cover" className="w-full h-full object-cover" /> : <ImagePlus size={16} className="text-ink-faint" />}
-                    </button>
-                    <span className="text-xs text-ink-faint">{coverDataUrl ? 'Cover chosen — click to change' : 'Choose a cover image (optional)'}</span>
-                    <input ref={coverInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) readImageFile(f, setCoverDataUrl); }} />
-                  </div>
-                </div>
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-accent/30 hover:border-accent/60 rounded-xl bg-accent-soft flex flex-col items-center justify-center cursor-pointer transition-colors p-6 group"
+            <div className="space-y-3">
+              {workspaces.length === 0 ? (
+                <p className="text-xs text-ink-faint">Create a workspace in Library first, then back it up here.</p>
+              ) : (
+                <select
+                  value={selectedWorkspaceId}
+                  onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+                  className="w-full bg-ink/5 border border-hairline rounded-xl px-4 py-2.5 text-ink text-sm outline-none focus:border-accent"
                 >
-                  <input type="file" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
-                  {uploadFile ? (
-                    <div className="text-center text-accent">
-                      <File className="mx-auto mb-2 opacity-80" size={32} />
-                      <p className="font-bold whitespace-nowrap text-ellipsis overflow-hidden max-w-[200px]">{uploadFile.name}</p>
-                      <p className="text-xs opacity-60">{(uploadFile.size / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
-                  ) : (
-                    <>
-                      <UploadIcon size={32} className="text-ink-faint mb-3 group-hover:text-accent transition-colors" />
-                      <p className="text-sm font-semibold text-ink-muted">Click here to choose a file (up to 2GB)</p>
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {workspaces.length === 0 ? (
-                  <p className="text-xs text-ink-faint">Create a workspace in Library first, then back it up here.</p>
-                ) : (
-                  <select
-                    value={selectedWorkspaceId}
-                    onChange={(e) => setSelectedWorkspaceId(e.target.value)}
-                    className="w-full bg-ink/5 border border-hairline rounded-xl px-4 py-2.5 text-ink text-sm outline-none focus:border-accent"
-                  >
-                    <option value="">Choose a workspace...</option>
-                    {workspaces.map(w => <option key={w.id} value={w.id}>{w.name} ({w.mangas.length} series)</option>)}
-                  </select>
-                )}
-                <Input type="text" placeholder="Notes for the team..." value={uploadDesc} onChange={e => setUploadDesc(e.target.value)} />
-                <p className="text-[11px] text-ink-faint">Uploads the whole workspace (series, volumes, chapters, covers) as a restorable backup.</p>
-              </div>
-            )}
+                  <option value="">Choose a workspace...</option>
+                  {workspaces.map(w => <option key={w.id} value={w.id}>{w.name} ({w.mangas.length} series)</option>)}
+                </select>
+              )}
+              <Input type="text" placeholder="Notes for the team..." value={uploadDesc} onChange={e => setUploadDesc(e.target.value)} />
+              <p className="text-[11px] text-ink-faint">Uploads the whole workspace (series, volumes, chapters, covers) as a restorable backup.</p>
+            </div>
 
             <p className="text-[11px] text-ink-faint">Uploads land in the current folder{currentFolderId !== null ? ` ("${cc.folders.find(f => f.id === currentFolderId)?.name || ''}")` : ' (Root)'}.</p>
 
@@ -293,7 +196,7 @@ export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine
 
             <div className="flex flex-col sm:flex-row gap-2 mt-2">
               <Button onClick={handleUpload} disabled={cc.isUploading} className="flex-1" size="lg">
-                {cc.isUploading ? 'Uploading...' : uploadSource === 'device' ? 'Upload File to Cloud' : 'Back Up Workspace to Cloud'}
+                {cc.isUploading ? 'Uploading...' : 'Back Up Workspace to Cloud'}
               </Button>
               <Button variant="secondary" onClick={() => setShowScheduleModal(true)} size="lg">
                 <CalendarClock size={14} /> Schedule Transfer
@@ -337,8 +240,6 @@ export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine
         open={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
         cc={cc}
-        folders={cc.folders}
-        currentFolderId={currentFolderId}
         createAutomation={automationEngine.createAutomation}
       />
 
@@ -438,11 +339,11 @@ export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine
                   ) : (
                     <>
                       {file.coverMsgId ? <span className="text-[10px] text-accent font-mono mb-2 animate-pulse">Loading Cover...</span> : null}
-                      {file.type === 'workspace_backup' ? <Boxes size={32} className="text-accent/50" /> : <File size={32} className="text-accent/50" />}
+                      <Boxes size={32} className="text-accent/50" />
                     </>
                   )}
                   <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-black/50 text-white backdrop-blur-sm">
-                    {file.type === 'workspace_backup' ? <><Boxes size={10} /> Workspace</> : <><File size={10} /> File</>}
+                    <Boxes size={10} /> Workspace
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleMoveFile(file); }}
@@ -465,15 +366,9 @@ export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine
 
                   <div className="flex justify-between items-center text-xs text-ink-muted font-mono border-t border-hairline pt-2 mt-auto">
                     <span>{new Date(file.date).toLocaleDateString()}</span>
-                    {file.type === 'workspace_backup' ? (
-                      <button onClick={() => handleRestore(file)} className="text-accent hover:text-ink flex items-center gap-1 font-sans font-bold bg-accent-soft hover:opacity-80 px-2 py-1 rounded transition-colors">
-                        <FolderInput size={14} /> Restore
-                      </button>
-                    ) : (
-                      <button onClick={() => cc.downloadCloudFile(file)} className="text-accent hover:text-ink flex items-center gap-1 font-sans font-bold bg-accent-soft hover:opacity-80 px-2 py-1 rounded transition-colors">
-                        <Download size={14} /> Download
-                      </button>
-                    )}
+                    <button onClick={() => handleRestore(file)} className="text-accent hover:text-ink flex items-center gap-1 font-sans font-bold bg-accent-soft hover:opacity-80 px-2 py-1 rounded transition-colors">
+                      <FolderInput size={14} /> Restore
+                    </button>
                   </div>
                 </div>
               </GlassCard>

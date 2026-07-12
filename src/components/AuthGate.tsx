@@ -99,12 +99,26 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center lg:justify-stretch p-4 lg:p-0">
+      {/* Branded panel — desktop only */}
+      <div className="hidden lg:flex flex-1 h-screen relative overflow-hidden items-center justify-center bg-gradient-to-br from-accent to-[color-mix(in_srgb,var(--color-accent)_60%,black)]">
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 30% 20%, white, transparent 40%), radial-gradient(circle at 80% 80%, white, transparent 35%)' }} />
+        <div className="relative z-10 text-center px-12 max-w-md">
+          <img src={logo} alt="MET" className="w-16 h-16 rounded-2xl object-cover ring-1 ring-white/30 mx-auto mb-6 shadow-2xl" />
+          <h1 className="text-3xl font-display font-bold text-white mb-3">Manga Editing Tool</h1>
+          <p className="text-white/80 text-sm leading-relaxed">A fast, all-in-one workspace for cleaning, translating, and typesetting manga — built for teams that ship.</p>
+        </div>
+      </div>
+
+      {/* Form panel */}
+      <div className="flex items-center justify-center w-full lg:flex-1 lg:h-screen">
       <GlassCard className="p-8 w-full max-w-sm space-y-5">
-        <div className="flex flex-col items-center text-center gap-2">
+        <div className="flex flex-col items-center text-center gap-2 lg:hidden">
           <img src={logo} alt="MET" className="w-12 h-12 rounded-2xl object-cover ring-1 ring-hairline" />
+        </div>
+        <div className="text-center lg:text-left">
           <h2 className="text-lg font-display font-bold text-ink">{mode === 'signup' ? 'Create your profile' : 'Welcome back'}</h2>
-          <p className="text-xs text-ink-muted">{mode === 'signup' ? 'This is your identity across the whole app.' : 'Sign in to continue.'}</p>
+          <p className="text-xs text-ink-muted mt-1">{mode === 'signup' ? 'This is your identity across the whole app.' : 'Sign in to continue.'}</p>
         </div>
 
         {mode === 'signup' && (
@@ -188,6 +202,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           {mode === 'signup' ? 'Already have a profile? Sign in' : "Don't have a profile? Sign up"}
         </button>
       </GlassCard>
+      </div>
     </div>
   );
 }

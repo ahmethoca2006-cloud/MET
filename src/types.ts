@@ -51,23 +51,14 @@ export type AutomationTrigger =
   | { type: 'once'; at: string }
   | { type: 'onOpen' };
 
-export type AutomationAction =
-  | {
-      type: 'cloudTransfer';
-      direction: 'upload';
-      fileName: string;
-      sizeBytes: number;
-      folderId: number | null;
-      blobKey: string;
-    }
-  | {
-      type: 'cloudTransfer';
-      direction: 'download';
-      fileName: string;
-      sizeBytes: number;
-      folderId: number | null;
-      cloudFileId: number;
-    };
+export type AutomationAction = {
+  type: 'cloudTransfer';
+  direction: 'download';
+  fileName: string;
+  sizeBytes: number;
+  folderId: number | null;
+  cloudFileId: number;
+};
 
 export interface Automation {
   id: string;

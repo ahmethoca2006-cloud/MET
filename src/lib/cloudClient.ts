@@ -4,12 +4,13 @@ import { StringSession } from 'telegram/sessions';
 import { swal, swalToast, Swal } from './swalTheme';
 import { genId } from './id';
 import { migrateWorkspace } from './migrate';
+import { loadTelegramCredentials, saveTelegramCredentials } from './telegramSync';
 import type { Workspace } from '../types';
 
 export interface CloudFile {
   id: number;
   msg: any;
-  type: 'manga_project' | 'workspace_backup';
+  type: 'workspace_backup';
   name: string;
   description: string;
   tags: string[];
@@ -101,6 +102,23 @@ export function useCloudClient() {
       initClient(savedApiId, savedApiHash, savedSession);
     }
     if (savedChatId) setChatId(savedChatId);
+
+    // No local session yet on this device — try pulling synced credentials from Supabase.
+    if (!savedSession) {
+      loadTelegramCredentials().then(creds => {
+        if (!creds) return;
+        if (creds.apiId) setApiId(creds.apiId);
+        if (creds.apiHash) setApiHash(creds.apiHash);
+        if (creds.chatId) setChatId(creds.chatId);
+        if (creds.session && creds.apiId && creds.apiHash) {
+          localStorage.setItem('tg_api_id', creds.apiId);
+          localStorage.setItem('tg_api_hash', creds.apiHash);
+          localStorage.setItem('tg_session', creds.session);
+          if (creds.chatId) localStorage.setItem('tg_chat_id', creds.chatId);
+          initClient(creds.apiId, creds.apiHash, creds.session);
+        }
+      }).catch(console.error);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -141,6 +159,7 @@ export function useCloudClient() {
         localStorage.setItem('tg_api_id', apiId);
         localStorage.setItem('tg_api_hash', apiHash);
         localStorage.setItem('tg_session', sessionString);
+        saveTelegramCredentials({ apiId, apiHash, phone: phoneNumber, session: sessionString }).catch(console.error);
         setClient(newClient);
         setIsConnected(true);
         await loadMe(newClient);
@@ -169,7 +188,7 @@ export function useCloudClient() {
         try {
           const data = JSON.parse(m.message);
           if (!data || typeof data !== 'object') return;
-          if (m.media && (data.type === 'manga_project' || data.type === 'workspace_backup')) {
+          if (m.media && data.type === 'workspace_backup') {
             cloudFiles.push({
               id: m.id,
               msg: m,
@@ -272,67 +291,6 @@ export function useCloudClient() {
       await fetchFiles();
     } catch (err: any) {
       swal({ title: 'Error', text: err.message || 'Failed to move file', icon: 'error' });
-    }
-  };
-
-  const uploadFile = async (file: File, opts: { name: string; notes: string; tags: string[]; coverDataUrl: string | null; folderId: number | null }) => {
-    if (!client || !chatId) {
-      swal({ title: 'Error', text: 'Connect to Telegram and set a Chat ID first', icon: 'error' });
-      return;
-    }
-
-    setIsUploading(true);
-    setUploadProgress(0);
-    setUploadLabel(opts.name || file.name);
-    setUploadTotalBytes(file.size);
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const fileBuffer: any = Buffer.from(arrayBuffer);
-      fileBuffer.name = file.name;
-
-      let coverMsgId = 0;
-      if (opts.coverDataUrl) {
-        try {
-          const coverBlob = await (await fetch(opts.coverDataUrl)).blob();
-          const coverArrayBuffer = await coverBlob.arrayBuffer();
-          const coverBuffer: any = Buffer.from(coverArrayBuffer);
-          coverBuffer.name = 'cover.jpg';
-          const coverMsg = await client.sendFile(chatId, { file: coverBuffer, forceDocument: false, caption: '[COVER_IMAGE_FOR_PROJECT]' });
-          if (coverMsg && coverMsg.id) coverMsgId = coverMsg.id;
-        } catch (err) {
-          console.error('Cover upload failed', err);
-        }
-      }
-
-      const metadata = {
-        type: 'manga_project',
-        name: opts.name || file.name,
-        description: opts.notes || '',
-        tags: opts.tags,
-        sender: meName || 'Team Member',
-        folderId: opts.folderId,
-        coverMsgId,
-        sizeBytes: file.size,
-        date: new Date().toISOString()
-      };
-
-      await client.sendFile(chatId, {
-        file: fileBuffer,
-        caption: JSON.stringify(metadata, null, 2),
-        forceDocument: true,
-        fileSize: file.size,
-        progressCallback: (progress: number) => setUploadProgress(Math.round(progress * 100)),
-      });
-
-      swalToast({ icon: 'success', title: 'Upload complete' });
-      fetchFiles();
-    } catch (err: any) {
-      console.error(err);
-      swal({ title: 'Upload Error', text: err.message || 'An error occurred during upload', icon: 'error' });
-    } finally {
-      setIsUploading(false);
-      setUploadProgress(0);
     }
   };
 
@@ -485,12 +443,16 @@ export function useCloudClient() {
   };
 
   const saveConfig = () => {
-    if (chatId) localStorage.setItem('tg_chat_id', chatId);
+    if (chatId) {
+      localStorage.setItem('tg_chat_id', chatId);
+      saveTelegramCredentials({ chatId }).catch(console.error);
+    }
     swalToast({ icon: 'success', title: 'Saved' });
   };
 
   const handleDisconnect = () => {
     localStorage.removeItem('tg_session');
+    saveTelegramCredentials({ session: '' }).catch(console.error);
     setIsConnected(false);
     setClient(null);
   };
@@ -520,7 +482,6 @@ export function useCloudClient() {
     uploadProgress,
     uploadLabel,
     uploadTotalBytes,
-    uploadFile,
     uploadWorkspaceBackup,
 
     isDownloading,

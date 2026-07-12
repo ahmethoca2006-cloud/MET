@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { get, set, del } from 'idb-keyval';
+import { get, set } from 'idb-keyval';
 import type { Automation, AutomationAction, AutomationTrigger } from '../types';
 import { swalToast } from './swalTheme';
 import { genId } from './id';
@@ -7,10 +7,6 @@ import type { CloudClient } from './cloudClient';
 
 const STORAGE_KEY = 'cloud_transfer_automations';
 const CHECK_INTERVAL_MS = 15_000;
-
-export function stashTransferBlob(blobKey: string, blob: Blob): Promise<void> {
-  return set(blobKey, blob);
-}
 
 function computeNextRunAt(trigger: AutomationTrigger, from: number): string | null {
   if (trigger.type === 'interval') return new Date(from + trigger.everyMs).toISOString();
@@ -47,21 +43,6 @@ export function useAutomationEngine(cloudClient: CloudClient) {
       swalToast({ icon: 'error', title: 'Transfer skipped', text: `Connect Cloud Storage to let "${name}" run.` });
       return;
     }
-    if (action.direction === 'upload') {
-      try {
-        const blob = await get<Blob>(action.blobKey);
-        if (!blob) {
-          swalToast({ icon: 'error', title: 'Transfer skipped', text: `"${name}" couldn't find its cached file.` });
-          return;
-        }
-        const file = new File([blob], action.fileName, { type: blob.type });
-        await cc.uploadFile(file, { name: action.fileName, notes: `Scheduled transfer via "${name}"`, tags: ['scheduled'], coverDataUrl: null, folderId: action.folderId });
-      } catch (e) {
-        console.error(e);
-      }
-      return;
-    }
-    // download
     const file = cc.files.find(f => f.id === action.cloudFileId);
     if (!file) {
       swalToast({ icon: 'error', title: 'Transfer skipped', text: `"${name}" couldn't find its cloud file — it may have been deleted.` });
@@ -82,9 +63,6 @@ export function useAutomationEngine(cloudClient: CloudClient) {
       nextRunAt: a.enabled && !isOneShot ? computeNextRunAt(a.trigger, now) : null,
     } : a));
     executeAction(automation.name, automation.action);
-    if (isOneShot && automation.action.direction === 'upload') {
-      del(automation.action.blobKey).catch(() => {});
-    }
   }, [executeAction]);
 
   useEffect(() => {
@@ -119,8 +97,6 @@ export function useAutomationEngine(cloudClient: CloudClient) {
   }, []);
 
   const deleteAutomation = useCallback((id: string) => {
-    const automation = automationsRef.current.find(a => a.id === id);
-    if (automation?.action.direction === 'upload') del(automation.action.blobKey).catch(() => {});
     setAutomations(prev => prev.filter(a => a.id !== id));
   }, []);
 

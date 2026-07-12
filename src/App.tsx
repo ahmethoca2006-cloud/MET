@@ -25,6 +25,7 @@ import { Studio } from './components/studio/Studio';
 import { useAutomationEngine } from './lib/automationEngine';
 import { useCloudClient } from './lib/cloudClient';
 import { migrateWorkspace } from './lib/migrate';
+import { interleaveWithAds } from './lib/interleaveAds';
 import type { NavTabId } from './config/navTabs';
 
 export default function App() {
@@ -425,7 +426,7 @@ export default function App() {
                     </GlassCard>
                   )}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {activeVolume.chapters.map(chap => (
+                    {interleaveWithAds(activeVolume.chapters, chap => (
                       <button
                         key={chap.id}
                         onClick={() => setActiveChapterId(chap.id)}
@@ -452,7 +453,7 @@ export default function App() {
                           <Trash2 size={12} />
                         </button>
                       </button>
-                    ))}
+                    ), 'library-chapters')}
                   </div>
                 </div>
               )}
@@ -472,7 +473,7 @@ export default function App() {
                     </GlassCard>
                   )}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {activeManga.volumes.map(vol => (
+                    {interleaveWithAds(activeManga.volumes, vol => (
                       <button key={vol.id} onClick={() => setActiveVolumeId(vol.id)} className="stagger-item group relative text-left">
                         <GlassCard className="overflow-hidden flex flex-col h-full transition-transform group-hover:-translate-y-0.5">
                           <div className="aspect-[3/4] bg-gradient-to-br from-accent/25 to-accent/5 flex items-center justify-center overflow-hidden">
@@ -495,7 +496,7 @@ export default function App() {
                           <Trash2 size={12} />
                         </button>
                       </button>
-                    ))}
+                    ), 'library-volumes')}
                   </div>
                 </div>
               )}
@@ -515,7 +516,7 @@ export default function App() {
                     </GlassCard>
                   )}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {mangas.map(manga => (
+                    {interleaveWithAds(mangas, manga => (
                       <button key={manga.id} onClick={() => setActiveMangaId(manga.id)} className="stagger-item group relative text-left">
                         <GlassCard className="overflow-hidden flex flex-col h-full transition-transform group-hover:-translate-y-0.5">
                           <div className="aspect-[3/4] bg-gradient-to-br from-accent/25 to-accent/5 flex items-center justify-center overflow-hidden">
@@ -538,7 +539,7 @@ export default function App() {
                           <Trash2 size={12} />
                         </button>
                       </button>
-                    ))}
+                    ), 'library-series')}
                   </div>
                 </div>
               )}
@@ -558,7 +559,7 @@ export default function App() {
                     </GlassCard>
                   )}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                    {workspaces.map(ws => (
+                    {interleaveWithAds(workspaces, ws => (
                       <button key={ws.id} onClick={() => setActiveWorkspaceId(ws.id)} className="stagger-item group relative text-left">
                         <GlassCard className="overflow-hidden flex flex-col h-full transition-transform group-hover:-translate-y-0.5">
                           <div className="aspect-[3/4] bg-gradient-to-br from-accent/25 to-accent/5 flex items-center justify-center overflow-hidden">
@@ -581,7 +582,7 @@ export default function App() {
                           <Trash2 size={12} />
                         </button>
                       </button>
-                    ))}
+                    ), 'library-workspaces')}
                   </div>
                 </div>
               )}
