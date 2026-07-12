@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
-import adImage from '../assets/a103ba81-1f9b-41dc-a6db-cd0109797bcb.png';
+import adImage1 from '../assets/a103ba81-1f9b-41dc-a6db-cd0109797bcb.png';
+import adImage2 from '../assets/ad-2.png';
 
 interface Ad {
   imageUrl: string;
   linkUrl: string;
 }
 
-const ADS: Ad[] = [{ imageUrl: adImage, linkUrl: '' }];
+const ADS: Ad[] = [
+  { imageUrl: adImage1, linkUrl: '' },
+  { imageUrl: adImage2, linkUrl: '' },
+];
 const ROTATE_MS = 10000;
 
 // Shared across every AdSlot instance so a broken image (bad URL, 404,
@@ -55,13 +59,13 @@ export function AdSlot({ placement, className }: { placement?: string; className
       rel="noopener noreferrer sponsored"
       aria-label="Advertisement"
       data-placement={placement}
-      className={`liquid-glass block w-full overflow-hidden rounded-2xl aspect-[1080/220] ${className || ''}`}
+      className={`liquid-glass block w-full overflow-hidden rounded-2xl ${className || ''}`}
     >
       <img
         key={validIndex}
         src={ad.imageUrl}
         alt="Advertisement"
-        className="w-full h-full object-cover animate-ad-fade"
+        className="w-full h-auto object-contain animate-ad-fade"
         draggable={false}
         onError={() => {
           brokenAds.add(validIndex);
