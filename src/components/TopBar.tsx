@@ -1,20 +1,26 @@
-import { useState } from 'react';
-import { Bell, User, Search, Sun, Moon } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Bell, User, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { IconButton } from './ui';
 import { useTeamAuth, profileFromSession } from '../lib/teamAuth';
+import { unreadCount } from '../lib/notifications';
+import { NotificationsPanel } from './NotificationsPanel';
 import logo from '../assets/logo-new.jpg';
 
 export function TopBar() {
-  const [searchOpen, setSearchOpen] = useState(false);
   const { resolvedTheme, toggleTheme } = useTheme();
   const { session } = useTeamAuth();
   const profile = profileFromSession(session);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+
+  const refreshUnread = () => { if (session) unreadCount().then(setUnread); };
+  useEffect(refreshUnread, [session]);
 
   return (
     <div className="liquid-glass-bar w-full h-14 sm:h-16 rounded-b-[22px] lg:rounded-none border border-hairline border-t-0 lg:border-x-0 px-2.5 sm:px-6 flex items-center justify-between gap-2 shrink-0 z-40 sticky top-0">
       {/* Brand */}
-      <div className={`flex items-center gap-2.5 min-w-0 shrink-0 ${searchOpen ? 'hidden sm:flex' : 'flex'}`}>
+      <div className="flex items-center gap-2.5 min-w-0 shrink-0">
         <img
           src={logo}
           alt="MET"
@@ -26,32 +32,8 @@ export function TopBar() {
         </span>
       </div>
 
-      {/* Search & Utility */}
-      <div className="flex items-center gap-4 min-w-0 flex-1 justify-end sm:justify-start">
-        {/* Compact icon-only trigger on narrow screens */}
-        <IconButton
-          onClick={() => setSearchOpen(v => !v)}
-          className="sm:hidden"
-          aria-label="Search"
-        >
-          <Search size={16} />
-        </IconButton>
-        <div className={`relative group ${searchOpen ? 'absolute left-2.5 right-2.5 top-1/2 -translate-y-1/2 z-10' : 'hidden'} sm:static sm:block sm:translate-y-0`}>
-          <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-            <Search size={16} className="text-ink-faint group-focus-within:text-accent transition-colors" />
-          </div>
-          <input
-            type="text"
-            placeholder="Search workspace..."
-            autoFocus={searchOpen}
-            onBlur={() => setSearchOpen(false)}
-            className="w-full sm:w-64 bg-elevated sm:bg-ink/5 border border-hairline hover:border-accent/30 focus:border-accent rounded-xl pl-10 pr-4 py-2 text-sm text-ink outline-none transition-all placeholder:text-ink-faint focus:bg-accent-soft focus:shadow-[0_0_15px_var(--color-accent-soft)]"
-          />
-        </div>
-      </div>
-
       {/* Right Side: Theme toggle, Notifications + Profile */}
-      <div className={`items-center gap-1.5 xs:gap-2 sm:gap-3 shrink-0 ${searchOpen ? 'hidden sm:flex' : 'flex'}`}>
+      <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-3 shrink-0">
         <div className="flex items-center gap-0.5 xs:gap-1 bg-ink/5 border border-hairline rounded-full p-1">
           {/* Theme toggle */}
           <IconButton
@@ -67,10 +49,11 @@ export function TopBar() {
           <IconButton
             size="sm"
             aria-label="Notifications"
+            onClick={() => setNotifOpen(true)}
             className="relative !bg-transparent !border-0 hover:!bg-accent-soft hover:!text-accent"
           >
             <Bell size={16} />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full ring-2 ring-[var(--color-surface)]"></span>
+            {unread > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full ring-2 ring-[var(--color-surface)]"></span>}
           </IconButton>
         </div>
 
@@ -88,6 +71,8 @@ export function TopBar() {
           </div>
         </div>
       </div>
+
+      <NotificationsPanel open={notifOpen} onClose={() => setNotifOpen(false)} onChanged={refreshUnread} />
     </div>
   );
 }

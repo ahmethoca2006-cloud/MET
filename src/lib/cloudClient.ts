@@ -53,6 +53,11 @@ export function useCloudClient() {
   const [uploadLabel, setUploadLabel] = useState('');
   const [uploadTotalBytes, setUploadTotalBytes] = useState(0);
 
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadLabel, setDownloadLabel] = useState('');
+  const [downloadTotalBytes, setDownloadTotalBytes] = useState(0);
+
   const loadMe = useCallback(async (newClient: TelegramClient) => {
     try {
       const me = await newClient.getMe();
@@ -405,9 +410,14 @@ export function useCloudClient() {
     });
     if (!result.isConfirmed) return;
 
+    setIsDownloading(true);
+    setDownloadProgress(0);
+    setDownloadLabel(file.name);
+    setDownloadTotalBytes(file.sizeBytes);
     try {
-      swal({ title: 'Downloading from Cloud...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-      const buffer = await client?.downloadMedia(file.msg);
+      const buffer = await client?.downloadMedia(file.msg, {
+        progressCallback: (progress: number) => setDownloadProgress(Math.round(progress * 100)),
+      } as any);
       if (buffer) {
         const blob = new Blob([buffer]);
         const url = window.URL.createObjectURL(blob);
@@ -420,12 +430,13 @@ export function useCloudClient() {
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
-        Swal.close();
       } else {
         swal({ title: 'Error', text: 'Empty file buffer received', icon: 'error' });
       }
     } catch (e: any) {
       swal({ title: 'Error', text: e?.message || 'Download failed', icon: 'error' });
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -511,6 +522,11 @@ export function useCloudClient() {
     uploadTotalBytes,
     uploadFile,
     uploadWorkspaceBackup,
+
+    isDownloading,
+    downloadProgress,
+    downloadLabel,
+    downloadTotalBytes,
     downloadCloudFile,
     restoreWorkspaceFromCloud,
 

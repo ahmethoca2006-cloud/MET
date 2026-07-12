@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { IconButton } from './IconButton';
@@ -23,6 +23,13 @@ const SIZE_CLASSES: Record<NonNullable<ModalProps['size']>, string> = {
 };
 
 export function Modal({ open, onClose, title, children, footer, size = 'md', className, dismissible = true }: ModalProps) {
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [open]);
+
   if (!open) return null;
 
   return (

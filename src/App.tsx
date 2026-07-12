@@ -25,7 +25,8 @@ import { Studio } from './components/studio/Studio';
 import { useAutomationEngine } from './lib/automationEngine';
 import { useCloudClient } from './lib/cloudClient';
 import { migrateWorkspace } from './lib/migrate';
-import type { NavTabId } from './config/navTabs';
+import type { NavTabId, HomeSubTabId } from './config/navTabs';
+import { HomeSummary } from './components/HomeSummary';
 
 export default function App() {
   const [showSplash, setShowSplash] = useState(true);
@@ -39,7 +40,8 @@ export default function App() {
   const [activeVolumeId, setActiveVolumeId] = useState<string | null>(null);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
 
-  const [activeNavigationTab, setActiveNavigationTab] = useState<NavTabId>('library');
+  const [activeNavigationTab, setActiveNavigationTab] = useState<NavTabId>('home');
+  const [homeSubTab, setHomeSubTab] = useState<HomeSubTabId>('library');
 
   // Create workspace modal
   const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
@@ -339,21 +341,40 @@ export default function App() {
             <SettingsPanel onShowPrivacy={() => setShowPrivacyModal(true)} onShowTerms={() => setShowTermsModal(true)} />
           )}
 
-          {activeNavigationTab === 'cloud' && (
-            <div className="space-y-4">
-              <AdSlot placement="cloud-top" />
-              <CloudStorage
-                cc={cloudClient}
-                workspaces={workspaces}
-                onImportWorkspace={handleImportWorkspace}
-                automationEngine={automationEngine}
-              />
-            </div>
-          )}
-
           {activeNavigationTab === 'teams' && <TeamsPanel />}
 
-          {activeNavigationTab === 'library' && (
+          {activeNavigationTab === 'home' && (
+            <div className="space-y-5">
+              <HomeSummary workspaces={workspaces} cc={cloudClient} />
+
+              <div className="grid grid-cols-2 gap-2 max-w-xs">
+                <button
+                  onClick={() => setHomeSubTab('library')}
+                  className={`py-2 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${homeSubTab === 'library' ? 'bg-accent-soft border-accent text-accent' : 'bg-ink/5 border-hairline text-ink-muted'}`}
+                >
+                  Library
+                </button>
+                <button
+                  onClick={() => setHomeSubTab('cloud')}
+                  className={`py-2 rounded-xl border text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${homeSubTab === 'cloud' ? 'bg-accent-soft border-accent text-accent' : 'bg-ink/5 border-hairline text-ink-muted'}`}
+                >
+                  Cloud
+                </button>
+              </div>
+
+              {homeSubTab === 'cloud' && (
+                <div className="space-y-4">
+                  <AdSlot placement="cloud-top" />
+                  <CloudStorage
+                    cc={cloudClient}
+                    workspaces={workspaces}
+                    onImportWorkspace={handleImportWorkspace}
+                    automationEngine={automationEngine}
+                  />
+                </div>
+              )}
+
+              {homeSubTab === 'library' && (
             <div className="space-y-5">
               {!activeChapter && <AdSlot placement="library-top" />}
 
@@ -586,11 +607,13 @@ export default function App() {
                 </div>
               )}
             </div>
+              )}
+            </div>
           )}
         </main>
       </div>
 
-      <BottomTabBar activeTab={activeNavigationTab} onTabChange={setActiveNavigationTab} onCreatePress={handleCreatePress} />
+      <BottomTabBar activeTab={activeNavigationTab} onTabChange={setActiveNavigationTab} />
 
       {/* Create Workspace Modal */}
       <Modal

@@ -28,20 +28,43 @@ function rememberEmail(email: string) {
   localStorage.setItem(KNOWN_EMAILS_KEY, JSON.stringify([email, ...existing].slice(0, 8)));
 }
 
+async function syncProfile(session: Session): Promise<boolean> {
+  const meta = session.user.user_metadata || {};
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({
+      id: session.user.id,
+      email: session.user.email,
+      name: meta.name || '',
+      avatar: meta.avatar || '',
+    })
+    .select('is_admin')
+    .single();
+  if (error) {
+    console.error('Failed to sync profile:', error);
+    return false;
+  }
+  return !!data?.is_admin;
+}
+
 export function useTeamAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
+      if (data.session) syncProfile(data.session).then(setIsAdmin);
     }).catch((err) => {
       console.error('Failed to load Supabase session:', err);
       setLoading(false);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
+      if (newSession) syncProfile(newSession).then(setIsAdmin);
+      else setIsAdmin(false);
     });
     return () => listener.subscription.unsubscribe();
   }, []);
@@ -69,6 +92,7 @@ export function useTeamAuth() {
     if (!error) {
       const { data } = await supabase.auth.getSession();
       setSession(data.session);
+      if (data.session) await syncProfile(data.session);
     }
     return error ? error.message : null;
   }, []);
@@ -85,5 +109,5 @@ export function useTeamAuth() {
     return error ? error.message : null;
   }, []);
 
-  return { session, loading, signIn, signUp, signOut, updateProfile, signInWithGoogle };
+  return { session, loading, isAdmin, signIn, signUp, signOut, updateProfile, signInWithGoogle };
 }

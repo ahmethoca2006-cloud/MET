@@ -1,6 +1,7 @@
-import { Settings, Users, CloudCog, LayoutGrid, type LucideIcon } from 'lucide-react';
+import { Settings, Users, Home, type LucideIcon } from 'lucide-react';
 
-export type NavTabId = 'settings' | 'teams' | 'cloud' | 'library';
+export type NavTabId = 'home' | 'settings' | 'teams';
+export type HomeSubTabId = 'library' | 'cloud';
 
 export interface NavTab {
   id: NavTabId;
@@ -9,8 +10,7 @@ export interface NavTab {
 }
 
 export const NAV_TABS: NavTab[] = [
-  { id: 'settings', label: 'Settings', icon: Settings },
   { id: 'teams', label: 'Teams', icon: Users },
-  { id: 'cloud', label: 'Cloud', icon: CloudCog },
-  { id: 'library', label: 'Library', icon: LayoutGrid },
+  { id: 'home', label: 'Home', icon: Home },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
