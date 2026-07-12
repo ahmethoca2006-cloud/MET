@@ -99,6 +99,34 @@ export async function declineInvite(memberRowId: string): Promise<string | null>
   return error ? error.message : null;
 }
 
+export async function removeMember(memberRowId: string): Promise<string | null> {
+  const { error } = await supabase.from('team_members').delete().eq('id', memberRowId);
+  return error ? error.message : null;
+}
+
+async function setRole(memberRowId: string, role: 'leader' | 'member', notifyTitle: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('team_members')
+    .update({ role })
+    .eq('id', memberRowId)
+    .select('user_id, team_id, team:teams(name)')
+    .single();
+  if (error) return error.message;
+  if (data?.user_id) {
+    const teamName = (data as any).team?.name || 'your team';
+    await notify(data.user_id, notifyTitle, `Your role in ${teamName} is now ${role}.`);
+  }
+  return null;
+}
+
+export async function promoteToLeader(memberRowId: string): Promise<string | null> {
+  return setRole(memberRowId, 'leader', 'Promoted to Leader');
+}
+
+export async function demoteToMember(memberRowId: string): Promise<string | null> {
+  return setRole(memberRowId, 'member', 'Role updated');
+}
+
 export async function listTeamMembers(teamId: string): Promise<TeamMember[]> {
   const { data } = await supabase
     .from('team_members')
