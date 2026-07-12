@@ -36,6 +36,9 @@ export function useTeamAuth() {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setLoading(false);
+    }).catch((err) => {
+      console.error('Failed to load Supabase session:', err);
+      setLoading(false);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
