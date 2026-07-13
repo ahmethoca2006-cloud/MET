@@ -27,6 +27,6 @@ export const STUDIO_TOOLS: StudioTool[] = [
   { id: 'stamp', label: 'Clone Stamp', icon: Stamp, enabled: false },
   { id: 'eyedropper', label: 'Eyedropper', icon: Pipette, enabled: false },
 
-  { id: 'text', label: 'Text', icon: Type, enabled: false, groupStart: true },
+  { id: 'text', label: 'Text', icon: Type, enabled: true, groupStart: true },
   { id: 'crop', label: 'Crop', icon: Scissors, enabled: false },
 ];

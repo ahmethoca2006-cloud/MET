@@ -33,6 +33,29 @@ export const LAYER_TYPE_ICON: Record<StudioLayerType, LucideIcon> = {
   adjustment: SlidersHorizontal,
 };
 
+export type TextAlign = 'left' | 'center' | 'right';
+
+export const FONT_FAMILIES = [
+  'Anime Ace', 'CC Wild Words', 'Comic Sans MS', 'Arial', 'Georgia', 'Impact',
+];
+
+export interface TextLayerData {
+  content: string;
+  x: number;
+  y: number;
+  width: number;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  align: TextAlign;
+  bold: boolean;
+  italic: boolean;
+  lineHeight: number;
+  strokeColor: string;
+  strokeWidth: number;
+  rotation: number;
+}
+
 export interface StudioLayer {
   id: string;
   type: StudioLayerType;
@@ -43,6 +66,8 @@ export interface StudioLayer {
   blendMode: BlendMode;
   /** Background layers can't be deleted, reordered below, or have opacity/blend changed. */
   isBackground?: boolean;
+  /** Only present when type === 'text'. */
+  text?: TextLayerData;
 }
 
 export function createBackgroundLayer(): StudioLayer {
@@ -70,4 +95,84 @@ export function createLayer(type: StudioLayerType, name: string): StudioLayer {
     opacity: 1,
     blendMode: 'normal',
   };
+}
+
+export function createTextLayer(x: number, y: number): StudioLayer {
+  layerCounter += 1;
+  return {
+    id: `layer-${Date.now()}-${layerCounter}`,
+    type: 'text',
+    name: `Text ${layerCounter}`,
+    visible: true,
+    locked: false,
+    opacity: 1,
+    blendMode: 'normal',
+    text: {
+      content: '',
+      x,
+      y,
+      width: 240,
+      fontFamily: FONT_FAMILIES[0],
+      fontSize: 28,
+      color: '#000000',
+      align: 'center',
+      bold: false,
+      italic: false,
+      lineHeight: 1.15,
+      strokeColor: '#ffffff',
+      strokeWidth: 0,
+      rotation: 0,
+    },
+  };
+}
+
+/**
+ * TypeR-style scripted lettering: a style is picked per script line by matching
+ * a prefix (e.g. "!!" for SFX), then stripped before the text is placed.
+ */
+export interface TyperStyle {
+  id: string;
+  name: string;
+  /** Empty prefix ("") matches any line that no other, more specific style claims first. */
+  prefix: string;
+  fontFamily: string;
+  fontSize: number;
+  color: string;
+  bold: boolean;
+  italic: boolean;
+  strokeColor: string;
+  strokeWidth: number;
+}
+
+export const DEFAULT_TYPER_STYLES: TyperStyle[] = [
+  { id: 'dialogue', name: 'Dialogue', prefix: '', fontFamily: FONT_FAMILIES[0], fontSize: 26, color: '#000000', bold: false, italic: false, strokeColor: '#ffffff', strokeWidth: 0 },
+  { id: 'sfx', name: 'SFX', prefix: '!!', fontFamily: 'Impact', fontSize: 44, color: '#ffffff', bold: true, italic: false, strokeColor: '#000000', strokeWidth: 3 },
+  { id: 'thought', name: 'Thought', prefix: '~', fontFamily: FONT_FAMILIES[0], fontSize: 24, color: '#000000', bold: false, italic: true, strokeColor: '#ffffff', strokeWidth: 0 },
+];
+
+export interface TyperLine {
+  /** Index into the original script (for progress display), skipping ignored/empty lines. */
+  raw: string;
+  content: string;
+  style: TyperStyle;
+}
+
+/**
+ * Parses a pasted script into placeable lines. Lines starting with "##" are
+ * ignored (notes). Longer prefixes are checked first so "!!" doesn't get
+ * shadowed by an empty-prefix style.
+ */
+export function parseTyperScript(script: string, styles: TyperStyle[]): TyperLine[] {
+  const sortedStyles = [...styles].sort((a, b) => b.prefix.length - a.prefix.length);
+  return script
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && !line.startsWith('##'))
+    .map(raw => {
+      const style = sortedStyles.find(s => s.prefix && raw.startsWith(s.prefix))
+        ?? sortedStyles.find(s => s.prefix === '')
+        ?? styles[0];
+      const content = style.prefix ? raw.slice(style.prefix.length).trim() : raw;
+      return { raw, content, style };
+    });
 }

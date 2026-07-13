@@ -1,12 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Page } from '../../types';
 import { StudioToolbar } from './StudioToolbar';
-import { StudioCanvas } from './StudioCanvas';
+import { StudioCanvas, type StudioCanvasHandle } from './StudioCanvas';
 import { StudioPagesPanel } from './StudioPagesPanel';
 import { ToolRail } from './ToolRail';
 import { RightDock } from './RightDock';
 import { LayersPanel } from './LayersPanel';
-import { createBackgroundLayer, createLayer, type StudioLayer } from './studioTypes';
+import { TextPanel } from './TextPanel';
+import { TyperPanel } from './TyperPanel';
+import {
+  createBackgroundLayer, createLayer, createTextLayer, parseTyperScript,
+  DEFAULT_TYPER_STYLES, type StudioLayer, type TextLayerData, type TyperStyle,
+} from './studioTypes';
 
 interface StudioProps {
   chapterName: string;
@@ -15,6 +20,7 @@ interface StudioProps {
 }
 
 export function Studio({ chapterName, pages, onBack }: StudioProps) {
+  const canvasRef = useRef<StudioCanvasHandle>(null);
   const [activePageId, setActivePageId] = useState<string | null>(pages[0]?.id ?? null);
   const [activeTool, setActiveTool] = useState('select');
   const [showCleaned, setShowCleaned] = useState(false);
@@ -24,6 +30,14 @@ export function Studio({ chapterName, pages, onBack }: StudioProps) {
   // Per-page layer stacks. Each page always has a locked "Background" layer at index 0.
   const [layersByPage, setLayersByPage] = useState<Record<string, StudioLayer[]>>({});
   const [activeLayerId, setActiveLayerId] = useState<string | null>('background');
+  const [dockTab, setDockTab] = useState('layers');
+
+  // TypeR: scripted lettering — paste a script, arm it, click bubbles to stamp lines in order.
+  const [typerScript, setTyperScript] = useState('');
+  const [typerStyles, setTyperStyles] = useState<TyperStyle[]>(DEFAULT_TYPER_STYLES);
+  const [typerIndex, setTyperIndex] = useState(0);
+  const [typerArmed, setTyperArmed] = useState(false);
+  const typerLines = useMemo(() => parseTyperScript(typerScript, typerStyles), [typerScript, typerStyles]);
 
   useEffect(() => {
     if (!pages.find(p => p.id === activePageId)) {
@@ -50,6 +64,11 @@ export function Studio({ chapterName, pages, onBack }: StudioProps) {
     const layer = createLayer('clean-patch', `Layer ${layers.length}`);
     updateLayers(current => [...current, layer]);
     setActiveLayerId(layer.id);
+  }
+
+  function selectLayer(id: string) {
+    setActiveLayerId(id);
+    if (layers.find(l => l.id === id)?.type === 'text') setDockTab('text');
   }
 
   function handleDuplicateLayer(id: string) {
@@ -97,11 +116,54 @@ export function Studio({ chapterName, pages, onBack }: StudioProps) {
     updateLayers(current => current.map(l => l.id === id ? { ...l, blendMode } : l));
   }
 
+  function handleAddTextLayer(x: number, y: number) {
+    const layer = createTextLayer(x, y);
+
+    if (typerArmed && typerLines[typerIndex]) {
+      const { content, style } = typerLines[typerIndex];
+      layer.name = `Text: ${content.slice(0, 20)}`;
+      layer.text = {
+        ...layer.text!,
+        content,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        color: style.color,
+        bold: style.bold,
+        italic: style.italic,
+        strokeColor: style.strokeColor,
+        strokeWidth: style.strokeWidth,
+      };
+      updateLayers(current => [...current, layer]);
+      setActiveLayerId(layer.id);
+      const nextIndex = typerIndex + 1;
+      setTyperIndex(nextIndex);
+      if (nextIndex >= typerLines.length) setTyperArmed(false);
+      return;
+    }
+
+    updateLayers(current => [...current, layer]);
+    setActiveLayerId(layer.id);
+    setActiveTool('select');
+    setDockTab('text');
+  }
+
+  function handleUpdateTextLayer(id: string, patch: Partial<TextLayerData>) {
+    updateLayers(current => current.map(l =>
+      l.id === id && l.type === 'text' && l.text ? { ...l, text: { ...l.text, ...patch } } : l
+    ));
+  }
+
+  function handleCenterTextLayer(id: string) {
+    canvasRef.current?.centerTextLayerInBubble(id);
+  }
+
+  const activeLayer = layers.find(l => l.id === activeLayerId) ?? null;
+
   const layersPanel = (
     <LayersPanel
       layers={layers}
       activeLayerId={activeLayerId}
-      onSelect={setActiveLayerId}
+      onSelect={selectLayer}
       onToggleVisible={handleToggleVisible}
       onToggleLocked={handleToggleLocked}
       onOpacityChange={handleOpacityChange}
@@ -115,6 +177,23 @@ export function Studio({ chapterName, pages, onBack }: StudioProps) {
 
   const pagesPanel = (
     <StudioPagesPanel pages={pages} activePageId={activePageId} onSelect={setActivePageId} orientation="vertical" />
+  );
+
+  const textPanel = activeLayer?.type === 'text' ? (
+    <TextPanel layer={activeLayer} onUpdate={handleUpdateTextLayer} onCenter={handleCenterTextLayer} />
+  ) : null;
+
+  const typerPanel = (
+    <TyperPanel
+      script={typerScript}
+      onScriptChange={setTyperScript}
+      styles={typerStyles}
+      onStylesChange={setTyperStyles}
+      index={typerIndex}
+      onIndexChange={setTyperIndex}
+      armed={typerArmed}
+      onArmedChange={(armed) => { setTyperArmed(armed); if (armed) setActiveTool('text'); }}
+    />
   );
 
   return (
@@ -138,15 +217,29 @@ export function Studio({ chapterName, pages, onBack }: StudioProps) {
         </div>
 
         <div className="flex-1 min-h-0 min-w-0">
-          <StudioCanvas page={activePage} showCleaned={showCleaned} activeTool={activeTool} fitSignal={fitSignal} layers={layers} />
+          <StudioCanvas
+            ref={canvasRef}
+            page={activePage}
+            showCleaned={showCleaned}
+            activeTool={activeTool}
+            fitSignal={fitSignal}
+            layers={layers}
+            activeLayerId={activeLayerId}
+            onSelectLayer={selectLayer}
+            onAddTextLayer={handleAddTextLayer}
+            onUpdateTextLayer={handleUpdateTextLayer}
+          />
         </div>
 
         {dockOpen && (
           <>
             <div className="hidden lg:block h-full">
               <RightDock
-                defaultTab="layers"
+                activeTab={dockTab}
+                onTabChange={setDockTab}
                 tabs={[
+                  ...(textPanel ? [{ id: 'text', label: 'Text', content: textPanel }] : []),
+                  { id: 'typer', label: 'TypeR', content: typerPanel },
                   { id: 'layers', label: 'Layers', content: layersPanel },
                   { id: 'pages', label: 'Pages', content: pagesPanel },
                 ]}
@@ -154,9 +247,12 @@ export function Studio({ chapterName, pages, onBack }: StudioProps) {
             </div>
             <div className="lg:hidden absolute inset-x-0 bottom-12 h-[45vh] z-10">
               <RightDock
-                defaultTab="pages"
+                activeTab={dockTab}
+                onTabChange={setDockTab}
                 className="!w-full !border-l-0 border-t border-hairline rounded-t-2xl"
                 tabs={[
+                  ...(textPanel ? [{ id: 'text', label: 'Text', content: textPanel }] : []),
+                  { id: 'typer', label: 'TypeR', content: typerPanel },
                   { id: 'pages', label: 'Pages', content: <StudioPagesPanel pages={pages} activePageId={activePageId} onSelect={setActivePageId} orientation="horizontal" /> },
                   { id: 'layers', label: 'Layers', content: layersPanel },
                 ]}

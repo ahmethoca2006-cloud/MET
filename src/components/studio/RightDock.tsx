@@ -5,10 +5,15 @@ interface RightDockProps {
   tabs: { id: string; label: string; content: ReactNode }[];
   defaultTab?: string;
   className?: string;
+  /** Controlled mode: when provided (with onTabChange), the dock no longer tracks its own tab state. */
+  activeTab?: string;
+  onTabChange?: (id: string) => void;
 }
 
-export function RightDock({ tabs, defaultTab, className }: RightDockProps) {
-  const [activeTab, setActiveTab] = useState(defaultTab ?? tabs[0]?.id);
+export function RightDock({ tabs, defaultTab, className, activeTab: activeTabProp, onTabChange }: RightDockProps) {
+  const [internalTab, setInternalTab] = useState(defaultTab ?? tabs[0]?.id);
+  const activeTab = activeTabProp ?? internalTab;
+  const setActiveTab = onTabChange ?? setInternalTab;
   const active = tabs.find(t => t.id === activeTab) ?? tabs[0];
 
   return (
