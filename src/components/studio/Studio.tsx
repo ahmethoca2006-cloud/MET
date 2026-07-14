@@ -137,6 +137,25 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
   const [typerArmed, setTyperArmed] = useState(false);
   const typerLines = useMemo(() => parseTyperScript(typerScript, typerStyles), [typerScript, typerStyles]);
 
+  // TypeR "Page N" auto page-switching: when the armed script advances onto a line tagged with
+  // a page hint, jump there automatically (matching by number in the filename, falling back to
+  // 1-based position) so placement lands on the right page without a manual page click first.
+  useEffect(() => {
+    if (!typerArmed) return;
+    const hint = typerLines[typerIndex]?.pageHint;
+    if (!hint) return;
+    const wantNumber = Number(hint);
+    const target = pages.find(p => {
+      const match = p.original.filename.match(/(\d+)(?!.*\d)/);
+      return match && Number(match[1]) === wantNumber;
+    }) ?? pages[wantNumber - 1];
+    if (target && target.id !== activePageId) {
+      setActivePageId(target.id);
+      swalToast({ icon: 'info', title: `TypeR: switched to page ${hint}` });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typerArmed, typerIndex, typerLines, pages]);
+
   // --- Persistence: load this chapter's studio data (layers, TypeR script/styles, raster
   // pixels) on mount, then autosave on change. Kept in a separate idb-keyval store from the
   // main page/chapter library so painting doesn't trigger a full-library rewrite per stroke.
@@ -341,7 +360,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
     const layer = createTextLayer(x, y);
 
     if (typerArmed && typerLines[typerIndex]) {
-      const { content, style } = typerLines[typerIndex];
+      const { content, style, boldOverride, italicOverride } = typerLines[typerIndex];
       layer.name = `Text: ${content.slice(0, 20)}`;
       layer.text = {
         ...layer.text!,
@@ -349,8 +368,8 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
         fontFamily: style.fontFamily,
         fontSize: style.fontSize,
         color: style.color,
-        bold: style.bold,
-        italic: style.italic,
+        bold: boldOverride ?? style.bold,
+        italic: italicOverride ?? style.italic,
         strokeColor: style.strokeColor,
         strokeWidth: style.strokeWidth,
       };
