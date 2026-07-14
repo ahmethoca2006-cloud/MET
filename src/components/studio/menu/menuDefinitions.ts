@@ -5,6 +5,8 @@ export interface MenuItemDef {
   action?: () => void;
   disabled?: boolean;
   separator?: boolean;
+  /** When set (true or false), renders a checkmark reflecting this item's on/off state. */
+  checked?: boolean;
 }
 
 export interface MenuDef {
@@ -35,7 +37,12 @@ export interface MenuActions {
   hasActiveTextLayer: boolean;
   panelTabs: { id: string; label: string }[];
   showPanel: (id: string) => void;
+  isPanelVisible: (id: string) => boolean;
   showShortcutsHelp: () => void;
+  isFullscreen: boolean;
+  toggleFullscreen: () => void;
+  panelsHidden: boolean;
+  togglePanelsHidden: () => void;
 }
 
 export function buildMenus(a: MenuActions): MenuDef[] {
@@ -66,6 +73,7 @@ export function buildMenus(a: MenuActions): MenuDef[] {
         { id: 'fit', label: 'Fit to Screen', shortcut: 'Ctrl+0', action: a.fit },
         { id: 'sep2', label: '', separator: true },
         { id: 'toggle-dock', label: 'Toggle Panels', action: a.toggleDock },
+        { id: 'fullscreen', label: 'Fullscreen', shortcut: 'Ctrl+Shift+F', action: a.toggleFullscreen, checked: a.isFullscreen },
       ],
     },
     {
@@ -93,8 +101,12 @@ export function buildMenus(a: MenuActions): MenuDef[] {
       label: 'Window',
       items: [
         { id: 'toggle-dock', label: 'Toggle Panels', action: a.toggleDock },
+        { id: 'hide-panels', label: 'Hide All Panels', shortcut: 'Tab', action: a.togglePanelsHidden, checked: a.panelsHidden },
+        { id: 'fullscreen', label: 'Fullscreen', shortcut: 'Ctrl+Shift+F', action: a.toggleFullscreen, checked: a.isFullscreen },
         { id: 'sep1', label: '', separator: true },
-        ...a.panelTabs.map(t => ({ id: `show-${t.id}`, label: `Show ${t.label}`, action: () => a.showPanel(t.id) })),
+        ...a.panelTabs.map(t => ({
+          id: `show-${t.id}`, label: `Show ${t.label}`, action: () => a.showPanel(t.id), checked: a.isPanelVisible(t.id),
+        })),
       ],
     },
     {

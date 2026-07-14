@@ -24,7 +24,8 @@ import { useStudioShortcuts } from './shortcuts/useStudioShortcuts';
 import { FIXED_SHORTCUTS_HELP } from './shortcuts/shortcutsMap';
 import { MenuBar } from './menu/MenuBar';
 import { buildMenus } from './menu/menuDefinitions';
-import { swal } from '../../lib/swalTheme';
+import { swal, swalToast } from '../../lib/swalTheme';
+import { WorkflowBar } from './WorkflowBar';
 import {
   createBackgroundLayer, createLayer, createTextLayer, parseTyperScript,
   DEFAULT_TYPER_STYLES, type StudioLayer, type TextLayerData, type TyperStyle,
@@ -47,7 +48,7 @@ export function Studio(props: StudioProps) {
   return (
     <ColorProvider>
       <HistoryProvider>
-        <DockProvider>
+        <DockProvider storageKey={props.chapterId}>
           <StudioInner {...props} />
         </DockProvider>
       </HistoryProvider>
@@ -69,6 +70,26 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
   const paintSettings: PaintSettings = { size: brushSize, hardness: brushHardness, opacity: brushOpacity, flow: brushFlow, color: foreground, tolerance };
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
 
+  const studioRootRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [panelsHidden, setPanelsHidden] = useState(false);
+
+  useEffect(() => {
+    function onFullscreenChange() { setIsFullscreen(document.fullscreenElement === studioRootRef.current); }
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      studioRootRef.current?.requestFullscreen().catch(() => {
+        swalToast({ icon: 'error', title: "Couldn't enter fullscreen" });
+      });
+    }
+  }
+
   useStudioShortcuts({
     onToolChange: (id) => setActiveTool(id),
     onBrushSizeStep: (delta) => setBrushSize(v => Math.max(1, Math.min(200, v + delta))),
@@ -78,6 +99,8 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
     onZoomOut: () => canvasRef.current?.zoomOut(),
     onFit: () => setFitSignal(s => s + 1),
     onToggleCleaned: () => setShowCleaned(v => !v),
+    onToggleFullscreen: toggleFullscreen,
+    onTogglePanelsHidden: () => setPanelsHidden(v => !v),
   });
   const [activePageId, setActivePageId] = useState<string | null>(pages[0]?.id ?? null);
   const [activeTool, setActiveTool] = useState('select');
@@ -85,6 +108,19 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
   const [overlayOpacity, setOverlayOpacity] = useState(0);
   const [fitSignal, setFitSignal] = useState(0);
   const [dockOpen, setDockOpen] = useState(true);
+  const [tabletOverlayTab, setTabletOverlayTab] = useState<string | null>(null);
+  const tabletOverlayRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tabletOverlayTab) return;
+    function onPointerDown(e: PointerEvent) {
+      if (tabletOverlayRef.current && !tabletOverlayRef.current.contains(e.target as Node)) {
+        setTabletOverlayTab(null);
+      }
+    }
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [tabletOverlayTab]);
 
   // Per-page layer stacks. Each page always has a locked "Background" layer at index 0.
   const [layersByPage, setLayersByPage] = useState<Record<string, StudioLayer[]>>({});
@@ -417,25 +453,54 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
     hasActiveTextLayer: activeLayer?.type === 'text',
     panelTabs: allTabs.map(t => ({ id: t.id, label: t.label })),
     showPanel: (id) => dock.selectTab(id),
+    isPanelVisible: (id) => dock.isFloating(id) || dock.activeTab.top === id || dock.activeTab.bottom === id,
     showShortcutsHelp: () => swal({
       title: 'Keyboard Shortcuts',
       html: `<div style="text-align:left;font-size:13px;line-height:1.8">${FIXED_SHORTCUTS_HELP.map(s => `<div><b>${s.keys}</b> — ${s.description}</div>`).join('')}</div>`,
     }),
+    isFullscreen,
+    toggleFullscreen,
+    panelsHidden,
+    togglePanelsHidden: () => setPanelsHidden(v => !v),
   });
 
-  const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches);
+  const [layoutMode, setLayoutMode] = useState<'desktop' | 'tablet' | 'phone'>(() => {
+    if (typeof window === 'undefined') return 'desktop';
+    if (window.matchMedia('(min-width: 1024px)').matches) return 'desktop';
+    if (window.matchMedia('(min-width: 768px)').matches) return 'tablet';
+    return 'phone';
+  });
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)');
-    const onChange = () => setIsDesktop(mq.matches);
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
+    const mqDesktop = window.matchMedia('(min-width: 1024px)');
+    const mqTablet = window.matchMedia('(min-width: 768px)');
+    const onChange = () => setLayoutMode(mqDesktop.matches ? 'desktop' : mqTablet.matches ? 'tablet' : 'phone');
+    mqDesktop.addEventListener('change', onChange);
+    mqTablet.addEventListener('change', onChange);
+    return () => {
+      mqDesktop.removeEventListener('change', onChange);
+      mqTablet.removeEventListener('change', onChange);
+    };
   }, []);
+  const isDesktop = layoutMode === 'desktop';
+
+  const workflowStages = [
+    { id: 'chapter', label: 'Chapter', active: true, tracked: true },
+    { id: 'page', label: 'Page', active: !!activePage, tracked: true },
+    { id: 'detection', label: 'Detection', active: false, tracked: false },
+    { id: 'cleaning', label: 'Cleaning', active: !!activePage?.cleaned, tracked: true },
+    { id: 'drawing', label: 'Drawing', active: layers.some(l => l.type === 'clean-patch'), tracked: true },
+    { id: 'typesetting', label: 'Typesetting', active: layers.some(l => l.type === 'text' && !!l.text?.content), tracked: true },
+    { id: 'review', label: 'Review', active: false, tracked: false },
+    { id: 'export', label: 'Export', active: false, tracked: false },
+  ];
 
   return (
-    <div className="fixed inset-0 lg:relative lg:inset-auto flex flex-col bg-[#0b0b0d] lg:rounded-2xl lg:overflow-hidden lg:border lg:border-hairline lg:h-[calc(100vh-8.5rem)] z-30">
-      <div className="hidden lg:block relative z-40">
-        <MenuBar menus={menus} />
-      </div>
+    <div ref={studioRootRef} className="fixed inset-0 lg:relative lg:inset-auto flex flex-col bg-[#0b0b0d] lg:rounded-2xl lg:overflow-hidden lg:border lg:border-hairline lg:h-[calc(100vh-8.5rem)] z-30">
+      {!panelsHidden && (
+        <div className="hidden lg:block relative z-40">
+          <MenuBar menus={menus} />
+        </div>
+      )}
       <StudioToolbar
         chapterName={chapterName}
         showCleaned={showCleaned}
@@ -446,33 +511,44 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
         onBack={onBack}
         onToggleDock={() => setDockOpen(v => !v)}
         hasCleaned={!!activePage?.cleaned}
+        isFullscreen={isFullscreen}
+        onToggleFullscreen={toggleFullscreen}
       />
 
-      <ToolOptionsBar
-        activeTool={activeTool}
-        size={brushSize}
-        onSizeChange={setBrushSize}
-        hardness={brushHardness}
-        onHardnessChange={setBrushHardness}
-        opacity={brushOpacity}
-        onOpacityChange={setBrushOpacity}
-        flow={brushFlow}
-        onFlowChange={setBrushFlow}
-        tolerance={tolerance}
-        onToleranceChange={setTolerance}
-      />
+      <WorkflowBar stages={workflowStages} />
+
+      {!panelsHidden && (
+        <ToolOptionsBar
+          activeTool={activeTool}
+          size={brushSize}
+          onSizeChange={setBrushSize}
+          hardness={brushHardness}
+          onHardnessChange={setBrushHardness}
+          opacity={brushOpacity}
+          onOpacityChange={setBrushOpacity}
+          flow={brushFlow}
+          onFlowChange={setBrushFlow}
+          tolerance={tolerance}
+          onToleranceChange={setTolerance}
+        />
+      )}
 
       <div className="flex-1 flex min-h-0 flex-col-reverse lg:flex-row">
-        <div className="lg:hidden relative z-40">
-          <ToolRail activeTool={activeTool} onToolChange={setActiveTool} orientation="horizontal" />
-        </div>
-        <div className="hidden lg:block h-full relative z-40">
-          <ToolRail activeTool={activeTool} onToolChange={setActiveTool} orientation="vertical" />
-        </div>
+        {!panelsHidden && (
+          <>
+            <div className="lg:hidden relative z-40">
+              <ToolRail activeTool={activeTool} onToolChange={setActiveTool} orientation="horizontal" />
+            </div>
+            <div className="hidden lg:block h-full relative z-40">
+              <ToolRail activeTool={activeTool} onToolChange={setActiveTool} orientation="vertical" />
+            </div>
+          </>
+        )}
 
-        {/* Single shared canvas instance — desktop wraps it in a resizable split with the dock, mobile overlays the dock as a bottom sheet. */}
+        {/* Single shared canvas instance — desktop wraps it in a resizable split with the dock,
+            tablet collapses the dock to a tap-to-open icon strip overlay, phone uses a bottom sheet. */}
         <div className="flex-1 min-h-0 min-w-0 relative">
-          <PanelGroup direction="horizontal" autoSaveId={isDesktop && dockOpen ? DOCK_PANEL_GROUP_AUTOSAVE_ID : undefined}>
+          <PanelGroup direction="horizontal" autoSaveId={isDesktop && dockOpen && !panelsHidden ? DOCK_PANEL_GROUP_AUTOSAVE_ID : undefined}>
             <Panel minSize={30} defaultSize={75}>
               <StudioCanvas
                 ref={canvasRef}
@@ -493,7 +569,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
                 onEyedropperPick={setForeground}
               />
             </Panel>
-            {isDesktop && dockOpen && (
+            {!panelsHidden && isDesktop && dockOpen && (
               <>
                 <PanelResizeHandle className="w-1 bg-hairline hover:bg-accent/50 transition-colors" />
                 <Panel minSize={16} defaultSize={25} maxSize={40}>
@@ -521,7 +597,31 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
             )}
           </PanelGroup>
 
-          {!isDesktop && dockOpen && (
+          {!panelsHidden && layoutMode === 'tablet' && dockOpen && (
+            <div className="absolute inset-y-0 right-0 z-20 flex">
+              <div className="liquid-glass-bar w-11 shrink-0 border-l border-hairline flex flex-col items-center py-2 gap-1">
+                {allTabs.map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTabletOverlayTab(prev => prev === t.id ? null : t.id)}
+                    title={t.label}
+                    className={`w-9 h-9 rounded-lg text-[10px] font-semibold flex items-center justify-center transition-colors ${
+                      tabletOverlayTab === t.id ? 'bg-accent-soft text-accent' : 'text-ink-faint hover:text-ink hover:bg-ink/5'
+                    }`}
+                  >
+                    {t.label.slice(0, 2).toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              {tabletOverlayTab && (
+                <div ref={tabletOverlayRef} className="w-72 max-w-[75vw] h-full liquid-glass-heavy border-l border-hairline shadow-2xl">
+                  {allTabs.find(t => t.id === tabletOverlayTab)?.content}
+                </div>
+              )}
+            </div>
+          )}
+
+          {!panelsHidden && layoutMode === 'phone' && dockOpen && (
             <div className="absolute inset-x-0 bottom-0 h-[45vh] z-10">
               <RightDock
                 activeTab={dock.activeTab.bottom}
@@ -534,7 +634,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
         </div>
       </div>
 
-      {Object.entries(dock.floating).map(([tabId, rect]) => {
+      {!panelsHidden && Object.entries(dock.floating).map(([tabId, rect]) => {
         const tab = allTabs.find(t => t.id === tabId);
         if (!tab) return null;
         return (
