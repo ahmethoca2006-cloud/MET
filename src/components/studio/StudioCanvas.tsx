@@ -21,6 +21,9 @@ export interface ExportSnapshot {
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
+const GRID_SIZE = 100;
+const RULER_SIZE = 20;
+const RULER_STEP = 100;
 const MARQUEE_TOOLS = new Set(['marquee-rect', 'marquee-ellipse', 'marquee-row', 'marquee-col', 'crop']);
 const LASSO_TOOLS = new Set(['lasso-freehand']);
 
@@ -29,6 +32,8 @@ interface StudioCanvasProps {
   showCleaned: boolean;
   /** 0 disables; >0 blends the original page as a translucent overlay above the cleaned page. */
   overlayOpacity: number;
+  showGrid?: boolean;
+  showRulers?: boolean;
   activeTool: string;
   /** Bumped by the parent (e.g. toolbar "Fit" button) to force a re-fit. */
   fitSignal: number;
@@ -72,7 +77,7 @@ export interface StudioCanvasHandle {
 }
 
 export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(function StudioCanvas({
-  page, showCleaned, overlayOpacity, activeTool, fitSignal, layers,
+  page, showCleaned, overlayOpacity, showGrid = false, showRulers = false, activeTool, fitSignal, layers,
   activeLayerId, onSelectLayer, onAddTextLayer, onUpdateTextLayer,
   paintSettings, selection, onSelectionChange, onPaintStrokeEnd, onEyedropperPick,
 }, ref) {
@@ -743,6 +748,17 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
             )}
           </Layer>
 
+          {showGrid && image && (
+            <Layer listening={false}>
+              {Array.from({ length: Math.floor(image.width / GRID_SIZE) + 1 }, (_, i) => i * GRID_SIZE).map(x => (
+                <Line key={`gx${x}`} points={[x, 0, x, image.height]} stroke="#00aaff" strokeWidth={1 / scale} opacity={0.35} />
+              ))}
+              {Array.from({ length: Math.floor(image.height / GRID_SIZE) + 1 }, (_, i) => i * GRID_SIZE).map(y => (
+                <Line key={`gy${y}`} points={[0, y, image.width, y]} stroke="#00aaff" strokeWidth={1 / scale} opacity={0.35} />
+              ))}
+            </Layer>
+          )}
+
           <Layer>
             <Transformer
               ref={transformerRef}
@@ -780,6 +796,23 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
         <div className="absolute inset-0 flex items-center justify-center text-white/40 text-sm">
           Select a page to begin
         </div>
+      )}
+      {showRulers && image && (
+        <>
+          <div className="absolute top-0 left-0 right-0 h-5 bg-black/60 border-b border-white/10 overflow-hidden pointer-events-none z-10" style={{ marginLeft: RULER_SIZE }}>
+            {Array.from({ length: Math.floor(image.width / RULER_STEP) + 1 }, (_, i) => i * RULER_STEP).map(x => (
+              <span key={x} className="absolute top-0 h-full flex items-center text-[9px] text-white/50 font-mono border-l border-white/20 pl-0.5"
+                style={{ left: pos.x + x * scale }}>{x}</span>
+            ))}
+          </div>
+          <div className="absolute top-0 left-0 bottom-0 w-5 bg-black/60 border-r border-white/10 overflow-hidden pointer-events-none z-10" style={{ marginTop: RULER_SIZE }}>
+            {Array.from({ length: Math.floor(image.height / RULER_STEP) + 1 }, (_, i) => i * RULER_STEP).map(y => (
+              <span key={y} className="absolute left-0 w-full text-[9px] text-white/50 font-mono border-t border-white/20 pt-0.5 text-center"
+                style={{ top: pos.y + y * scale }}>{y}</span>
+            ))}
+          </div>
+          <div className="absolute top-0 left-0 w-5 h-5 bg-black/70 z-20" />
+        </>
       )}
       <div className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg liquid-glass text-[11px] font-mono text-white/80">
         {Math.round(scale * 100)}%

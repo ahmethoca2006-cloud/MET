@@ -44,6 +44,10 @@ export interface MenuActions {
   toggleFullscreen: () => void;
   panelsHidden: boolean;
   togglePanelsHidden: () => void;
+  showGrid: boolean;
+  toggleGrid: () => void;
+  showRulers: boolean;
+  toggleRulers: () => void;
 }
 
 export function buildMenus(a: MenuActions): MenuDef[] {
@@ -75,6 +79,9 @@ export function buildMenus(a: MenuActions): MenuDef[] {
         { id: 'zoom-out', label: 'Zoom Out', shortcut: 'Ctrl+-', action: a.zoomOut },
         { id: 'fit', label: 'Fit to Screen', shortcut: 'Ctrl+0', action: a.fit },
         { id: 'sep2', label: '', separator: true },
+        { id: 'grid', label: 'Grid', action: a.toggleGrid, checked: a.showGrid },
+        { id: 'rulers', label: 'Rulers', action: a.toggleRulers, checked: a.showRulers },
+        { id: 'sep3', label: '', separator: true },
         { id: 'toggle-dock', label: 'Toggle Panels', action: a.toggleDock },
         { id: 'fullscreen', label: 'Fullscreen', shortcut: 'Ctrl+Shift+F', action: a.toggleFullscreen, checked: a.isFullscreen },
       ],

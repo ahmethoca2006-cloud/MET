@@ -114,6 +114,8 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   const [activeTool, setActiveTool] = useState('select');
   const [showCleaned, setShowCleaned] = useState(false);
   const [overlayOpacity, setOverlayOpacity] = useState(0);
+  const [showGrid, setShowGrid] = useState(false);
+  const [showRulers, setShowRulers] = useState(false);
   const [fitSignal, setFitSignal] = useState(0);
   const [dockOpen, setDockOpen] = useState(true);
   const [tabletOverlayTab, setTabletOverlayTab] = useState<string | null>(null);
@@ -527,6 +529,10 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     toggleFullscreen,
     panelsHidden,
     togglePanelsHidden: () => setPanelsHidden(v => !v),
+    showGrid,
+    toggleGrid: () => setShowGrid(v => !v),
+    showRulers,
+    toggleRulers: () => setShowRulers(v => !v),
   });
 
   const [layoutMode, setLayoutMode] = useState<'desktop' | 'tablet' | 'phone'>(() => {
@@ -620,6 +626,8 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
                 page={activePage}
                 showCleaned={showCleaned}
                 overlayOpacity={overlayOpacity}
+                showGrid={showGrid}
+                showRulers={showRulers}
                 activeTool={activeTool}
                 fitSignal={fitSignal}
                 layers={layers}
