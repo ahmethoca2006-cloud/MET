@@ -687,13 +687,22 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
           )}
 
           {!panelsHidden && layoutMode === 'phone' && dockOpen && (
-            <div className="absolute inset-x-0 bottom-0 h-[45vh] z-10">
-              <RightDock
-                activeTab={dock.activeTab.bottom}
-                onTabChange={(id) => dock.setActiveTab('bottom', id)}
-                className="!w-full !border-l-0 border-t border-hairline rounded-t-2xl"
-                tabs={mobileTabs}
-              />
+            <div className="absolute inset-x-0 bottom-0 top-[8vh] z-20 flex flex-col animate-slide-up-sheet">
+              <button
+                aria-label="Close panel"
+                onClick={() => setDockOpen(false)}
+                className="h-6 shrink-0 flex items-center justify-center liquid-glass-bar !bg-transparent border-x border-t border-hairline rounded-t-2xl"
+              >
+                <span className="w-10 h-1 rounded-full bg-ink/20" />
+              </button>
+              <div className="flex-1 min-h-0">
+                <RightDock
+                  activeTab={dock.activeTab.bottom}
+                  onTabChange={(id) => dock.setActiveTab('bottom', id)}
+                  className="!w-full !h-full !border-l-0 border-x border-hairline"
+                  tabs={mobileTabs}
+                />
+              </div>
             </div>
           )}
         </div>
