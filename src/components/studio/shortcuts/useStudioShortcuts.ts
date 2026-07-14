@@ -12,6 +12,7 @@ interface UseStudioShortcutsArgs {
   onToggleCleaned: () => void;
   onToggleFullscreen: () => void;
   onTogglePanelsHidden: () => void;
+  onExport: () => void;
 }
 
 function isTextInputFocused(): boolean {
@@ -23,7 +24,7 @@ function isTextInputFocused(): boolean {
 
 export function useStudioShortcuts({
   onToolChange, onBrushSizeStep, onSwapColors, onResetColors, onZoomIn, onZoomOut, onFit,
-  onToggleCleaned, onToggleFullscreen, onTogglePanelsHidden,
+  onToggleCleaned, onToggleFullscreen, onTogglePanelsHidden, onExport,
 }: UseStudioShortcutsArgs) {
   const toolMap = useMemo(() => buildToolShortcutMap(), []);
 
@@ -41,6 +42,7 @@ export function useStudioShortcuts({
         if (key === '=' || key === '+') { e.preventDefault(); onZoomIn(); return; }
         if (key === '-') { e.preventDefault(); onZoomOut(); return; }
         if (key === '0') { e.preventDefault(); onFit(); return; }
+        if (key === 'e') { e.preventDefault(); onExport(); return; }
         return; // other mod combos (undo/redo) are handled by useKeyboardUndo
       }
 
@@ -57,5 +59,5 @@ export function useStudioShortcuts({
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toolMap, onToolChange, onBrushSizeStep, onSwapColors, onResetColors, onZoomIn, onZoomOut, onFit, onToggleCleaned, onToggleFullscreen, onTogglePanelsHidden]);
+  }, [toolMap, onToolChange, onBrushSizeStep, onSwapColors, onResetColors, onZoomIn, onZoomOut, onFit, onToggleCleaned, onToggleFullscreen, onTogglePanelsHidden, onExport]);
 }

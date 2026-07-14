@@ -26,6 +26,8 @@ import { MenuBar } from './menu/MenuBar';
 import { buildMenus } from './menu/menuDefinitions';
 import { swal, swalToast } from '../../lib/swalTheme';
 import { WorkflowBar } from './WorkflowBar';
+import { ExportDialog } from './ExportDialog';
+import { exportPsd } from '../../lib/exportPsd';
 import {
   createBackgroundLayer, createLayer, createTextLayer, parseTyperScript,
   DEFAULT_TYPER_STYLES, type StudioLayer, type TextLayerData, type TyperStyle,
@@ -73,6 +75,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
   const studioRootRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [panelsHidden, setPanelsHidden] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
     function onFullscreenChange() { setIsFullscreen(document.fullscreenElement === studioRootRef.current); }
@@ -101,6 +104,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
     onToggleCleaned: () => setShowCleaned(v => !v),
     onToggleFullscreen: toggleFullscreen,
     onTogglePanelsHidden: () => setPanelsHidden(v => !v),
+    onExport: () => setExportOpen(true),
   });
   const [activePageId, setActivePageId] = useState<string | null>(pages[0]?.id ?? null);
   const [activeTool, setActiveTool] = useState('select');
@@ -433,6 +437,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
 
   const menus = buildMenus({
     onBack: onBack,
+    onExport: () => setExportOpen(true),
     undo: history.undo,
     redo: history.redo,
     canUndo: history.canUndo,
@@ -649,6 +654,14 @@ function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
           </FloatingPanel>
         );
       })}
+
+      <ExportDialog
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        fileBaseName={`${chapterName}${activePage ? `_${activePage.original.filename.replace(/\.[^.]+$/, '')}` : ''}`.replace(/\s+/g, '_')}
+        getSnapshot={() => canvasRef.current?.getExportSnapshot() ?? null}
+        exportPsd={exportPsd}
+      />
     </div>
   );
 }

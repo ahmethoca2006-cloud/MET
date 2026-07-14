@@ -18,6 +18,7 @@ export const FIXED_SHORTCUTS_HELP: { keys: string; description: string }[] = [
   { keys: 'O', description: 'Toggle Original / Cleaned view' },
   { keys: 'Tab', description: 'Hide / show all panels' },
   { keys: 'Ctrl/Cmd+Shift+F', description: 'Toggle fullscreen' },
+  { keys: 'Ctrl/Cmd+E', description: 'Export page' },
   { keys: 'Space (hold) + drag', description: 'Pan the canvas, regardless of active tool' },
   { keys: 'Middle-mouse drag', description: 'Pan the canvas, regardless of active tool' },
   { keys: 'Ctrl/Cmd+Z', description: 'Undo' },

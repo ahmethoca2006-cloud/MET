@@ -9,6 +9,15 @@ import { getOrCreateCanvasFor, deleteCanvasFor, type PaintCanvasRegistry } from 
 import { usePaintLayer, PAINT_TOOLS } from './paint/usePaintLayer';
 import type { Selection } from './paint/selection';
 import { strokePenPath, type PaintSettings } from './paint/paintEngine';
+import type { SerializedStudioLayer } from '../../lib/studioProjectStore';
+
+export interface ExportSnapshot {
+  width: number;
+  height: number;
+  backgroundDataUrl: string;
+  /** Bottom-to-top, same order as the layers panel; raster layers carry their pixels as a data URL. */
+  layers: SerializedStudioLayer[];
+}
 
 const MIN_SCALE = 0.1;
 const MAX_SCALE = 8;
@@ -54,6 +63,8 @@ export interface StudioCanvasHandle {
   exportRasterLayers: () => Record<string, string>;
   /** Decodes a saved data URL back into a layer's raster canvas (for restoring persisted state). */
   loadRasterLayer: (layerId: string, dataUrl: string) => Promise<void>;
+  /** Snapshots the active page's background + full layer stack for flatten/PSD export. Null if no page is loaded. */
+  getExportSnapshot: () => ExportSnapshot | null;
   getZoom: () => number;
   zoomTo: (scale: number) => void;
   zoomIn: () => void;
@@ -176,6 +187,19 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
       layerNodeRefs.current[layerId]?.batchDraw();
+    },
+    getExportSnapshot() {
+      const img = imageRef.current;
+      if (!img) return null;
+      const bgCanvas = document.createElement('canvas');
+      bgCanvas.width = img.width;
+      bgCanvas.height = img.height;
+      bgCanvas.getContext('2d')!.drawImage(img, 0, 0);
+      const exportLayers: SerializedStudioLayer[] = layersRef.current.map((l) => {
+        const canvas = paintCanvasRegistry.current[l.id];
+        return canvas ? { ...l, raster: canvas.toDataURL('image/png') } : l;
+      });
+      return { width: img.width, height: img.height, backgroundDataUrl: bgCanvas.toDataURL('image/png'), layers: exportLayers };
     },
     getZoom() {
       return scale;

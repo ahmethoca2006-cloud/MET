@@ -17,6 +17,7 @@ export interface MenuDef {
 
 export interface MenuActions {
   onBack: () => void;
+  onExport: () => void;
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
@@ -51,6 +52,8 @@ export function buildMenus(a: MenuActions): MenuDef[] {
       id: 'project',
       label: 'Project',
       items: [
+        { id: 'export', label: 'Export…', shortcut: 'Ctrl+E', action: a.onExport },
+        { id: 'sep1', label: '', separator: true },
         { id: 'back', label: 'Back to Pages', action: a.onBack },
       ],
     },
