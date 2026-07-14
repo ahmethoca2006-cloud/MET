@@ -50,6 +50,10 @@ export interface StudioCanvasHandle {
   deletePaintCanvas: (layerId: string) => void;
   /** Forces Konva to redraw a layer after its raster canvas was mutated directly (e.g. by undo/redo). */
   redrawLayer: (layerId: string) => void;
+  /** Snapshots every raster layer with a live canvas backing (for persistence) as PNG data URLs, keyed by layer id. */
+  exportRasterLayers: () => Record<string, string>;
+  /** Decodes a saved data URL back into a layer's raster canvas (for restoring persisted state). */
+  loadRasterLayer: (layerId: string, dataUrl: string) => Promise<void>;
   getZoom: () => number;
   zoomTo: (scale: number) => void;
   zoomIn: () => void;
@@ -144,6 +148,34 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     },
     deletePaintCanvas(layerId: string) {
       deleteCanvasFor(paintCanvasRegistry.current, layerId);
+    },
+    exportRasterLayers() {
+      // Exports every raster canvas the registry currently holds — not just the active page's —
+      // since the registry accumulates canvases for every page visited this session, and pages
+      // navigated away from still need their edits captured on the next autosave.
+      const out: Record<string, string> = {};
+      for (const [layerId, canvas] of Object.entries(paintCanvasRegistry.current)) {
+        if (canvas) out[layerId] = canvas.toDataURL('image/png');
+      }
+      return out;
+    },
+    async loadRasterLayer(layerId: string, dataUrl: string) {
+      // The background image for a freshly-switched-to page loads asynchronously, so give it
+      // a brief window to arrive rather than silently dropping the restore on a race.
+      const img = imageRef.current ?? await waitForImage(imageRef);
+      if (!img) return;
+      const source = new window.Image();
+      await new Promise<void>((resolve, reject) => {
+        source.onload = () => resolve();
+        source.onerror = () => reject(new Error(`Failed to decode raster layer ${layerId}`));
+        source.src = dataUrl;
+      });
+      const canvas = getOrCreateCanvasFor(paintCanvasRegistry.current, layerId, img.width, img.height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+      layerNodeRefs.current[layerId]?.batchDraw();
     },
     getZoom() {
       return scale;
@@ -684,6 +716,18 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     </div>
   );
 });
+
+function waitForImage(imageRef: { current: HTMLImageElement | null }, timeoutMs = 3000): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const start = performance.now();
+    function check() {
+      if (imageRef.current) { resolve(imageRef.current); return; }
+      if (performance.now() - start > timeoutMs) { resolve(null); return; }
+      requestAnimationFrame(check);
+    }
+    check();
+  });
+}
 
 function clampScale(value: number) {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));

@@ -29,8 +29,15 @@ import {
   createBackgroundLayer, createLayer, createTextLayer, parseTyperScript,
   DEFAULT_TYPER_STYLES, type StudioLayer, type TextLayerData, type TyperStyle,
 } from './studioTypes';
+import {
+  loadChapterStudioData, saveChapterStudioData, pushVersionSnapshot,
+  type ChapterStudioData, type SerializedStudioLayer,
+} from '../../lib/studioProjectStore';
+
+const AUTOSAVE_DEBOUNCE_MS = 1200;
 
 interface StudioProps {
+  chapterId: string;
   chapterName: string;
   pages: Page[];
   onBack: () => void;
@@ -48,7 +55,7 @@ export function Studio(props: StudioProps) {
   );
 }
 
-function StudioInner({ chapterName, pages, onBack }: StudioProps) {
+function StudioInner({ chapterId, chapterName, pages, onBack }: StudioProps) {
   const canvasRef = useRef<StudioCanvasHandle>(null);
   const { foreground, setForeground, swap: swapColors, reset: resetColors } = useColor();
   const history = useHistory();
@@ -89,6 +96,104 @@ function StudioInner({ chapterName, pages, onBack }: StudioProps) {
   const [typerIndex, setTyperIndex] = useState(0);
   const [typerArmed, setTyperArmed] = useState(false);
   const typerLines = useMemo(() => parseTyperScript(typerScript, typerStyles), [typerScript, typerStyles]);
+
+  // --- Persistence: load this chapter's studio data (layers, TypeR script/styles, raster
+  // pixels) on mount, then autosave on change. Kept in a separate idb-keyval store from the
+  // main page/chapter library so painting doesn't trigger a full-library rewrite per stroke.
+  const loadedRef = useRef(false);
+  const rasterByPageRef = useRef<Record<string, Record<string, string>>>({});
+  const hydratedPagesRef = useRef<Set<string>>(new Set());
+  const dirtyRef = useRef(false);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const layersByPageRef = useRef(layersByPage);
+  layersByPageRef.current = layersByPage;
+  const typerScriptRef = useRef(typerScript);
+  typerScriptRef.current = typerScript;
+  const typerStylesRef = useRef(typerStyles);
+  typerStylesRef.current = typerStyles;
+
+  useEffect(() => {
+    let cancelled = false;
+    loadedRef.current = false;
+    hydratedPagesRef.current = new Set();
+    rasterByPageRef.current = {};
+    (async () => {
+      const saved = await loadChapterStudioData(chapterId);
+      if (cancelled) return;
+      if (saved) {
+        const nextLayersByPage: Record<string, StudioLayer[]> = {};
+        const nextRasterByPage: Record<string, Record<string, string>> = {};
+        for (const [pageId, serialized] of Object.entries(saved.layersByPage)) {
+          nextLayersByPage[pageId] = serialized.map(({ raster: _raster, ...layer }) => layer);
+          const rasterMap: Record<string, string> = {};
+          for (const l of serialized) if (l.raster) rasterMap[l.id] = l.raster;
+          if (Object.keys(rasterMap).length > 0) nextRasterByPage[pageId] = rasterMap;
+        }
+        setLayersByPage(nextLayersByPage);
+        setTyperScript(saved.typerScript);
+        if (saved.typerStyles.length > 0) setTyperStyles(saved.typerStyles);
+        rasterByPageRef.current = nextRasterByPage;
+      }
+      loadedRef.current = true;
+    })();
+    return () => { cancelled = true; };
+  }, [chapterId]);
+
+  // Hydrate the active page's raster (painted pixel) layers once its canvas is ready.
+  useEffect(() => {
+    if (!loadedRef.current || !activePageId) return;
+    if (hydratedPagesRef.current.has(activePageId)) return;
+    hydratedPagesRef.current.add(activePageId);
+    const raster = rasterByPageRef.current[activePageId];
+    if (!raster) return;
+    (async () => {
+      for (const [layerId, dataUrl] of Object.entries(raster)) {
+        await canvasRef.current?.loadRasterLayer(layerId, dataUrl);
+      }
+    })();
+  }, [activePageId, layersByPage]);
+
+  function scheduleAutosave() {
+    dirtyRef.current = true;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(flushAutosave, AUTOSAVE_DEBOUNCE_MS);
+  }
+
+  function flushAutosave() {
+    if (!dirtyRef.current || !loadedRef.current) return;
+    dirtyRef.current = false;
+    // Covers every raster layer touched so far this session (any page, not just the active one —
+    // the paint canvas registry keeps every visited page's canvases alive until its layer is deleted).
+    const liveRaster = canvasRef.current?.exportRasterLayers() ?? {};
+    const mergedLayersByPage: Record<string, SerializedStudioLayer[]> = {};
+    for (const [pageId, pageLayers] of Object.entries(layersByPageRef.current)) {
+      mergedLayersByPage[pageId] = pageLayers.map((l) => {
+        const raster = liveRaster[l.id] ?? rasterByPageRef.current[pageId]?.[l.id];
+        return raster ? { ...l, raster } : l;
+      });
+    }
+    const data: ChapterStudioData = {
+      schemaVersion: 1,
+      layersByPage: mergedLayersByPage,
+      typerScript: typerScriptRef.current,
+      typerStyles: typerStylesRef.current,
+      updatedAt: new Date().toISOString(),
+    };
+    saveChapterStudioData(chapterId, data).catch(console.error);
+    pushVersionSnapshot(chapterId, data).catch(console.error);
+  }
+
+  useEffect(() => {
+    if (loadedRef.current) scheduleAutosave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layersByPage, typerScript, typerStyles]);
+
+  // Flush a pending save immediately when leaving this chapter's Studio (e.g. "Back to Pages").
+  useEffect(() => () => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    flushAutosave();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!pages.find(p => p.id === activePageId)) {
@@ -160,6 +265,8 @@ function StudioInner({ chapterName, pages, onBack }: StudioProps) {
       undo: () => { ctx.putImageData(before, 0, 0); canvasRef.current?.redrawLayer(layerId); },
       redo: () => { ctx.putImageData(after, 0, 0); canvasRef.current?.redrawLayer(layerId); },
     });
+    // Raster pixel edits don't touch layersByPage state, so they need an explicit autosave nudge.
+    scheduleAutosave();
   }
 
   function handleMoveLayer(id: string, direction: 'up' | 'down') {
