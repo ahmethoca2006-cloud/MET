@@ -18,7 +18,7 @@ import { DockProvider, useDock } from './dock/DockContext';
 import { FloatingPanel } from './dock/FloatingPanel';
 import { DOCK_PANEL_GROUP_AUTOSAVE_ID } from './dock/dockLayout';
 import { NO_SELECTION, hasSelection, featherSelection, growSelection, type Selection } from './paint/selection';
-import type { PaintSettings, LiquifyMode } from './paint/paintEngine';
+import type { PaintSettings, LiquifyMode, SymmetryMode } from './paint/paintEngine';
 import { PAINT_TOOLS } from './paint/usePaintLayer';
 import { ToolOptionsBar } from './toolOptions/ToolOptionsBar';
 import { useStudioShortcuts } from './shortcuts/useStudioShortcuts';
@@ -79,9 +79,10 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   const [brushFlow, setBrushFlow] = useState(1);
   const [tolerance, setTolerance] = useState(32);
   const [liquifyMode, setLiquifyMode] = useState<LiquifyMode>('push');
+  const [symmetry, setSymmetry] = useState<SymmetryMode>('none');
   const paintSettings: PaintSettings = {
     size: brushSize, hardness: brushHardness, opacity: brushOpacity, flow: brushFlow,
-    color: foreground, bgColor: background, tolerance, liquifyMode,
+    color: foreground, bgColor: background, tolerance, liquifyMode, symmetry,
   };
   const [selection, setSelection] = useState<Selection>(NO_SELECTION);
 
@@ -209,6 +210,61 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   const [typerIndex, setTyperIndex] = useState(0);
   const [typerArmed, setTyperArmed] = useState(false);
   const typerLines = useMemo(() => parseTyperScript(typerScript, typerStyles), [typerScript, typerStyles]);
+  // Multi-Bubble mode: draw a rect per bubble (Rectangular Marquee) and queue it instead of
+  // placing immediately, then place every queued rect's line in one go, in script order.
+  const [multiBubbleMode, setMultiBubbleModeState] = useState(false);
+  const [multiBubbleRects, setMultiBubbleRects] = useState<{ x: number; y: number; width: number; height: number }[]>([]);
+
+  function setMultiBubbleMode(enabled: boolean) {
+    setMultiBubbleModeState(enabled);
+    setMultiBubbleRects([]);
+    if (typerArmed) setActiveTool(enabled ? 'marquee-rect' : 'text');
+  }
+
+  function handleAddBubbleRect() {
+    if (selection.kind !== 'rect') {
+      swalToast({ icon: 'info', title: 'Draw a rectangle around a bubble first' });
+      return;
+    }
+    setMultiBubbleRects(prev => [...prev, selection]);
+    setSelection(NO_SELECTION);
+  }
+
+  function handlePlaceAllBubbles() {
+    if (multiBubbleRects.length === 0) return;
+    const newLayers: StudioLayer[] = [];
+    let idx = typerIndex;
+    for (const rect of multiBubbleRects) {
+      const line = typerLines[idx];
+      if (!line) break;
+      const { content, style, boldOverride, italicOverride } = line;
+      const lineCount = content.split('\n').length || 1;
+      const textWidth = Math.max(40, Math.min(rect.width, 400));
+      const textHeight = lineCount * style.fontSize * 1.15;
+      const layer = createTextLayer(rect.x + rect.width / 2 - textWidth / 2, rect.y + rect.height / 2 - textHeight / 2);
+      layer.name = `Text: ${content.slice(0, 20)}`;
+      layer.text = {
+        ...layer.text!,
+        content,
+        width: textWidth,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        color: style.color,
+        bold: boldOverride ?? style.bold,
+        italic: italicOverride ?? style.italic,
+        strokeColor: style.strokeColor,
+        strokeWidth: style.strokeWidth,
+      };
+      newLayers.push(layer);
+      idx += 1;
+    }
+    updateLayers(current => [...current, ...newLayers], 'Place TypeR Multi-Bubble');
+    setTyperIndex(idx);
+    if (idx >= typerLines.length) setTyperArmed(false);
+    setMultiBubbleRects([]);
+    setActiveTool('select');
+    swalToast({ icon: 'success', title: `Placed ${newLayers.length} line${newLayers.length === 1 ? '' : 's'}` });
+  }
 
   // Pick up text sent from the Text Editor's "Send to TypeR" button, if any is waiting.
   useEffect(() => {
@@ -584,8 +640,13 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
       index={typerIndex}
       onIndexChange={setTyperIndex}
       armed={typerArmed}
-      onArmedChange={(armed) => { setTyperArmed(armed); if (armed) setActiveTool('text'); }}
+      onArmedChange={(armed) => { setTyperArmed(armed); if (armed) setActiveTool(multiBubbleMode ? 'marquee-rect' : 'text'); }}
       fontFamilies={allFontFamilies}
+      multiBubbleMode={multiBubbleMode}
+      onMultiBubbleModeChange={setMultiBubbleMode}
+      queuedBubbleCount={multiBubbleRects.length}
+      onAddBubbleRect={handleAddBubbleRect}
+      onPlaceAllBubbles={handlePlaceAllBubbles}
     />
   );
 
@@ -727,6 +788,8 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
           onToleranceChange={setTolerance}
           liquifyMode={liquifyMode}
           onLiquifyModeChange={setLiquifyMode}
+          symmetry={symmetry}
+          onSymmetryChange={setSymmetry}
         />
       )}
 
@@ -767,6 +830,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
                 onPaintStrokeEnd={handlePaintStrokeEnd}
                 onEyedropperPick={setForeground}
                 onCommitCrop={handleCommitCrop}
+                queuedBubbleRects={multiBubbleRects}
               />
             </Panel>
             {!panelsHidden && isDesktop && dockOpen && (

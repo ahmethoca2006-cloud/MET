@@ -5,6 +5,9 @@ export type PaintTool =
   | 'blur' | 'sharpen' | 'smudge' | 'dodge' | 'burn' | 'sponge' | 'contentAware'
   | 'shape-rect' | 'shape-ellipse' | 'shape-line' | 'spot-heal' | 'liquify';
 
+/** Mirrors brush/pencil/eraser strokes across the canvas center — 'horizontal' flips left-right (mirror axis is the vertical centerline), 'vertical' flips top-bottom, 'both' does both (4-way). */
+export type SymmetryMode = 'none' | 'horizontal' | 'vertical' | 'both';
+
 export interface PaintSettings {
   size: number;
   hardness: number; // 0-1
@@ -14,6 +17,7 @@ export interface PaintSettings {
   bgColor: string; // hex — used as the Gradient tool's "to" color (foreground-to-background, Photoshop convention)
   tolerance: number; // 0-255, used by bucket/wand
   liquifyMode: LiquifyMode;
+  symmetry: SymmetryMode;
 }
 
 function hexToRgb(hex: string): [number, number, number] {

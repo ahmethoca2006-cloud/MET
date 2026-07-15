@@ -56,6 +56,8 @@ interface StudioCanvasProps {
   onEyedropperPick?: (hex: string) => void;
   /** Fired on Enter/double-click while the Crop tool is active, to commit the current rect selection as a crop. */
   onCommitCrop?: () => void;
+  /** TypeR Multi-Bubble mode's already-queued rects, drawn as a distinct overlay from the live selection. */
+  queuedBubbleRects?: { x: number; y: number; width: number; height: number }[];
 }
 
 export interface StudioCanvasHandle {
@@ -96,6 +98,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   page, showCleaned, overlayOpacity, showGrid = false, showRulers = false, activeTool, fitSignal, layers,
   activeLayerId, onSelectLayer, onAddTextLayer, onUpdateTextLayer,
   paintSettings, selection, onSelectionChange, onPaintStrokeEnd, onEyedropperPick, onCommitCrop,
+  queuedBubbleRects,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -872,6 +875,10 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
               <Rect x={selection.bounds.x} y={selection.bounds.y} width={selection.bounds.width} height={selection.bounds.height}
                 stroke="#ffffff" strokeWidth={1 / scale} dash={[6 / scale, 4 / scale]} opacity={0.8} />
             )}
+            {queuedBubbleRects?.map((rect, i) => (
+              <Rect key={i} x={rect.x} y={rect.y} width={rect.width} height={rect.height}
+                stroke="#f59e0b" strokeWidth={1.5 / scale} dash={[4 / scale, 3 / scale]} />
+            ))}
             {penPoints.length > 0 && (
               <>
                 <Line points={penPoints.flatMap(p => [p.x, p.y])} stroke={paintSettings.color} strokeWidth={2 / scale} />

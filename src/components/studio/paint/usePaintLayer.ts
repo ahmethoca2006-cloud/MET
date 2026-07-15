@@ -101,6 +101,18 @@ export function usePaintLayer({ getCanvas, settings, selection, onSelectionChang
       // Stylus pressure (0-1, from PointerEvent.pressure) scales the effective brush size for this segment.
       const effectiveSettings = pressure !== 1 ? { ...settings, size: Math.max(1, settings.size * pressure) } : settings;
       strokeSegment(ctx, lastX, lastY, x, y, effectiveSettings, tool, selection);
+      // Symmetry mode: mirror the same segment across the canvas center. Real per-stamp
+      // mirroring (not just a post-hoc flip), so it works mid-stroke exactly like Photoshop's.
+      const w = ctx.canvas.width, h = ctx.canvas.height;
+      if (settings.symmetry === 'horizontal' || settings.symmetry === 'both') {
+        strokeSegment(ctx, w - lastX, lastY, w - x, y, effectiveSettings, tool, selection);
+      }
+      if (settings.symmetry === 'vertical' || settings.symmetry === 'both') {
+        strokeSegment(ctx, lastX, h - lastY, x, h - y, effectiveSettings, tool, selection);
+      }
+      if (settings.symmetry === 'both') {
+        strokeSegment(ctx, w - lastX, h - lastY, w - x, h - y, effectiveSettings, tool, selection);
+      }
     } else if (tool === 'clone' && cloneOffsetRef.current && sourceSnapshotRef.current) {
       cloneSegment(ctx, sourceSnapshotRef.current, lastX, lastY, x, y, settings.size, cloneOffsetRef.current.x, cloneOffsetRef.current.y, selection);
     } else if (tool === 'blur' || tool === 'sharpen' || tool === 'smudge' || tool === 'dodge' || tool === 'burn' || tool === 'sponge') {

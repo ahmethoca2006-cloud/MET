@@ -1,5 +1,5 @@
 import { findTool } from '../toolGroups';
-import type { LiquifyMode } from '../paint/paintEngine';
+import type { LiquifyMode, SymmetryMode } from '../paint/paintEngine';
 
 interface ToolOptionsBarProps {
   activeTool: string;
@@ -15,6 +15,8 @@ interface ToolOptionsBarProps {
   onToleranceChange: (v: number) => void;
   liquifyMode: LiquifyMode;
   onLiquifyModeChange: (v: LiquifyMode) => void;
+  symmetry: SymmetryMode;
+  onSymmetryChange: (v: SymmetryMode) => void;
 }
 
 const SIZE_TOOLS = new Set(['brush', 'pencil', 'eraser', 'clone', 'blur', 'sharpen', 'smudge', 'dodge', 'burn', 'sponge', 'spot-heal', 'shape-rect', 'shape-ellipse', 'shape-line', 'liquify']);
@@ -22,6 +24,7 @@ const HARDNESS_TOOLS = new Set(['brush', 'clone']);
 const FLOW_TOOLS = new Set(['brush', 'pencil', 'eraser', 'blur', 'sharpen', 'smudge', 'dodge', 'burn', 'sponge', 'liquify']);
 const OPACITY_TOOLS = new Set(['brush', 'pencil', 'eraser', 'bucket', 'gradient']);
 const TOLERANCE_TOOLS = new Set(['wand', 'bucket']);
+const SYMMETRY_TOOLS = new Set(['brush', 'pencil', 'eraser']);
 
 const LIQUIFY_MODES: { id: LiquifyMode; label: string }[] = [
   { id: 'push', label: 'Push' },
@@ -30,6 +33,13 @@ const LIQUIFY_MODES: { id: LiquifyMode; label: string }[] = [
   { id: 'bloat', label: 'Bloat' },
   { id: 'crystalize', label: 'Crystalize' },
   { id: 'reconstruct', label: 'Reconstruct' },
+];
+
+const SYMMETRY_MODES: { id: SymmetryMode; label: string }[] = [
+  { id: 'none', label: 'Off' },
+  { id: 'horizontal', label: 'Horizontal' },
+  { id: 'vertical', label: 'Vertical' },
+  { id: 'both', label: 'Both' },
 ];
 
 function Slider({ label, value, min, max, step, onChange, format }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; format?: (v: number) => string }) {
@@ -45,6 +55,7 @@ function Slider({ label, value, min, max, step, onChange, format }: { label: str
 export function ToolOptionsBar({
   activeTool, size, onSizeChange, hardness, onHardnessChange, opacity, onOpacityChange,
   flow, onFlowChange, tolerance, onToleranceChange, liquifyMode, onLiquifyModeChange,
+  symmetry, onSymmetryChange,
 }: ToolOptionsBarProps) {
   const tool = findTool(activeTool);
   const showSize = SIZE_TOOLS.has(activeTool);
@@ -53,8 +64,9 @@ export function ToolOptionsBar({
   const showOpacity = OPACITY_TOOLS.has(activeTool);
   const showTolerance = TOLERANCE_TOOLS.has(activeTool);
   const showLiquifyMode = activeTool === 'liquify';
+  const showSymmetry = SYMMETRY_TOOLS.has(activeTool);
 
-  if (!tool || (!showSize && !showHardness && !showFlow && !showOpacity && !showTolerance && !showLiquifyMode)) return null;
+  if (!tool || (!showSize && !showHardness && !showFlow && !showOpacity && !showTolerance && !showLiquifyMode && !showSymmetry)) return null;
 
   return (
     <div className="liquid-glass-bar flex items-center gap-4 px-3 h-10 shrink-0 border-b border-hairline overflow-x-auto">
@@ -76,6 +88,18 @@ export function ToolOptionsBar({
       {showFlow && <Slider label="Flow" value={flow * 100} min={0} max={100} step={1} onChange={(v) => onFlowChange(v / 100)} format={(v) => `${Math.round(v)}%`} />}
       {showOpacity && <Slider label="Opacity" value={opacity * 100} min={0} max={100} step={1} onChange={(v) => onOpacityChange(v / 100)} format={(v) => `${Math.round(v)}%`} />}
       {showTolerance && <Slider label="Tolerance" value={tolerance} min={0} max={100} step={1} onChange={onToleranceChange} />}
+      {showSymmetry && (
+        <label className="flex items-center gap-2 text-[11px] text-ink-faint shrink-0">
+          <span>Symmetry</span>
+          <select
+            value={symmetry}
+            onChange={(e) => onSymmetryChange(e.target.value as SymmetryMode)}
+            className="bg-ink/5 border border-hairline rounded-md px-1.5 py-1 text-ink text-[11px]"
+          >
+            {SYMMETRY_MODES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        </label>
+      )}
     </div>
   );
 }

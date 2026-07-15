@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Target, RotateCcw, Plus, Trash2, Copy, Download, Upload } from 'lucide-react';
+import { Target, RotateCcw, Plus, Trash2, Copy, Download, Upload, Layers as LayersIcon } from 'lucide-react';
 import { Textarea, IconButton } from '../ui';
 import { cn } from '../ui/cn';
 import { swal, swalToast } from '../../lib/swalTheme';
@@ -16,11 +16,19 @@ interface TyperPanelProps {
   onArmedChange: (armed: boolean) => void;
   /** Built-in fonts plus any custom fonts installed via the Fonts panel. */
   fontFamilies?: string[];
+  /** Multi-Bubble mode: draw a rect per bubble (Rectangular Marquee), queue it, then place every
+   *  queued rect's line in one go instead of one click-to-place bubble at a time. */
+  multiBubbleMode: boolean;
+  onMultiBubbleModeChange: (enabled: boolean) => void;
+  queuedBubbleCount: number;
+  onAddBubbleRect: () => void;
+  onPlaceAllBubbles: () => void;
 }
 
 export function TyperPanel({
   script, onScriptChange, styles, onStylesChange, index, onIndexChange, armed, onArmedChange,
   fontFamilies = FONT_FAMILIES,
+  multiBubbleMode, onMultiBubbleModeChange, queuedBubbleCount, onAddBubbleRect, onPlaceAllBubbles,
 }: TyperPanelProps) {
   const [editingStyleId, setEditingStyleId] = useState<string | null>(null);
   const [sizeStep, setSizeStep] = useState(2);
@@ -136,19 +144,53 @@ export function TyperPanel({
         )}
         {done && <div className="text-[11px] text-ink-faint italic">All lines placed.</div>}
 
-        <button
-          type="button"
-          disabled={lines.length === 0 || done}
-          onClick={() => onArmedChange(!armed)}
-          className={cn(
-            'flex items-center justify-center gap-2 h-9 rounded-lg text-xs font-medium border transition-colors',
-            'disabled:opacity-40 disabled:pointer-events-none',
-            armed ? 'bg-accent text-white border-accent' : 'bg-ink/5 border-hairline text-ink hover:bg-ink/10'
-          )}
-        >
-          <Target size={14} />
-          {armed ? 'Armed — click the canvas to place' : 'Arm placement'}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={lines.length === 0 || done}
+            onClick={() => onArmedChange(!armed)}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-2 h-9 rounded-lg text-xs font-medium border transition-colors',
+              'disabled:opacity-40 disabled:pointer-events-none',
+              armed ? 'bg-accent text-white border-accent' : 'bg-ink/5 border-hairline text-ink hover:bg-ink/10'
+            )}
+          >
+            <Target size={14} />
+            {armed
+              ? multiBubbleMode ? 'Armed — draw a rect per bubble' : 'Armed — click the canvas to place'
+              : 'Arm placement'}
+          </button>
+          <IconButton
+            size="sm"
+            active={multiBubbleMode}
+            aria-label="Multi-Bubble mode"
+            title="Multi-Bubble mode: queue several bubble rects, then place all their lines at once"
+            onClick={() => onMultiBubbleModeChange(!multiBubbleMode)}
+            className="!bg-transparent !w-9 !h-9"
+          >
+            <LayersIcon size={14} />
+          </IconButton>
+        </div>
+
+        {armed && multiBubbleMode && (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onAddBubbleRect}
+              className="flex-1 h-8 rounded-lg text-[11px] font-medium border border-hairline bg-ink/5 text-ink hover:bg-ink/10 transition-colors"
+            >
+              Add Bubble ({queuedBubbleCount})
+            </button>
+            <button
+              type="button"
+              disabled={queuedBubbleCount === 0}
+              onClick={onPlaceAllBubbles}
+              className="flex-1 h-8 rounded-lg text-[11px] font-medium border border-accent bg-accent text-white disabled:opacity-40 disabled:pointer-events-none hover:opacity-90 transition-colors"
+            >
+              Place All
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2 pt-2 border-t border-hairline/60">
           <div className="flex items-center justify-between">
