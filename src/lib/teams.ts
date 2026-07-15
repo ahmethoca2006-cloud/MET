@@ -63,6 +63,28 @@ export async function updateTeamSettings(teamId: string, fields: Partial<Pick<Te
   return error ? error.message : null;
 }
 
+export async function deleteTeam(teamId: string): Promise<string | null> {
+  const { error } = await supabase.from('teams').delete().eq('id', teamId);
+  return error ? error.message : null;
+}
+
+export async function broadcastToTeam(teamId: string, title: string, body: string): Promise<string | null> {
+  const [{ data: activeMembers }, { data: team }] = await Promise.all([
+    supabase.from('team_members').select('user_id').eq('team_id', teamId).eq('status', 'active').not('user_id', 'is', null),
+    supabase.from('teams').select('owner_id').eq('id', teamId).single(),
+  ]);
+  const recipients = new Set((activeMembers ?? []).map(m => m.user_id as string));
+  if (team?.owner_id) recipients.delete(team.owner_id);
+  await Promise.all(Array.from(recipients).map(userId => notify(userId, title, body)));
+
+  const { data: userData } = await supabase.auth.getUser();
+  const senderId = userData.user?.id;
+  if (senderId) {
+    await supabase.from('team_messages').insert({ team_id: teamId, sender_id: senderId, body: `📢 ${title}\n${body}` });
+  }
+  return null;
+}
+
 export async function getMyOwnedTeam(): Promise<Team | null> {
   const { data: userData } = await supabase.auth.getUser();
   const ownerId = userData.user?.id;

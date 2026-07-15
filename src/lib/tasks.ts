@@ -1,7 +1,6 @@
 import { supabase } from './supabaseClient';
 import { notify } from './notifications';
 
-export type TaskDifficulty = 'Easy' | 'Medium' | 'Hard';
 export type TaskStatus = 'todo' | 'in_progress' | 'under_review' | 'done' | 'cancelled';
 
 export interface Task {
@@ -18,7 +17,6 @@ export interface Task {
   attachment_msg_id: number | null;
   created_at: string;
   completed_at: string | null;
-  difficulty: TaskDifficulty;
   reward: number | null;
   job_types: string[];
   submission_type: 'file' | 'link' | null;
@@ -34,12 +32,12 @@ async function rpc(fn: string, args: Record<string, unknown>): Promise<string | 
 }
 
 export async function createTaskWithWorkflow(input: {
-  teamId: string; title: string; description: string; difficulty: TaskDifficulty;
+  teamId: string; title: string; description: string;
   jobTypes: string[]; dueDate: string | null; reward?: number;
 }): Promise<string | null> {
   const { data, error } = await supabase.rpc('task_create', {
     _team_id: input.teamId, _title: input.title, _description: input.description,
-    _difficulty: input.difficulty, _job_types: input.jobTypes, _due_date: input.dueDate,
+    _difficulty: 'Medium', _job_types: input.jobTypes, _due_date: input.dueDate,
     _reward: input.reward ?? null,
   });
   if (error) return error.message;

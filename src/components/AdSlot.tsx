@@ -59,13 +59,13 @@ export function AdSlot({ placement, className }: { placement?: string; className
       rel="noopener noreferrer sponsored"
       aria-label="Advertisement"
       data-placement={placement}
-      className={`relative flex items-center justify-center w-full h-20 sm:h-24 lg:h-28 rounded-2xl bg-ink/[0.03] overflow-hidden ${className || ''}`}
+      className={`relative block w-full max-w-2xl mx-auto aspect-[2/1] rounded-2xl overflow-hidden ${className || ''}`}
     >
       <img
         key={validIndex}
         src={ad.imageUrl}
         alt="Advertisement"
-        className="max-w-full max-h-full object-contain animate-ad-fade"
+        className="absolute inset-0 w-full h-full object-cover animate-ad-fade"
         draggable={false}
         onError={() => {
           brokenAds.add(validIndex);

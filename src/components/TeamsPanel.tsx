@@ -3,6 +3,7 @@ import {
   Users, ImagePlus, Plus, Mail, Check, X, Crown, ShieldCheck, ArrowUpCircle, ArrowDownCircle, UserMinus,
   Send, ListTodo, Paperclip, CalendarClock, Trash2, Wallet, Flame, Trophy, BarChart3, Link as LinkIcon,
   ThumbsUp, ThumbsDown, Pencil, LogOut, Clock3, PiggyBank, Home, MessageCircle, Globe, Lock, ArrowLeft, UserPlus, Hash,
+  Megaphone, AlertTriangle,
 } from 'lucide-react';
 import { GlassCard, Button, Input, Textarea, Modal, Switch } from './ui';
 import { swal, swalToast } from '../lib/swalTheme';
@@ -13,9 +14,10 @@ import {
   createTeam, getMyOwnedTeam, getMyMembership, getPendingInvitesForMe,
   inviteMember, acceptInvite, declineInvite, listTeamMembers, updateMemberFields,
   promoteToLeader, demoteToMember, removeMember, getLeaderboard,
+  updateTeamSettings, deleteTeam, broadcastToTeam,
 } from '../lib/teams';
 import {
-  Task, TaskDifficulty, createTaskWithWorkflow, listTeamTasks, listMyTasks, deleteTask, attachFileToTask,
+  Task, createTaskWithWorkflow, listTeamTasks, listMyTasks, deleteTask, attachFileToTask,
   setTeamTelegramChannel, acceptTask, declineTask, submitTask, approveTask, rejectSubmission,
   checkIn, setMemberActive, expireStaleOffers,
 } from '../lib/tasks';
@@ -35,7 +37,7 @@ import type { CloudClient, CloudFile, CloudFolder } from '../lib/cloudClient';
 import { CloudFolders } from './cloud/CloudFolders';
 import { Folder as FolderIcon, Upload, Download } from 'lucide-react';
 
-type SectionId = 'dashboard' | 'tasks' | 'bank' | 'chat' | 'files' | 'requests' | 'roster' | 'analytics';
+type SectionId = 'dashboard' | 'tasks' | 'bank' | 'chat' | 'files' | 'requests' | 'roster' | 'analytics' | 'admin';
 
 export function TeamsPanel({ cc }: { cc: CloudClient }) {
   const { session, isAdmin } = useTeamAuth();
@@ -58,7 +60,7 @@ export function TeamsPanel({ cc }: { cc: CloudClient }) {
 // Dashboard shell
 // ---------------------------------------------------------------------------
 
-const SECTIONS: { id: SectionId; label: string; icon: typeof Users }[] = [
+const SECTIONS: { id: SectionId; label: string; icon: typeof Users; forOwnerOnly?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: Home },
   { id: 'tasks', label: 'Tasks', icon: ListTodo },
   { id: 'bank', label: 'Bank', icon: Wallet },
@@ -67,6 +69,7 @@ const SECTIONS: { id: SectionId; label: string; icon: typeof Users }[] = [
   { id: 'requests', label: 'Requests', icon: CalendarClock },
   { id: 'roster', label: 'Roster', icon: Users },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+  { id: 'admin', label: 'Admin', icon: ShieldCheck, forOwnerOnly: true },
 ];
 
 interface Perms {
@@ -77,6 +80,32 @@ interface Perms {
   canManageJoinRequests: boolean;
   canManageVacations: boolean;
 }
+
+function SectionHeader({ icon: Icon, title, description }: { icon: typeof Users; title: string; description?: string }) {
+  return (
+    <div className="flex items-center gap-3 mb-4">
+      <div className="w-10 h-10 rounded-xl bg-accent-soft border border-accent/20 flex items-center justify-center text-accent shrink-0">
+        <Icon size={18} />
+      </div>
+      <div className="min-w-0">
+        <h2 className="text-base font-display font-semibold text-ink">{title}</h2>
+        {description && <p className="text-xs text-ink-muted mt-0.5">{description}</p>}
+      </div>
+    </div>
+  );
+}
+
+const SECTION_DESCRIPTIONS: Partial<Record<SectionId, string>> = {
+  dashboard: 'Your status, balance, and streak at a glance',
+  tasks: 'Offer, accept, submit, and review work',
+  bank: 'Transfers, deposits, and withdrawals',
+  chat: 'Team channel and direct messages',
+  files: "Everything sitting in the team's shared Telegram channel",
+  requests: 'Leave, resignation, and join requests',
+  roster: 'Members, roles, and permissions',
+  analytics: 'Leaderboard and team-wide report',
+  admin: 'Team settings, broadcasts, and danger zone',
+};
 
 function TeamWorkspace({
   team, members, isOwner, myMember, canManage, onChanged, cc,
@@ -89,8 +118,6 @@ function TeamWorkspace({
   onChanged: () => void;
   cc: CloudClient;
 }) {
-  const [section, setSection] = useState<SectionId>('dashboard');
-
   const perms: Perms = {
     isOwner,
     canManage,
@@ -100,36 +127,76 @@ function TeamWorkspace({
     canManageVacations: isOwner || !!myMember?.can_manage_vacations,
   };
 
+  const visibleSections = SECTIONS.filter(s => !s.forOwnerOnly || isOwner);
+
+  const jumpTo = (id: SectionId) => {
+    document.getElementById(`team-section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   return (
-    <div className="lg:flex lg:gap-6 lg:items-start">
-      <nav className="flex lg:flex-col gap-1.5 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 mb-4 lg:mb-0 lg:w-48 lg:shrink-0">
-        {SECTIONS.map(s => {
+    <div className="space-y-10">
+      <nav className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 backdrop-blur-xl bg-surface/80 border-b border-hairline flex items-center gap-1.5 overflow-x-auto">
+        {visibleSections.map(s => {
           const Icon = s.icon;
           return (
             <button
               key={s.id}
               type="button"
-              onClick={() => setSection(s.id)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap shrink-0 lg:w-full ${
-                section === s.id ? 'bg-accent text-white' : 'bg-ink/5 text-ink-muted hover:bg-ink/10'
-              }`}
+              onClick={() => jumpTo(s.id)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 bg-ink/5 text-ink-muted hover:bg-accent-soft hover:text-accent transition-colors"
             >
-              <Icon size={14} /> {s.label}
+              <Icon size={13} /> {s.label}
             </button>
           );
         })}
       </nav>
 
-      <div className="flex-1 min-w-0">
-        {section === 'dashboard' && <DashboardSection team={team} myMember={myMember} canManage={canManage} members={members} onChanged={onChanged} />}
-        {section === 'roster' && <TeamRoster team={team} members={members} isOwner={isOwner} canManageMembers={canManage} onChanged={onChanged} />}
-        {section === 'tasks' && <TasksSection team={team} members={members} canManageTasks={canManage} canReviewTasks={perms.canReviewTasks} myMember={myMember} cc={cc} />}
-        {section === 'bank' && <BankTab team={team} members={members} myMember={myMember} canManageBank={perms.canManageBank} />}
-        {section === 'chat' && <ChatSection team={team} members={members} myMember={myMember} />}
-        {section === 'files' && <TeamFilesSection team={team} canManage={canManage} cc={cc} />}
-        {section === 'requests' && <RequestsTab team={team} myMember={myMember} canManageVacations={perms.canManageVacations} canManageJoinRequests={perms.canManageJoinRequests} onChanged={onChanged} />}
-        {section === 'analytics' && <AnalyticsSection team={team} members={members} />}
-      </div>
+      <section id="team-section-dashboard" className="scroll-mt-20">
+        <SectionHeader icon={Home} title="Dashboard" description={SECTION_DESCRIPTIONS.dashboard} />
+        <DashboardSection team={team} myMember={myMember} canManage={canManage} members={members} onChanged={onChanged} />
+      </section>
+
+      <section id="team-section-tasks" className="scroll-mt-20">
+        <SectionHeader icon={ListTodo} title="Tasks" description={SECTION_DESCRIPTIONS.tasks} />
+        <TasksSection team={team} members={members} canManageTasks={canManage} canReviewTasks={perms.canReviewTasks} myMember={myMember} cc={cc} />
+      </section>
+
+      <section id="team-section-bank" className="scroll-mt-20">
+        <SectionHeader icon={Wallet} title="Bank" description={SECTION_DESCRIPTIONS.bank} />
+        <BankTab team={team} members={members} myMember={myMember} canManageBank={perms.canManageBank} />
+      </section>
+
+      <section id="team-section-chat" className="scroll-mt-20">
+        <SectionHeader icon={MessageCircle} title="Chat" description={SECTION_DESCRIPTIONS.chat} />
+        <ChatSection team={team} members={members} myMember={myMember} />
+      </section>
+
+      <section id="team-section-files" className="scroll-mt-20">
+        <SectionHeader icon={FolderIcon} title="Files" description={SECTION_DESCRIPTIONS.files} />
+        <TeamFilesSection team={team} canManage={canManage} cc={cc} />
+      </section>
+
+      <section id="team-section-requests" className="scroll-mt-20">
+        <SectionHeader icon={CalendarClock} title="Requests" description={SECTION_DESCRIPTIONS.requests} />
+        <RequestsTab team={team} myMember={myMember} canManageVacations={perms.canManageVacations} canManageJoinRequests={perms.canManageJoinRequests} onChanged={onChanged} />
+      </section>
+
+      <section id="team-section-roster" className="scroll-mt-20">
+        <SectionHeader icon={Users} title="Roster" description={SECTION_DESCRIPTIONS.roster} />
+        <TeamRoster team={team} members={members} isOwner={isOwner} canManageMembers={canManage} onChanged={onChanged} />
+      </section>
+
+      <section id="team-section-analytics" className="scroll-mt-20">
+        <SectionHeader icon={BarChart3} title="Analytics" description={SECTION_DESCRIPTIONS.analytics} />
+        <AnalyticsSection team={team} members={members} />
+      </section>
+
+      {isOwner && (
+        <section id="team-section-admin" className="scroll-mt-20">
+          <SectionHeader icon={ShieldCheck} title="Admin" description={SECTION_DESCRIPTIONS.admin} />
+          <AdminSection team={team} onChanged={onChanged} />
+        </section>
+      )}
     </div>
   );
 }
@@ -873,7 +940,6 @@ function TasksSection({ team, members, canManageTasks, canReviewTasks, myMember,
   const [tasks, setTasks] = useState<Task[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [difficulty, setDifficulty] = useState<TaskDifficulty>('Medium');
   const [jobTypes, setJobTypes] = useState<string[]>([]);
   const [dueDate, setDueDate] = useState('');
   const [reward, setReward] = useState('');
@@ -901,11 +967,11 @@ function TasksSection({ team, members, canManageTasks, canReviewTasks, myMember,
     setCreating(true);
     const error = await createTaskWithWorkflow({
       teamId: team.id, title: title.trim(), description: description.trim(),
-      difficulty, jobTypes, dueDate: dueDate || null, reward: reward ? Number(reward) : undefined,
+      jobTypes, dueDate: dueDate || null, reward: reward ? Number(reward) : undefined,
     });
     setCreating(false);
     if (error) { swal({ icon: 'error', title: 'Could not create task', text: error }); return; }
-    setTitle(''); setDescription(''); setJobTypes([]); setDueDate(''); setDifficulty('Medium'); setReward('');
+    setTitle(''); setDescription(''); setJobTypes([]); setDueDate(''); setReward('');
     swalToast({ icon: 'success', title: 'Task created and auto-assigned' });
     refresh();
   };
@@ -961,14 +1027,9 @@ function TasksSection({ team, members, canManageTasks, canReviewTasks, myMember,
               ))}
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as TaskDifficulty)} className="w-full bg-ink/5 border border-hairline rounded-xl px-3 py-2.5 text-ink text-sm outline-none focus:border-accent">
-                <option value="Easy">Easy</option>
-                <option value="Medium">Medium</option>
-                <option value="Hard">Hard</option>
-              </select>
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <Input type="number" step="0.01" placeholder="Reward ($, optional)" value={reward} onChange={(e) => setReward(e.target.value)} />
             </div>
-            <Input type="number" step="0.01" placeholder="Reward ($, optional)" value={reward} onChange={(e) => setReward(e.target.value)} />
             <Button onClick={handleCreate} disabled={creating} className="w-full">
               <Plus size={14} /> {creating ? 'Creating...' : 'Create Task'}
             </Button>
@@ -987,7 +1048,7 @@ function TasksSection({ team, members, canManageTasks, canReviewTasks, myMember,
                     {t.description && <p className="text-xs text-ink-muted mt-0.5 whitespace-pre-line">{t.description}</p>}
                     <p className="text-[10px] text-ink-faint mt-1 flex flex-wrap items-center gap-x-2">
                       {canManageTasks && <span>{t.assignee?.name || 'Unassigned'}</span>}
-                      <span>{t.difficulty}{t.reward != null ? ` · $${t.reward}` : ''}</span>
+                      {t.reward != null && <span>${t.reward}</span>}
                       {t.job_types?.length > 0 && <span>{t.job_types.join(', ')}</span>}
                     </p>
                   </div>
@@ -1596,5 +1657,102 @@ function DirectThread({ team, partnerId, partnerName, onBack }: { team: Team; pa
         <Button onClick={handleSend}><Send size={14} /></Button>
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Admin — team settings, broadcast, danger zone (owner only)
+// ---------------------------------------------------------------------------
+
+function AdminSection({ team, onChanged }: { team: Team; onChanged: () => void }) {
+  const [name, setName] = useState(team.name);
+  const [description, setDescription] = useState(team.description);
+  const [payNote, setPayNote] = useState(team.pay_note);
+  const [visibility, setVisibility] = useState<'public' | 'private'>(team.visibility);
+  const [savingSettings, setSavingSettings] = useState(false);
+
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastBody, setBroadcastBody] = useState('');
+  const [broadcasting, setBroadcasting] = useState(false);
+
+  const [deleting, setDeleting] = useState(false);
+
+  const handleSaveSettings = async () => {
+    if (!name.trim()) { swal({ icon: 'error', title: 'Team name is required' }); return; }
+    setSavingSettings(true);
+    const error = await updateTeamSettings(team.id, { name: name.trim(), description: description.trim(), pay_note: payNote.trim(), visibility });
+    setSavingSettings(false);
+    if (error) { swal({ icon: 'error', title: 'Could not save', text: error }); return; }
+    swalToast({ icon: 'success', title: 'Team settings saved' });
+    onChanged();
+  };
+
+  const handleBroadcast = async () => {
+    if (!broadcastTitle.trim() || !broadcastBody.trim()) { swal({ icon: 'error', title: 'Title and message required' }); return; }
+    setBroadcasting(true);
+    const error = await broadcastToTeam(team.id, broadcastTitle.trim(), broadcastBody.trim());
+    setBroadcasting(false);
+    if (error) { swal({ icon: 'error', title: 'Could not broadcast', text: error }); return; }
+    swalToast({ icon: 'success', title: 'Broadcast sent to every member' });
+    setBroadcastTitle(''); setBroadcastBody('');
+  };
+
+  const handleDeleteTeam = async () => {
+    const result = await swal({
+      icon: 'warning',
+      title: `Permanently delete "${team.name}"?`,
+      text: 'This removes every member, task, transaction, and message for this team. This cannot be undone.',
+      showCancelButton: true,
+      confirmButtonText: 'Delete Team',
+      confirmButtonColor: '#FF3B30',
+    });
+    if (!result.isConfirmed) return;
+    setDeleting(true);
+    const error = await deleteTeam(team.id);
+    setDeleting(false);
+    if (error) { swal({ icon: 'error', title: 'Could not delete team', text: error }); return; }
+    swalToast({ icon: 'success', title: 'Team deleted' });
+    onChanged();
+  };
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2">
+      <GlassCard className="p-6 space-y-3">
+        <h3 className="text-sm font-semibold text-ink">Team Settings</h3>
+        <div className="space-y-1">
+          <label className="text-xs text-accent font-semibold">Name</label>
+          <Input value={name} onChange={e => setName(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-accent font-semibold">Description</label>
+          <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs text-accent font-semibold">Usual Pay</label>
+          <Input value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="e.g. $10–20 per task" />
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-xl border border-hairline">
+          <div className="flex items-center gap-2 text-sm font-semibold text-ink">
+            {visibility === 'public' ? <Globe size={14} className="text-accent" /> : <Lock size={14} className="text-ink-faint" />}
+            {visibility === 'public' ? 'Public — listed in directory' : 'Private — join by ID only'}
+          </div>
+          <Switch checked={visibility === 'public'} onChange={v => setVisibility(v ? 'public' : 'private')} />
+        </div>
+        <Button className="w-full" onClick={handleSaveSettings} disabled={savingSettings}>{savingSettings ? 'Saving...' : 'Save Settings'}</Button>
+      </GlassCard>
+
+      <GlassCard className="p-6 space-y-3">
+        <h3 className="text-sm font-semibold text-ink flex items-center gap-2"><Megaphone size={16} className="text-accent" /> Broadcast to Everyone</h3>
+        <Input placeholder="Announcement title" value={broadcastTitle} onChange={e => setBroadcastTitle(e.target.value)} />
+        <Textarea placeholder="Message..." value={broadcastBody} onChange={e => setBroadcastBody(e.target.value)} rows={4} />
+        <Button className="w-full" onClick={handleBroadcast} disabled={broadcasting}>{broadcasting ? 'Sending...' : 'Send to All Members'}</Button>
+      </GlassCard>
+
+      <GlassCard className="p-6 space-y-3 border-danger/30 lg:col-span-2">
+        <h3 className="text-sm font-semibold text-danger flex items-center gap-2"><AlertTriangle size={16} /> Danger Zone</h3>
+        <p className="text-xs text-ink-muted">Deleting the team removes all members, tasks, transactions, and messages permanently.</p>
+        <Button variant="danger" onClick={handleDeleteTeam} disabled={deleting}>{deleting ? 'Deleting...' : 'Delete Team'}</Button>
+      </GlassCard>
+    </div>
   );
 }
