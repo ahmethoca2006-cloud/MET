@@ -448,6 +448,7 @@ export default function App() {
                     onBack={() => setChapterView('manage')}
                     pendingTyperScript={pendingTyperScript}
                     onConsumePendingTyperScript={() => setPendingTyperScript(null)}
+                    onPagesChange={handleChapterPagesChange}
                   />
                 )
               )}

@@ -19,13 +19,13 @@ import { FloatingPanel } from './dock/FloatingPanel';
 import { DOCK_PANEL_GROUP_AUTOSAVE_ID } from './dock/dockLayout';
 import { NO_SELECTION, hasSelection, featherSelection, growSelection, type Selection } from './paint/selection';
 import type { PaintSettings, LiquifyMode } from './paint/paintEngine';
+import { PAINT_TOOLS } from './paint/usePaintLayer';
 import { ToolOptionsBar } from './toolOptions/ToolOptionsBar';
 import { useStudioShortcuts } from './shortcuts/useStudioShortcuts';
 import { FIXED_SHORTCUTS_HELP } from './shortcuts/shortcutsMap';
 import { MenuBar } from './menu/MenuBar';
 import { buildMenus } from './menu/menuDefinitions';
 import { swal, swalToast } from '../../lib/swalTheme';
-import { WorkflowBar } from './WorkflowBar';
 import { ExportDialog } from './ExportDialog';
 import { TranslationPreviewPanel } from './TranslationPreviewPanel';
 import { exportPsd } from '../../lib/exportPsd';
@@ -51,6 +51,8 @@ interface StudioProps {
   /** Text sent from the standalone Text Editor page's "Send to TypeR" button, waiting to be picked up. */
   pendingTyperScript?: string | null;
   onConsumePendingTyperScript?: () => void;
+  /** Persists page image changes (currently just Crop) back up to the workspace tree. */
+  onPagesChange?: (pages: Page[]) => void;
 }
 
 export function Studio(props: StudioProps) {
@@ -65,7 +67,7 @@ export function Studio(props: StudioProps) {
   );
 }
 
-function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript, onConsumePendingTyperScript }: StudioProps) {
+function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript, onConsumePendingTyperScript, onPagesChange }: StudioProps) {
   const canvasRef = useRef<StudioCanvasHandle>(null);
   const { foreground, background, setForeground, swap: swapColors, reset: resetColors } = useColor();
   const history = useHistory();
@@ -115,6 +117,28 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     const amount = await promptSelectionAmount('Contract Selection', 'Amount (px)');
     if (amount === null || amount <= 0) return;
     setSelection(sel => growSelection(sel, -amount, activePage.original.width, activePage.original.height));
+  }
+
+  /** Commits the Crop tool's rect selection: trims the background + every raster layer's canvas,
+   *  shifts text layers to match, and persists the new page dimensions back up to App.tsx. */
+  async function handleCommitCrop() {
+    if (!activePage) return;
+    if (selection.kind !== 'rect') {
+      swalToast({ icon: 'info', title: 'Draw a rectangular crop area first' });
+      return;
+    }
+    const rect = selection;
+    const result = await canvasRef.current?.commitCrop(rect);
+    if (!result) return;
+    onPagesChange?.(pages.map(p => p.id === activePage.id ? { ...p, original: result.original, cleaned: result.cleaned } : p));
+    updateLayers(current => current.map(l =>
+      l.type === 'text' && l.text ? { ...l, text: { ...l.text, x: l.text.x - rect.x, y: l.text.y - rect.y } } : l
+    ), 'Crop');
+    setSelection(NO_SELECTION);
+    setActiveTool('select');
+    setFitSignal(s => s + 1);
+    scheduleAutosave();
+    swalToast({ icon: 'success', title: 'Cropped' });
   }
 
   const studioRootRef = useRef<HTMLDivElement>(null);
@@ -348,6 +372,10 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     const layer = createLayer('clean-patch', `Layer ${layers.length}`);
     updateLayers(current => [...current, layer], 'Add Layer');
     setActiveLayerId(layer.id);
+    // New raster layers start as a working copy of the background — matches the standard
+    // "duplicate scan, clean the duplicate" manga workflow and gives clone/heal/filter-brush/
+    // liquify tools real pixels to act on immediately instead of an empty transparent canvas.
+    canvasRef.current?.seedLayerWithBackground(layer.id);
   }
 
   function handleAddAdjustmentLayer() {
@@ -488,6 +516,31 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   }
 
   const activeLayer = layers.find(l => l.id === activeLayerId) ?? null;
+
+  // Paint-family tools need a clean-patch (raster) layer to draw onto — the Background layer has
+  // no backing canvas, so without this every brush/fill/shape tool would silently no-op the moment
+  // a fresh chapter is opened (Background is the default active layer). Reuse the topmost existing
+  // raster layer if there is one; only create a fresh one if the stack has none at all.
+  useEffect(() => {
+    if (!(PAINT_TOOLS as readonly string[]).includes(activeTool) || !activeLayer) return;
+    if (activeLayer.type === 'clean-patch') return;
+    const existing = [...layers].reverse().find(l => l.type === 'clean-patch');
+    if (existing) {
+      setActiveLayerId(existing.id);
+    } else {
+      handleAddLayer();
+      swalToast({ icon: 'info', title: 'New layer created for painting' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTool]);
+
+  const cropHintShownRef = useRef(false);
+  useEffect(() => {
+    if (activeTool === 'crop' && !cropHintShownRef.current) {
+      cropHintShownRef.current = true;
+      swalToast({ icon: 'info', title: 'Draw a rectangle, then press Enter or double-click to crop' });
+    }
+  }, [activeTool]);
 
   const layersPanel = (
     <LayersPanel
@@ -656,9 +709,8 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
         hasCleaned={!!activePage?.cleaned}
         isFullscreen={isFullscreen}
         onToggleFullscreen={toggleFullscreen}
+        workflowStages={workflowStages}
       />
-
-      <WorkflowBar stages={workflowStages} />
 
       {!panelsHidden && (
         <ToolOptionsBar
@@ -714,6 +766,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
                 onSelectionChange={setSelection}
                 onPaintStrokeEnd={handlePaintStrokeEnd}
                 onEyedropperPick={setForeground}
+                onCommitCrop={handleCommitCrop}
               />
             </Panel>
             {!panelsHidden && isDesktop && dockOpen && (

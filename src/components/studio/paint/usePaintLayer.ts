@@ -22,6 +22,10 @@ interface UsePaintLayerArgs {
   /** Mutable map owned by the caller (StudioCanvas) — a layer's pristine pre-liquify pixels,
    *  captured lazily on that layer's first-ever liquify edit, for the `reconstruct` mode. */
   liquifySnapshots?: Record<string, ImageData>;
+  /** Magic Wand's source when no clean-patch layer is active (e.g. Background selected) — a
+   *  read-only snapshot of the composited page art, so the wand can select from the actual
+   *  manga art instead of silently no-op'ing against a nonexistent raster canvas. */
+  getFallbackCanvas?: () => HTMLCanvasElement | null;
 }
 
 /**
@@ -30,7 +34,7 @@ interface UsePaintLayerArgs {
  * coordinates) only when `activeTool` is one of PAINT_TOOLS; select/pan/text keep
  * their existing, untouched code paths.
  */
-export function usePaintLayer({ getCanvas, settings, selection, onSelectionChange, onStrokeEnd, getLayerId, liquifySnapshots }: UsePaintLayerArgs) {
+export function usePaintLayer({ getCanvas, settings, selection, onSelectionChange, onStrokeEnd, getLayerId, liquifySnapshots, getFallbackCanvas }: UsePaintLayerArgs) {
   const drawingRef = useRef(false);
   const lastRef = useRef<{ x: number; y: number } | null>(null);
   const cloneSourceRef = useRef<{ x: number; y: number } | null>(null);
@@ -175,14 +179,14 @@ export function usePaintLayer({ getCanvas, settings, selection, onSelectionChang
   }, [getCanvas, settings, selection, onStrokeEnd]);
 
   const pickMagicWand = useCallback((x: number, y: number, combineMode: SelectionCombineMode = 'replace') => {
-    const canvas = getCanvas();
+    const canvas = getCanvas() ?? getFallbackCanvas?.() ?? null;
     if (!canvas || !onSelectionChange) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const mask = magicWandMask(ctx, canvas.width, canvas.height, x, y, settings.tolerance);
     const picked = mask.kind === 'mask' ? mask : NO_SELECTION;
     onSelectionChange(combineMode === 'replace' ? picked : combineSelections(selection, picked, combineMode, canvas.width, canvas.height));
-  }, [getCanvas, settings.tolerance, selection, onSelectionChange]);
+  }, [getCanvas, getFallbackCanvas, settings.tolerance, selection, onSelectionChange]);
 
   const setCloneSource = useCallback((x: number, y: number) => {
     cloneSourceRef.current = { x, y };

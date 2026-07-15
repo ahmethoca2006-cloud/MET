@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Stage, Layer, Image as KonvaImage, Rect, Ellipse, Line, Text as KonvaText, Transformer } from 'react-konva';
 import type Konva from 'konva';
-import type { Page } from '../../types';
+import type { Page, ProcessedImage } from '../../types';
 import { BLEND_TO_COMPOSITE, type StudioLayer, type TextLayerData } from './studioTypes';
 import { detectBubbleCenter } from './bubbleDetect';
 import { swalToast } from '../../lib/swalTheme';
@@ -54,6 +54,8 @@ interface StudioCanvasProps {
   onPaintStrokeEnd: (layerId: string, before: ImageData) => void;
   /** Fired when the Eyedropper samples a pixel from the background page image. */
   onEyedropperPick?: (hex: string) => void;
+  /** Fired on Enter/double-click while the Crop tool is active, to commit the current rect selection as a crop. */
+  onCommitCrop?: () => void;
 }
 
 export interface StudioCanvasHandle {
@@ -75,12 +77,25 @@ export interface StudioCanvasHandle {
   zoomTo: (scale: number) => void;
   zoomIn: () => void;
   zoomOut: () => void;
+  /**
+   * Crops the background (original + cleaned) and every raster layer's canvas to `rect` (page-image
+   * coordinates), in place. Returns the new original/cleaned image data so the caller (Studio.tsx)
+   * can persist it and shift text layers by (-rect.x, -rect.y); null if there's no page loaded.
+   */
+  commitCrop: (rect: { x: number; y: number; width: number; height: number }) => Promise<{ original: ProcessedImage; cleaned: ProcessedImage | null } | null>;
+  /**
+   * Copies the current background pixels into a clean-patch layer's raster canvas. Called right
+   * after a new layer is created so Clone/Heal/filter-brush/Liquify tools have real page content
+   * to work on immediately — a brand new blank layer would make those tools no-ops, since they
+   * only ever read/write the active layer's own canvas, never the background underneath it.
+   */
+  seedLayerWithBackground: (layerId: string) => void;
 }
 
 export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(function StudioCanvas({
   page, showCleaned, overlayOpacity, showGrid = false, showRulers = false, activeTool, fitSignal, layers,
   activeLayerId, onSelectLayer, onAddTextLayer, onUpdateTextLayer,
-  paintSettings, selection, onSelectionChange, onPaintStrokeEnd, onEyedropperPick,
+  paintSettings, selection, onSelectionChange, onPaintStrokeEnd, onEyedropperPick, onCommitCrop,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -161,6 +176,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     },
     getLayerId: () => paintLayerIdRef.current,
     liquifySnapshots,
+    getFallbackCanvas: () => sampleCanvasRef.current,
   });
 
   useImperativeHandle(ref, () => ({
@@ -259,7 +275,55 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       });
       swalToast({ icon: 'success', title: 'Centered in bubble' });
     },
-  }), [onUpdateTextLayer, scale, pos, containerSize]);
+    async commitCrop(rect) {
+      if (!page) return null;
+      const cw = page.original.width, ch = page.original.height;
+      const rx = Math.max(0, Math.min(cw - 1, Math.round(Math.min(rect.x, rect.x + rect.width))));
+      const ry = Math.max(0, Math.min(ch - 1, Math.round(Math.min(rect.y, rect.y + rect.height))));
+      const rw = Math.max(0, Math.min(cw - rx, Math.round(Math.abs(rect.width))));
+      const rh = Math.max(0, Math.min(ch - ry, Math.round(Math.abs(rect.height))));
+      if (rw < 2 || rh < 2) return null;
+
+      async function cropSource(pi: ProcessedImage): Promise<ProcessedImage> {
+        const img = await loadImageFromSrc(pi.dataUrl);
+        const canvas = document.createElement('canvas');
+        canvas.width = rw;
+        canvas.height = rh;
+        canvas.getContext('2d')!.drawImage(img, rx, ry, rw, rh, 0, 0, rw, rh);
+        return { ...pi, dataUrl: canvas.toDataURL(pi.mimeType || 'image/png'), width: rw, height: rh };
+      }
+
+      const newOriginal = await cropSource(page.original);
+      const newCleaned = page.cleaned ? await cropSource(page.cleaned) : null;
+
+      // Crop every raster layer's canvas in place — same registry object, so Konva's existing
+      // <Image> references keep working, just pointing at newly-sized/redrawn pixel content.
+      for (const layerId of Object.keys(paintCanvasRegistry.current)) {
+        const old = paintCanvasRegistry.current[layerId];
+        if (!old) continue;
+        const cropped = document.createElement('canvas');
+        cropped.width = rw;
+        cropped.height = rh;
+        cropped.getContext('2d')!.drawImage(old, rx, ry, rw, rh, 0, 0, rw, rh);
+        old.width = rw;
+        old.height = rh;
+        old.getContext('2d')!.drawImage(cropped, 0, 0);
+        layerNodeRefs.current[layerId]?.batchDraw();
+      }
+
+      return { original: newOriginal, cleaned: newCleaned };
+    },
+    seedLayerWithBackground(layerId: string) {
+      const img = imageRef.current;
+      if (!img) return;
+      const canvas = getOrCreateCanvasFor(paintCanvasRegistry.current, layerId, img.width, img.height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      layerNodeRefs.current[layerId]?.batchDraw();
+    },
+  }), [onUpdateTextLayer, scale, pos, containerSize, page]);
 
   const activeSource = showCleaned && page?.cleaned ? page.cleaned : page?.original ?? null;
   // Only meaningful when the cleaned page is the base — overlaying the original above itself is a no-op.
@@ -283,18 +347,19 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     return () => { img.onload = null; };
   }, [overlaySource]);
 
-  // Esc cancels an in-progress Pen path or polygonal lasso; Enter commits either.
+  // Esc cancels an in-progress Pen path or polygonal lasso; Enter commits either (or a pending Crop).
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape' && penPoints.length > 0) setPenPoints([]);
       if (e.key === 'Escape' && lassoPolyPoints.length > 0) setLassoPolyPoints([]);
       if (e.key === 'Enter' && activeTool === 'pen' && penPoints.length > 1) commitPenPath();
       if (e.key === 'Enter' && activeTool === 'lasso-polygon' && lassoPolyPoints.length > 2) commitLassoPolygon();
+      if (e.key === 'Enter' && activeTool === 'crop') onCommitCrop?.();
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [penPoints, lassoPolyPoints, activeTool]);
+  }, [penPoints, lassoPolyPoints, activeTool, onCommitCrop]);
 
   // Eyedropper samples from a hidden replica of the background image (approximation — doesn't include raster layers yet).
   useEffect(() => {
@@ -374,6 +439,19 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     const targetClass = e.target.getClassName?.();
     const clickedBackground = e.target === e.target.getStage() || targetClass === 'Image' || targetClass === 'Rect';
+
+    if (activeTool === 'zoom') {
+      const stage = stageRef.current;
+      const pointer = stage?.getPointerPosition();
+      if (!stage || !pointer) return;
+      const factor = e.evt.altKey ? 1 / 1.5 : 1.5;
+      const oldScale = scale;
+      const newScale = clampScale(oldScale * factor);
+      const pointTo = { x: (pointer.x - pos.x) / oldScale, y: (pointer.y - pos.y) / oldScale };
+      setScale(newScale);
+      setPos({ x: pointer.x - pointTo.x * newScale, y: pointer.y - pointTo.y * newScale });
+      return;
+    }
 
     if (activeTool === 'pen') {
       const stage = stageRef.current;
@@ -580,6 +658,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const handleStageDblClick = () => {
     if (activeTool === 'pen') commitPenPath();
     if (activeTool === 'lasso-polygon') commitLassoPolygon();
+    if (activeTool === 'crop') onCommitCrop?.();
   };
 
   const editingLayer = editingLayerId ? layers.find(l => l.id === editingLayerId) ?? null : null;
@@ -884,6 +963,15 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     </div>
   );
 });
+
+function loadImageFromSrc(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to decode image'));
+    img.src = src;
+  });
+}
 
 function waitForImage(imageRef: { current: HTMLImageElement | null }, timeoutMs = 3000): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
