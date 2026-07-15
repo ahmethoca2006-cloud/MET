@@ -17,6 +17,11 @@ interface UsePaintLayerArgs {
   onSelectionChange?: (sel: Selection) => void;
   /** Called once per committed stroke/fill with the layer's pixels as they were just before it, for undo. */
   onStrokeEnd: (before: ImageData) => void;
+  /** Identifies the active raster layer, for keying `liquifySnapshots`. */
+  getLayerId?: () => string | null;
+  /** Mutable map owned by the caller (StudioCanvas) — a layer's pristine pre-liquify pixels,
+   *  captured lazily on that layer's first-ever liquify edit, for the `reconstruct` mode. */
+  liquifySnapshots?: Record<string, ImageData>;
 }
 
 /**
@@ -25,7 +30,7 @@ interface UsePaintLayerArgs {
  * coordinates) only when `activeTool` is one of PAINT_TOOLS; select/pan/text keep
  * their existing, untouched code paths.
  */
-export function usePaintLayer({ getCanvas, settings, selection, onSelectionChange, onStrokeEnd }: UsePaintLayerArgs) {
+export function usePaintLayer({ getCanvas, settings, selection, onSelectionChange, onStrokeEnd, getLayerId, liquifySnapshots }: UsePaintLayerArgs) {
   const drawingRef = useRef(false);
   const lastRef = useRef<{ x: number; y: number } | null>(null);
   const cloneSourceRef = useRef<{ x: number; y: number } | null>(null);
@@ -74,11 +79,18 @@ export function usePaintLayer({ getCanvas, settings, selection, onSelectionChang
       sourceSnapshotRef.current = snap;
     }
 
+    if (tool === 'liquify' && liquifySnapshots) {
+      const layerId = getLayerId?.();
+      if (layerId && !liquifySnapshots[layerId]) {
+        liquifySnapshots[layerId] = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      }
+    }
+
     strokeBeforeRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
     drawingRef.current = true;
     lastRef.current = { x, y };
     applyStrokeSegment(ctx, tool, x, y, x, y, pressure);
-  }, [getCanvas, settings, selection, onStrokeEnd]);
+  }, [getCanvas, settings, selection, onStrokeEnd, getLayerId, liquifySnapshots]);
 
   function applyStrokeSegment(ctx: CanvasRenderingContext2D, tool: PaintTool, lastX: number, lastY: number, x: number, y: number, pressure = 1) {
     if (tool === 'brush' || tool === 'pencil' || tool === 'eraser') {
@@ -90,7 +102,8 @@ export function usePaintLayer({ getCanvas, settings, selection, onSelectionChang
     } else if (tool === 'blur' || tool === 'sharpen' || tool === 'smudge' || tool === 'dodge' || tool === 'burn' || tool === 'sponge') {
       applyFilterBrush(ctx, x, y, settings.size, settings.flow, tool, x - lastX, y - lastY, selection);
     } else if (tool === 'liquify') {
-      liquify(ctx, x, y, settings.size, settings.flow, settings.liquifyMode, x - lastX, y - lastY, selection);
+      const pristine = liquifySnapshots && getLayerId ? liquifySnapshots[getLayerId() ?? ''] : null;
+      liquify(ctx, x, y, settings.size, settings.flow, settings.liquifyMode, x - lastX, y - lastY, selection, pristine);
     } else if (tool === 'spot-heal') {
       const r = Math.max(4, settings.size / 2);
       contentAwareFill(ctx, { x: x - r, y: y - r, width: r * 2, height: r * 2 });

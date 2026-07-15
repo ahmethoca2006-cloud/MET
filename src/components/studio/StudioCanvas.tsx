@@ -88,6 +88,8 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const textNodeRefs = useRef<Record<string, Konva.Text | null>>({});
   const layerNodeRefs = useRef<Record<string, Konva.Layer | null>>({});
   const paintCanvasRegistry = useRef<PaintCanvasRegistry>({});
+  /** Per-layer pristine pre-liquify snapshot, for Liquify's Reconstruct mode — see usePaintLayer.ts. */
+  const liquifySnapshots = useRef<Record<string, ImageData>>({}).current;
   const layersRef = useRef(layers);
   layersRef.current = layers;
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
@@ -157,6 +159,8 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       layerNodeRefs.current[layerId ?? '']?.batchDraw();
       if (layerId) onPaintStrokeEnd(layerId, before);
     },
+    getLayerId: () => paintLayerIdRef.current,
+    liquifySnapshots,
   });
 
   useImperativeHandle(ref, () => ({
@@ -170,6 +174,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     },
     deletePaintCanvas(layerId: string) {
       deleteCanvasFor(paintCanvasRegistry.current, layerId);
+      delete liquifySnapshots[layerId];
     },
     exportRasterLayers() {
       // Exports every raster canvas the registry currently holds — not just the active page's —

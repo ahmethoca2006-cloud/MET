@@ -29,6 +29,7 @@ const LIQUIFY_MODES: { id: LiquifyMode; label: string }[] = [
   { id: 'pinch', label: 'Pinch' },
   { id: 'bloat', label: 'Bloat' },
   { id: 'crystalize', label: 'Crystalize' },
+  { id: 'reconstruct', label: 'Reconstruct' },
 ];
 
 function Slider({ label, value, min, max, step, onChange, format }: { label: string; value: number; min: number; max: number; step: number; onChange: (v: number) => void; format?: (v: number) => string }) {

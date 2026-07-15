@@ -219,16 +219,17 @@ export function applyFilterBrush(
   ctx.putImageData(img, bx, by);
 }
 
-export type LiquifyMode = 'push' | 'swirl' | 'pinch' | 'bloat' | 'crystalize';
+export type LiquifyMode = 'push' | 'swirl' | 'pinch' | 'bloat' | 'crystalize' | 'reconstruct';
 
 /**
  * Liquify: per-stamp pixel-displacement warp, ported (as math, not code — the original is a
  * Konva/canvas-based React app) from Flowy's liquify tool concept (see CLAUDE.md for the
  * attribution note). Each mode computes a *source sample offset* per pixel and reads from
  * there instead of the pixel's own position, which is what makes it a true warp rather than a
- * blend like the Smudge filter brush above. `reconstruct` (gradually undo toward the original
- * pixels) isn't implemented — it needs a pristine pre-liquify snapshot kept alongside the layer,
- * which no other tool here needs, so it's a real, separate piece of state this pass didn't add.
+ * blend like the Smudge filter brush above. `reconstruct` gradually blends each stamped pixel
+ * back toward `pristine` (a full-canvas snapshot taken before the layer's first-ever liquify
+ * edit, owned by the caller — see `liquifySnapshots` in StudioCanvas.tsx) instead of computing a
+ * sample offset, so it needs that extra param the other modes ignore.
  */
 export function liquify(
   ctx: CanvasRenderingContext2D,
@@ -236,6 +237,7 @@ export function liquify(
   mode: LiquifyMode,
   dragDx: number, dragDy: number,
   selection: Selection,
+  pristine?: ImageData | null,
 ) {
   const r = Math.max(4, Math.round(size / 2));
   const px = Math.round(x - r), py = Math.round(y - r);
@@ -288,6 +290,16 @@ export function liquify(
         const cell = Math.max(2, Math.round(4 + (1 - amount) * 10));
         sampleX = Math.round(ix / cell) * cell;
         sampleY = Math.round(iy / cell) * cell;
+      } else if (mode === 'reconstruct') {
+        if (!pristine) continue;
+        const px = bx + ix, py = by + iy;
+        if (px < 0 || py < 0 || px >= pristine.width || py >= pristine.height) continue;
+        const pi = (py * pristine.width + px) * 4;
+        const blend = falloff * amount;
+        for (let c = 0; c < 4; c++) {
+          img.data[o + c] = pristine.data[pi + c] * blend + src[o + c] * (1 - blend);
+        }
+        continue;
       }
 
       for (let c = 0; c < 4; c++) {
