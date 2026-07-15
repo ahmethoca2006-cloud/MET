@@ -532,6 +532,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
       onIndexChange={setTyperIndex}
       armed={typerArmed}
       onArmedChange={(armed) => { setTyperArmed(armed); if (armed) setActiveTool('text'); }}
+      fontFamilies={allFontFamilies}
     />
   );
 

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { RotateCcw, ArrowLeftRight } from 'lucide-react';
+import { RotateCcw, ArrowLeftRight, Plus, Trash2 } from 'lucide-react';
 import { colord, extend } from 'colord';
 import cmykPlugin from 'colord/plugins/cmyk';
 import { IconButton, Input } from '../../ui';
+import { swal } from '../../../lib/swalTheme';
 import { useColor } from './ColorContext';
 import { hexToRgb, hsvToRgb, rgbToHex, rgbToHsv } from './colorConversions';
 
@@ -11,7 +12,10 @@ extend([cmykPlugin]);
 const SV_SIZE = 160;
 
 export function ColorPanel() {
-  const { foreground, background, recent, setForeground, setBackground, swap, reset } = useColor();
+  const {
+    foreground, background, recent, setForeground, setBackground, swap, reset,
+    palettes, activePaletteId, setActivePaletteId, createPalette, deletePalette, addSwatch, removeSwatch,
+  } = useColor();
   const [active, setActive] = useState<'fg' | 'bg'>('fg');
   const activeColor = active === 'fg' ? foreground : background;
   const setActiveColor = active === 'fg' ? setForeground : setBackground;
@@ -63,6 +67,20 @@ export function ColorPanel() {
   }
   function setFromCmyk(patch: Partial<{ c: number; m: number; y: number; k: number }>) {
     setActiveColor(colord({ ...cmyk, ...patch }).toHex());
+  }
+
+  const activePalette = palettes.find(p => p.id === activePaletteId) ?? null;
+
+  async function handleNewPalette() {
+    const result = await swal({ title: 'New Palette', input: 'text', inputLabel: 'Palette name', showCancelButton: true, confirmButtonText: 'Create' });
+    const name = (result.value || '').trim();
+    if (result.isConfirmed && name) createPalette(name);
+  }
+
+  async function handleDeletePalette() {
+    if (!activePalette) return;
+    const result = await swal({ icon: 'warning', title: `Delete "${activePalette.name}"?`, showCancelButton: true, confirmButtonText: 'Delete', confirmButtonColor: '#FF3B30' });
+    if (result.isConfirmed) deletePalette(activePalette.id);
   }
 
   return (
@@ -192,6 +210,52 @@ export function ColorPanel() {
             </div>
           </div>
         )}
+
+        <div className="flex flex-col gap-1.5 pt-2 border-t border-hairline/60">
+          <div className="flex items-center justify-between gap-2">
+            <select
+              value={activePaletteId ?? ''}
+              onChange={(e) => setActivePaletteId(e.target.value || null)}
+              className="flex-1 min-w-0 bg-ink/5 border border-hairline rounded-md px-1.5 py-1 text-ink text-[11px]"
+            >
+              <option value="" disabled>{palettes.length === 0 ? 'No palettes yet' : 'Select a palette'}</option>
+              {palettes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            <IconButton size="sm" aria-label="New palette" title="New palette" onClick={handleNewPalette} className="!bg-transparent !w-6 !h-6">
+              <Plus size={13} />
+            </IconButton>
+            {activePalette && (
+              <IconButton size="sm" aria-label="Delete palette" title="Delete palette" onClick={handleDeletePalette} className="!bg-transparent !w-6 !h-6 hover:!text-danger">
+                <Trash2 size={12} />
+              </IconButton>
+            )}
+          </div>
+
+          {activePalette && (
+            <div className="flex flex-wrap gap-1.5">
+              {activePalette.colors.map(c => (
+                <button
+                  key={c}
+                  aria-label={`Palette color ${c}`}
+                  title="Click to apply, right-click to remove"
+                  onClick={() => setActiveColor(c)}
+                  onContextMenu={(e) => { e.preventDefault(); removeSwatch(activePalette.id, c); }}
+                  className="w-6 h-6 rounded-md border border-hairline"
+                  style={{ background: c }}
+                />
+              ))}
+              <IconButton
+                size="sm"
+                aria-label="Save current color to palette"
+                title="Save current color to palette"
+                onClick={() => addSwatch(activePalette.id, activeColor)}
+                className="!bg-transparent !w-6 !h-6 !border !border-dashed !border-hairline"
+              >
+                <Plus size={13} />
+              </IconButton>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

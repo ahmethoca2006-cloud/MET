@@ -3,7 +3,7 @@ import { Target, RotateCcw, Plus, Trash2, Copy, Download, Upload } from 'lucide-
 import { Textarea, IconButton } from '../ui';
 import { cn } from '../ui/cn';
 import { swal, swalToast } from '../../lib/swalTheme';
-import { parseTyperScript, createTyperStyle, type TyperStyle } from './studioTypes';
+import { parseTyperScript, createTyperStyle, FONT_FAMILIES, type TyperStyle } from './studioTypes';
 
 interface TyperPanelProps {
   script: string;
@@ -14,10 +14,13 @@ interface TyperPanelProps {
   onIndexChange: (index: number) => void;
   armed: boolean;
   onArmedChange: (armed: boolean) => void;
+  /** Built-in fonts plus any custom fonts installed via the Fonts panel. */
+  fontFamilies?: string[];
 }
 
 export function TyperPanel({
   script, onScriptChange, styles, onStylesChange, index, onIndexChange, armed, onArmedChange,
+  fontFamilies = FONT_FAMILIES,
 }: TyperPanelProps) {
   const [editingStyleId, setEditingStyleId] = useState<string | null>(null);
   const [sizeStep, setSizeStep] = useState(2);
@@ -224,6 +227,16 @@ export function TyperPanel({
                               />
                             </label>
                           </div>
+                          <label className="flex items-center gap-2 text-[11px] text-ink-faint">
+                            <span className="w-14 shrink-0">Font</span>
+                            <select
+                              value={style.fontFamily}
+                              onChange={(e) => updateStyle(style.id, { fontFamily: e.target.value })}
+                              className="flex-1 bg-ink/5 border border-hairline rounded-md px-1.5 py-1 text-ink text-[11px]"
+                            >
+                              {fontFamilies.map(f => <option key={f} value={f}>{f}</option>)}
+                            </select>
+                          </label>
                           <label className="flex items-center gap-2 text-[11px] text-ink-faint">
                             <span className="w-14 shrink-0">Prefix</span>
                             <input
