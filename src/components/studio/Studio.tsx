@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import type { Page } from '../../types';
 import { StudioToolbar } from './StudioToolbar';
-import { StudioCanvas, type StudioCanvasHandle } from './StudioCanvas';
+import { StudioCanvas, type StudioCanvasHandle, type TextSelection } from './StudioCanvas';
 import { StudioPagesPanel } from './StudioPagesPanel';
 import { ToolRail } from './ToolRail';
 import { RightDock } from './RightDock';
@@ -240,6 +240,10 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   // Per-page layer stacks. Each page always has a locked "Background" layer at index 0.
   const [layersByPage, setLayersByPage] = useState<Record<string, StudioLayer[]>>({});
   const [activeLayerId, setActiveLayerId] = useState<string | null>('background');
+  // The character range selected inside the text layer currently being edited on canvas. Lives here
+  // rather than in StudioCanvas because TextPanel — a sibling in the dock — is what applies
+  // character styling to it.
+  const [textSelection, setTextSelection] = useState<TextSelection | null>(null);
 
   // TypeR: scripted lettering — paste a script, arm it, click bubbles to stamp lines in order.
   const [typerScript, setTyperScript] = useState('');
@@ -657,7 +661,13 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   );
 
   const textPanel = activeLayer?.type === 'text' ? (
-    <TextPanel layer={activeLayer} onUpdate={handleUpdateTextLayer} onCenter={handleCenterTextLayer} fontFamilies={allFontFamilies} />
+    <TextPanel
+      layer={activeLayer}
+      onUpdate={handleUpdateTextLayer}
+      onCenter={handleCenterTextLayer}
+      fontFamilies={allFontFamilies}
+      selection={textSelection?.layerId === activeLayer.id ? textSelection : null}
+    />
   ) : null;
 
   const adjustmentPanel = activeLayer?.type === 'adjustment' ? (
@@ -897,6 +907,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
                 onSelectLayer={selectLayer}
                 onAddTextLayer={handleAddTextLayer}
                 onUpdateTextLayer={handleUpdateTextLayer}
+                onTextSelectionChange={setTextSelection}
                 paintSettings={paintSettings}
                 selection={selection}
                 onSelectionChange={setSelection}

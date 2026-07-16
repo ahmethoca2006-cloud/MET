@@ -10,6 +10,8 @@ import {
   type TextStyle, type TextStyleKind,
 } from '../../lib/textStyleStore';
 import { FONT_FAMILIES, DEFAULT_TEXT_SHADOW, DEFAULT_TEXT_GRADIENT, type StudioLayer, type TextAlign, type TextLayerData } from './studioTypes';
+import { applyToRange, resolveRunStyle, runAt, styleOverRange, type ResolvedRunStyle, type RunStylePatch } from './textRuns';
+import type { TextSelection } from './StudioCanvas';
 
 interface TextPanelProps {
   layer: StudioLayer;
@@ -17,9 +19,17 @@ interface TextPanelProps {
   onCenter: (id: string) => void;
   /** Built-in fonts plus any custom fonts installed via the Fonts panel. */
   fontFamilies?: string[];
+  /** Character range selected on canvas, when this layer is being edited. */
+  selection?: TextSelection | null;
 }
 
-export function TextPanel({ layer, onUpdate, onCenter, fontFamilies = FONT_FAMILIES }: TextPanelProps) {
+const FONT_WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+
+/** Character properties that also exist as a layer default. The rest (kerning, baseline shift,
+ *  explicit weight) only exist per-run, so with no selection they're written across every run. */
+const LAYER_BACKED_CHAR_KEYS = new Set(['fontFamily', 'fontSize', 'color', 'bold', 'italic', 'letterSpacing']);
+
+export function TextPanel({ layer, onUpdate, onCenter, fontFamilies = FONT_FAMILIES, selection = null }: TextPanelProps) {
   const [styles, setStyles] = useState<TextStyle[]>([]);
   const [openGroups, setOpenGroups] = useState<Record<TextStyleKind, boolean>>({ character: true, paragraph: false });
 
@@ -79,6 +89,46 @@ export function TextPanel({ layer, onUpdate, onCenter, fontFamilies = FONT_FAMIL
 
   const set = (patch: Partial<TextLayerData>) => onUpdate(layer.id, patch);
 
+  const runs = text.runs ?? [];
+  const range = selection && selection.end > selection.start ? selection : null;
+
+  // What the character controls should display: the value shared across the selection, falling back
+  // to the run at its start when the range is mixed (showing the layer default there would claim a
+  // value the selection doesn't actually have).
+  const anchor = range ? resolveRunStyle(text, runAt(text.content, runs, range.start)) : resolveRunStyle(text);
+  const shared: RunStylePatch = range ? styleOverRange(text.content, runs, range.start, range.end) : {};
+  const charValue = <K extends keyof ResolvedRunStyle>(key: K): ResolvedRunStyle[K] =>
+    ((shared as Partial<ResolvedRunStyle>)[key] ?? anchor[key]) as ResolvedRunStyle[K];
+
+  /**
+   * Applies a character property. With a range selected it writes run overrides for just that
+   * range; with no range it applies to the whole layer — which is what Photoshop's Character panel
+   * does when the layer rather than a range is selected.
+   */
+  const setChar = (patch: RunStylePatch) => {
+    if (range) {
+      set({ runs: applyToRange(text.content, runs, range.start, range.end, patch) });
+      return;
+    }
+    const layerPatch: Partial<TextLayerData> = {};
+    const runOnly: RunStylePatch = {};
+    const clear: RunStylePatch = {};
+    for (const [key, value] of Object.entries(patch)) {
+      if (LAYER_BACKED_CHAR_KEYS.has(key)) {
+        (layerPatch as Record<string, unknown>)[key] = value;
+        // Clear any run override of this key, or the new layer default would be masked by runs and
+        // the control would look broken.
+        (clear as Record<string, unknown>)[key] = undefined;
+      } else {
+        (runOnly as Record<string, unknown>)[key] = value;
+      }
+    }
+    let next = runs;
+    if (Object.keys(clear).length) next = applyToRange(text.content, next, 0, text.content.length, clear);
+    if (Object.keys(runOnly).length) next = applyToRange(text.content, next, 0, text.content.length, runOnly);
+    set({ ...layerPatch, runs: next });
+  };
+
   return (
     <StudioPanel
       title="Text"
@@ -96,11 +146,17 @@ export function TextPanel({ layer, onUpdate, onCenter, fontFamilies = FONT_FAMIL
           className="!text-title"
         />
 
+        <p className={cn('text-[10px] leading-snug rounded-control px-1.5 py-1', range ? 'bg-accent-soft text-accent' : 'text-ink-faint/70')}>
+          {range
+            ? `Character controls apply to ${range.end - range.start} selected character${range.end - range.start === 1 ? '' : 's'}.`
+            : 'Character controls apply to the whole layer. Select characters on canvas to style part of it.'}
+        </p>
+
         <label className="flex flex-col gap-1 text-micro text-ink-faint">
           <span>Font</span>
           <select
-            value={text.fontFamily}
-            onChange={(e) => set({ fontFamily: e.target.value })}
+            value={charValue('fontFamily')}
+            onChange={(e) => setChar({ fontFamily: e.target.value })}
             className="bg-ink/5 border border-hairline rounded-control px-1.5 py-1.5 text-ink text-micro"
           >
             {fontFamilies.map(f => <option key={f} value={f}>{f}</option>)}
@@ -114,8 +170,8 @@ export function TextPanel({ layer, onUpdate, onCenter, fontFamilies = FONT_FAMIL
               type="number"
               min={6}
               max={200}
-              value={Math.round(text.fontSize)}
-              onChange={(e) => set({ fontSize: Number(e.target.value) || text.fontSize })}
+              value={Math.round(charValue('fontSize'))}
+              onChange={(e) => setChar({ fontSize: Number(e.target.value) || charValue('fontSize') })}
               className="w-full bg-ink/5 border border-hairline rounded-control px-1.5 py-1 text-ink text-micro"
             />
           </label>
@@ -123,18 +179,29 @@ export function TextPanel({ layer, onUpdate, onCenter, fontFamilies = FONT_FAMIL
             <span className="shrink-0">Color</span>
             <input
               type="color"
-              value={text.color}
-              onChange={(e) => set({ color: e.target.value })}
+              value={charValue('color')}
+              onChange={(e) => setChar({ color: e.target.value })}
               className="w-8 h-7 rounded-control border border-hairline bg-transparent"
             />
           </label>
         </div>
 
+        <label className="flex items-center gap-2 text-micro text-ink-faint">
+          <span className="w-16 shrink-0">Weight</span>
+          <select
+            value={charValue('fontWeight')}
+            onChange={(e) => setChar({ fontWeight: Number(e.target.value) })}
+            className="studio-interactive flex-1 bg-ink/5 border border-hairline rounded-control px-1.5 py-1 text-ink text-micro"
+          >
+            {FONT_WEIGHTS.map(w => <option key={w} value={w}>{w}</option>)}
+          </select>
+        </label>
+
         <div className="flex items-center gap-1">
-          <IconButton size="sm" active={text.bold} aria-label="Bold" onClick={() => set({ bold: !text.bold })} className="!bg-transparent">
+          <IconButton size="sm" active={charValue('fontWeight') >= 600} aria-label="Bold" onClick={() => setChar({ bold: !(charValue('fontWeight') >= 600), fontWeight: undefined })} className="!bg-transparent">
             <Bold size={14} />
           </IconButton>
-          <IconButton size="sm" active={text.italic} aria-label="Italic" onClick={() => set({ italic: !text.italic })} className="!bg-transparent">
+          <IconButton size="sm" active={charValue('italic')} aria-label="Italic" onClick={() => setChar({ italic: !charValue('italic') })} className="!bg-transparent">
             <Italic size={14} />
           </IconButton>
           <div className="w-px h-6 bg-hairline mx-1" />
@@ -175,12 +242,40 @@ export function TextPanel({ layer, onUpdate, onCenter, fontFamilies = FONT_FAMIL
           <span className="w-16 shrink-0">Tracking</span>
           <input
             type="range" min={-5} max={30} step={0.5}
-            value={text.letterSpacing}
-            onChange={(e) => set({ letterSpacing: Number(e.target.value) })}
+            value={charValue('letterSpacing')}
+            onChange={(e) => setChar({ letterSpacing: Number(e.target.value) })}
             className="flex-1 accent-[var(--color-accent)]"
           />
-          <span className="w-8 text-right tabular-nums">{text.letterSpacing}</span>
+          <span className="w-8 text-right tabular-nums">{charValue('letterSpacing')}</span>
         </label>
+
+        <label className="flex items-center gap-2 text-micro text-ink-faint">
+          <span className="w-16 shrink-0" title="Extra space inserted before the selected characters">Kerning</span>
+          <input
+            type="range" min={-20} max={20} step={0.5}
+            value={charValue('kerning')}
+            onChange={(e) => setChar({ kerning: Number(e.target.value) })}
+            className="flex-1 accent-[var(--color-accent)]"
+          />
+          <span className="w-8 text-right tabular-nums">{charValue('kerning')}</span>
+        </label>
+
+        <label className="flex items-center gap-2 text-micro text-ink-faint">
+          <span className="w-16 shrink-0">Baseline</span>
+          <input
+            type="range" min={-40} max={40} step={1}
+            value={charValue('baselineShift')}
+            onChange={(e) => setChar({ baselineShift: Number(e.target.value) })}
+            className="flex-1 accent-[var(--color-accent)]"
+          />
+          <span className="w-8 text-right tabular-nums">{charValue('baselineShift')}</span>
+        </label>
+        {!range && (
+          <p className="text-[10px] text-ink-faint/70 leading-snug -mt-1">
+            Kerning inserts space before a character and baseline shift raises it — both are
+            per-character, so they only really pay off on a selection.
+          </p>
+        )}
 
         <label className="flex items-center gap-2 text-micro text-ink-faint">
           <span className="w-16 shrink-0">Wrap</span>

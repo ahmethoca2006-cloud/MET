@@ -5,7 +5,9 @@ import type Konva from 'konva';
 import type { Page, ProcessedImage } from '../../types';
 import { BLEND_TO_COMPOSITE, type StudioLayer, type TextLayerData } from './studioTypes';
 import { detectBubbleCenter } from './bubbleDetect';
-import { gradientVector } from './textGradient';
+import { TextLayerNode } from './TextLayerNode';
+import { layoutText } from './textLayout';
+import { reflowRunsForContent } from './textRuns';
 import { swalToast } from '../../lib/swalTheme';
 import { getOrCreateCanvasFor, deleteCanvasFor, type PaintCanvasRegistry } from './paint/paintCanvasRegistry';
 import { usePaintLayer, PAINT_TOOLS } from './paint/usePaintLayer';
@@ -14,6 +16,13 @@ import { strokePenPath, type PaintSettings } from './paint/paintEngine';
 import { BrushCursor } from './paint/BrushCursor';
 import type { SerializedStudioLayer } from '../../lib/studioProjectStore';
 import { filterForAdjustment } from '../../lib/adjustments';
+
+/** A character range inside one text layer, as reported by the editing textarea. */
+export interface TextSelection {
+  layerId: string;
+  start: number;
+  end: number;
+}
 
 export interface ExportSnapshot {
   width: number;
@@ -54,6 +63,12 @@ interface StudioCanvasProps {
   /** boxWidth given => box text of that width (click-drag); omitted => point text (click). */
   onAddTextLayer: (x: number, y: number, boxWidth?: number) => void;
   onUpdateTextLayer: (id: string, patch: Partial<TextLayerData>) => void;
+  /**
+   * The character range selected inside the text layer being edited, or null when nothing is being
+   * edited. Lifted out of the canvas so TextPanel can apply character styling to the selection —
+   * the editing overlay is a plain textarea, so its selectionStart/End *is* the selection model.
+   */
+  onTextSelectionChange?: (selection: TextSelection | null) => void;
   /** Current brush/fill/etc. settings, driven by the tool options bar. */
   paintSettings: PaintSettings;
   /** Active selection (marquee/lasso/wand); paint ops clip to this when present. */
@@ -105,14 +120,14 @@ export interface StudioCanvasHandle {
 
 export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(function StudioCanvas({
   page, showCleaned, overlayOpacity, showGrid = false, showRulers = false, activeTool, fitSignal, layers,
-  activeLayerId, onSelectLayer, onAddTextLayer, onUpdateTextLayer,
+  activeLayerId, onSelectLayer, onAddTextLayer, onUpdateTextLayer, onTextSelectionChange,
   paintSettings, selection, onSelectionChange, onPaintStrokeEnd, onEyedropperPick, onCommitCrop,
   queuedBubbleRects,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
-  const textNodeRefs = useRef<Record<string, Konva.Text | null>>({});
+  const textNodeRefs = useRef<Record<string, Konva.Group | null>>({});
   const layerNodeRefs = useRef<Record<string, Konva.Layer | null>>({});
   const paintCanvasRegistry = useRef<PaintCanvasRegistry>({});
   /** Per-layer pristine pre-liquify snapshot, for Liquify's Reconstruct mode — see usePaintLayer.ts. */
@@ -454,28 +469,6 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     transformer.getLayer()?.batchDraw();
   }, [activeLayerId, activeTool, editingLayerId, layers]);
 
-  // Gradient fills need the text node's real laid-out box, which can't be a prop: point text has
-  // no author-set width, so only Konva knows how wide it ended up. React commits the node's props
-  // before effects run, so node.width()/height() here already reflect the current content — and
-  // reading the node beats re-measuring the text ourselves and drifting from what Konva drew.
-  useEffect(() => {
-    // Every Studio layer owns its own Konva layer, so each touched one needs its own redraw —
-    // react-konva already drew this commit before effects ran, and these points are set after.
-    const dirty = new Set<Konva.Layer>();
-    for (const layer of layers) {
-      const gradient = layer.text?.gradient;
-      if (layer.type !== 'text' || !gradient?.enabled) continue;
-      const node = textNodeRefs.current[layer.id];
-      if (!node) continue;
-      const { start, end } = gradientVector(node.width(), node.height(), gradient.angle);
-      node.fillLinearGradientStartPoint(start);
-      node.fillLinearGradientEndPoint(end);
-      const konvaLayer = node.getLayer();
-      if (konvaLayer) dirty.add(konvaLayer);
-    }
-    dirty.forEach(l => l.batchDraw());
-  }, [layers]);
-
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     const targetClass = e.target.getClassName?.();
     const clickedBackground = e.target === e.target.getStage() || targetClass === 'Image' || targetClass === 'Rect';
@@ -722,6 +715,11 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
 
   const editingLayer = editingLayerId ? layers.find(l => l.id === editingLayerId) ?? null : null;
 
+  const reportSelection = useCallback((el: HTMLTextAreaElement) => {
+    if (!editingLayerId) return;
+    onTextSelectionChange?.({ layerId: editingLayerId, start: el.selectionStart, end: el.selectionEnd });
+  }, [editingLayerId, onTextSelectionChange]);
+
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
     const stage = stageRef.current;
@@ -886,56 +884,15 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
                 />
               )}
               {layer.type === 'text' && layer.text && (
-                <KonvaText
-                  ref={(node) => { textNodeRefs.current[layer.id] = node; }}
-                  visible={layer.id !== editingLayerId}
-                  text={layer.text.content || ' '}
-                  x={layer.text.x}
-                  y={layer.text.y}
-                  width={layer.text.autoWidth ? undefined : layer.text.width}
-                  fontFamily={layer.text.fontFamily}
-                  fontSize={layer.text.fontSize}
-                  fontStyle={`${layer.text.bold ? 'bold' : ''} ${layer.text.italic ? 'italic' : ''}`.trim() || 'normal'}
-                  fill={layer.text.color}
-                  // Konva's default fillPriority is 'color', so a node carrying both `fill` and
-                  // gradient stops draws the flat colour — the gradient would silently never show.
-                  fillPriority={layer.text.gradient?.enabled ? 'linear-gradient' : 'color'}
-                  fillLinearGradientColorStops={layer.text.gradient?.enabled
-                    ? [0, layer.text.gradient.from, 1, layer.text.gradient.to]
-                    : undefined}
-                  align={layer.text.align}
-                  lineHeight={layer.text.lineHeight}
-                  letterSpacing={layer.text.letterSpacing}
-                  // Point text never wraps — with width undefined, Konva grows the node to fit.
-                  wrap={layer.text.autoWidth ? 'none' : 'word'}
-                  shadowEnabled={layer.text.shadow?.enabled ?? false}
-                  shadowColor={layer.text.shadow?.color}
-                  shadowBlur={layer.text.shadow?.blur}
-                  shadowOffsetX={layer.text.shadow?.offsetX}
-                  shadowOffsetY={layer.text.shadow?.offsetY}
-                  stroke={layer.text.strokeWidth > 0 ? layer.text.strokeColor : undefined}
-                  strokeWidth={layer.text.strokeWidth}
-                  rotation={layer.text.rotation}
+                <TextLayerNode
+                  layer={layer}
+                  groupRef={(node) => { textNodeRefs.current[layer.id] = node; }}
+                  editing={layer.id === editingLayerId}
+                  selected={layer.id === activeLayerId && activeTool === 'select'}
                   draggable={activeTool === 'select' && !layer.locked}
-                  onClick={() => onSelectLayer(layer.id)}
-                  onTap={() => onSelectLayer(layer.id)}
-                  onDblClick={() => { onSelectLayer(layer.id); setEditingLayerId(layer.id); }}
-                  onDblTap={() => { onSelectLayer(layer.id); setEditingLayerId(layer.id); }}
-                  onDragEnd={(e) => onUpdateTextLayer(layer.id, { x: e.target.x(), y: e.target.y() })}
-                  onTransformEnd={(e) => {
-                    const node = e.target as Konva.Text;
-                    const scaleX = node.scaleX();
-                    const scaleY = node.scaleY();
-                    node.scaleX(1);
-                    node.scaleY(1);
-                    onUpdateTextLayer(layer.id, {
-                      x: node.x(),
-                      y: node.y(),
-                      rotation: node.rotation(),
-                      width: Math.max(20, node.width() * scaleX),
-                      fontSize: Math.max(6, layer.text!.fontSize * scaleY),
-                    });
-                  }}
+                  onSelect={() => onSelectLayer(layer.id)}
+                  onEdit={() => { onSelectLayer(layer.id); setEditingLayerId(layer.id); }}
+                  onUpdate={(patch) => onUpdateTextLayer(layer.id, patch)}
                 />
               )}
             </Layer>
@@ -1007,14 +964,30 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
         <textarea
           autoFocus
           value={editingLayer.text.content}
-          onChange={(e) => onUpdateTextLayer(editingLayer.id, { content: e.target.value })}
-          onBlur={() => setEditingLayerId(null)}
+          onChange={(e) => {
+            const prev = editingLayer.text!;
+            // Runs are indexed against `content`, so any content change has to re-anchor them or
+            // styled spans would slide off their characters as you type.
+            onUpdateTextLayer(editingLayer.id, {
+              content: e.target.value,
+              runs: reflowRunsForContent(prev.content, e.target.value, prev.runs ?? []),
+            });
+            reportSelection(e.target);
+          }}
+          onSelect={(e) => reportSelection(e.currentTarget)}
+          onKeyUp={(e) => reportSelection(e.currentTarget)}
+          onMouseUp={(e) => reportSelection(e.currentTarget)}
+          // Triple-click selects the whole item (Part D). The textarea sits above the stage once
+          // editing starts, so the third click never reaches the Konva node — it has to be handled
+          // here, not on the shape.
+          onClick={(e) => { if (e.detail === 3) e.currentTarget.select(); reportSelection(e.currentTarget); }}
+          onBlur={() => { setEditingLayerId(null); onTextSelectionChange?.(null); }}
           onKeyDown={(e) => { if (e.key === 'Escape') setEditingLayerId(null); }}
           className="absolute p-0 m-0 bg-black/20 border border-dashed border-white/50 outline-none resize-none overflow-hidden"
           style={{
             top: pos.y + editingLayer.text.y * scale,
             left: pos.x + editingLayer.text.x * scale,
-            width: editingLayer.text.width * scale,
+            width: (editingLayer.text.autoWidth ? layoutText(editingLayer.text).width : editingLayer.text.width) * scale,
             fontSize: editingLayer.text.fontSize * scale,
             fontFamily: editingLayer.text.fontFamily,
             fontWeight: editingLayer.text.bold ? 'bold' : 'normal',

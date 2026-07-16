@@ -3,7 +3,7 @@ import { genId } from './id';
 import { DEFAULT_TEXT_SHADOW, DEFAULT_TEXT_GRADIENT, type StudioLayer, type TyperStyle } from '../components/studio/studioTypes';
 
 /** Bump + add a migration step in loadChapterStudioData whenever the persisted shape changes. */
-export const STUDIO_SCHEMA_VERSION = 3;
+export const STUDIO_SCHEMA_VERSION = 4;
 const SCHEMA_VERSION = STUDIO_SCHEMA_VERSION;
 const MAX_VERSIONS = 10;
 
@@ -45,6 +45,9 @@ export function createEmptyStudioData(): ChapterStudioData {
  *
  * v2 -> v3: text layers gained `gradient`. Backfills gradient-off, i.e. the flat `color` fill.
  *
+ * v3 -> v4: text layers gained `runs` (per-character overrides). Backfills `[]`, i.e. the whole
+ * layer renders in its own flat style — exactly the pre-v4 behaviour.
+ *
  * Every backfill below is an idempotent `??`, so this single pass handles any older version
  * (v1 -> v3 as correctly as v2 -> v3) without needing a per-step chain.
  */
@@ -61,6 +64,7 @@ function migrateTextLayers(data: ChapterStudioData): ChapterStudioData {
           letterSpacing: l.text.letterSpacing ?? 0,
           shadow: l.text.shadow ?? { ...DEFAULT_TEXT_SHADOW },
           gradient: l.text.gradient ?? { ...DEFAULT_TEXT_GRADIENT },
+          runs: l.text.runs ?? [],
         },
       };
     });

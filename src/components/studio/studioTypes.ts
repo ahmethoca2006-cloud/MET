@@ -58,6 +58,38 @@ export interface TextGradient {
   angle: number;
 }
 
+/**
+ * Character-level overrides for a span of `content`.
+ *
+ * Runs are contiguous and cover `content` exactly — `sum(run.length) === content.length`. A run
+ * with no overrides just renders in the layer's own style, so plain text is one full-length empty
+ * run. `textRuns.ts` owns that invariant; don't hand-edit `runs` anywhere else.
+ *
+ * Only the properties Photoshop treats as *character* properties live here. Stroke, shadow/glow and
+ * gradient are layer effects, and align/lineHeight/wrap are paragraph properties — those stay on
+ * TextLayerData. This split is also what maps onto ag-psd's `styleRuns` for PSD export.
+ */
+export interface TextRun {
+  length: number;
+  fontFamily?: string;
+  fontSize?: number;
+  /** Falls back to `bold ? 700 : 400`. Families that ship a single weight get browser synthesis. */
+  fontWeight?: number;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  /** Tracking within this run (extra px between characters). */
+  letterSpacing?: number;
+  /**
+   * Extra px inserted *before* this run — Photoshop's manual kern, which is applied at a caret
+   * position between two characters. A caret position is exactly a run boundary, which is what
+   * makes "advance before the run" a faithful model rather than an approximation.
+   */
+  kerning?: number;
+  /** Raises (+) or lowers (-) this run off the baseline. */
+  baselineShift?: number;
+}
+
 export interface TextLayerData {
   content: string;
   x: number;
@@ -85,6 +117,8 @@ export interface TextLayerData {
   shadow: TextShadow;
   /** Gradient fill; overrides `color` while enabled. */
   gradient: TextGradient;
+  /** Per-character overrides over the layer style above. See TextRun; maintained by textRuns.ts. */
+  runs: TextRun[];
   /** Translator workflow metadata — surfaced in the Translation Preview panel. */
   status: TranslationStatus;
   comment: string;
@@ -219,6 +253,8 @@ export function createTextLayer(x: number, y: number, boxWidth?: number): Studio
       letterSpacing: 0,
       shadow: { ...DEFAULT_TEXT_SHADOW },
       gradient: { ...DEFAULT_TEXT_GRADIENT },
+      // Empty content -> no runs; normalizeRuns keeps them in step as the content grows.
+      runs: [],
       fontFamily: FONT_FAMILIES[0],
       fontSize: 28,
       color: '#000000',

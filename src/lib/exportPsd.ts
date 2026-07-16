@@ -1,5 +1,6 @@
-import type { Psd, Layer as PsdLayer, LayerEffectGradientOverlay } from 'ag-psd';
-import type { TextGradient } from '../components/studio/studioTypes';
+import type { Psd, Layer as PsdLayer, LayerEffectGradientOverlay, TextStyleRun } from 'ag-psd';
+import type { TextGradient, TextLayerData } from '../components/studio/studioTypes';
+import { normalizeRuns, resolveRunStyle } from '../components/studio/textRuns';
 import type { ExportSnapshot } from '../components/studio/StudioCanvas';
 import type { SerializedStudioLayer } from './studioProjectStore';
 
@@ -42,6 +43,34 @@ function buildGradientOverlay(gradient: TextGradient): LayerEffectGradientOverla
   };
 }
 
+/**
+ * Our per-character runs -> Photoshop's `styleRuns`. Returns [] for plain text so the layer just
+ * carries its default style, which is what pre-run chapters and unstyled text should produce.
+ *
+ * `kerning` is emitted with `autoKerning: false`: a manual kern and the font's own metric kerning
+ * are alternatives in Photoshop, so leaving auto on would let the font fight the explicit value.
+ */
+function buildStyleRuns(t: TextLayerData): TextStyleRun[] {
+  const runs = normalizeRuns(t.content, t.runs ?? []);
+  if (runs.length === 0) return [];
+  return runs.map(run => {
+    const style = resolveRunStyle(t, run);
+    return {
+      length: run.length,
+      style: {
+        font: { name: style.fontFamily },
+        fontSize: style.fontSize,
+        fauxBold: style.fontWeight >= 600,
+        fauxItalic: style.italic,
+        fillColor: hexToRgb(style.color),
+        tracking: style.letterSpacing,
+        ...(style.kerning !== 0 ? { kerning: style.kerning, autoKerning: false } : {}),
+        ...(style.baselineShift !== 0 ? { baselineShift: style.baselineShift } : {}),
+      },
+    };
+  });
+}
+
 function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -76,6 +105,7 @@ async function buildPsdLayer(layer: SerializedStudioLayer, width: number, height
     base.canvas = await dataUrlToCanvas(layer.raster, width, height);
   } else if (layer.type === 'text' && layer.text) {
     const t = layer.text;
+    const runs = buildStyleRuns(t);
     const lineCount = t.content.split('\n').length || 1;
     // Editable text layer per ag-psd's LayerTextData — Photoshop can re-edit this directly.
     // Font family names pass through as-is; Photoshop substitutes if that font isn't installed
@@ -94,6 +124,9 @@ async function buildPsdLayer(layer: SerializedStudioLayer, width: number, height
         fillColor: hexToRgb(t.color),
         ...(t.strokeWidth > 0 ? { strokeColor: hexToRgb(t.strokeColor), strokeFlag: true, outlineWidth: t.strokeWidth } : {}),
       },
+      // Per-character runs map onto Photoshop's own style runs, so mixed-size/colour text stays
+      // editable there rather than being flattened to the layer's default style.
+      ...(runs.length > 0 ? { styleRuns: runs } : {}),
     };
     // A gradient overlay is how gradient text is done by hand in Photoshop, and it stays editable
     // there. `style.fillColor` above is left as the flat colour underneath, so the layer still
