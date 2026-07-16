@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Group, Rect, Line, Text as KonvaText } from 'react-konva';
 import type Konva from 'konva';
-import type { StudioLayer, TextLayerData } from './studioTypes';
+import type { StudioLayer, TextLayerData, LayerSelectMode } from './studioTypes';
 import { layoutText } from './textLayout';
 import { gradientVector } from './textGradient';
 
@@ -11,9 +11,22 @@ interface TextLayerNodeProps {
   editing: boolean;
   selected: boolean;
   draggable: boolean;
-  onSelect: () => void;
+  onSelect: (mode: LayerSelectMode) => void;
   onEdit: () => void;
   onUpdate: (patch: Partial<TextLayerData>) => void;
+}
+
+/**
+ * Konva name on a text layer's invisible hit rect. The stage's "did I click empty canvas?" test goes
+ * by class name, and the page's drop-shadow backing is a Rect too — so without a name to tell them
+ * apart, clicking text reads as clicking background and clears the selection it just made.
+ */
+export const TEXT_HIT_NAME = 'text-hit';
+
+/** Shift or Ctrl/Cmd adds to (or removes from) the selection; a plain click replaces it. */
+function selectModeFor(evt: MouseEvent | TouchEvent): LayerSelectMode {
+  const e = evt as MouseEvent;
+  return e.shiftKey || e.ctrlKey || e.metaKey ? 'toggle' : 'replace';
 }
 
 /**
@@ -46,10 +59,13 @@ export function TextLayerNode({
       y={text.y}
       rotation={text.rotation}
       draggable={draggable}
-      onClick={onSelect}
-      onTap={onSelect}
+      onClick={(e) => onSelect(selectModeFor(e.evt))}
+      onTap={(e) => onSelect(selectModeFor(e.evt))}
       onDblClick={onEdit}
       onDblTap={onEdit}
+      // Konva's Transformer already moves every attached node when a multi-selection is dragged, so
+      // each node just commits its own final position — propagating the delta by hand here would
+      // double-apply it and the followers would overshoot.
       onDragEnd={(e) => onUpdate({ x: e.target.x(), y: e.target.y() })}
       onTransformEnd={(e) => {
         const node = e.target as Konva.Group;
@@ -72,7 +88,7 @@ export function TextLayerNode({
           the Transformer frames the text box rather than the glyph extents. A `transparent` fill is
           still drawn to the hit canvas (Konva substitutes its own colour key there), so this is
           invisible but clickable. */}
-      <Rect width={Math.max(layout.width, 4)} height={Math.max(layout.height, 4)} fill="transparent" />
+      <Rect name={TEXT_HIT_NAME} width={Math.max(layout.width, 4)} height={Math.max(layout.height, 4)} fill="transparent" />
 
       {layout.runs.map((run, i) => (
         <KonvaText

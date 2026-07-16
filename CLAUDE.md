@@ -97,6 +97,22 @@ Native project format: `.msp` (zipped JSON containing the full workspace tree + 
 
 Text export (TXT/DOCX/PDF) lives in `src/lib/textEditorExport.ts` — see the Text Editor section below.
 
+### Canvas selection (Select tool)
+
+`Studio.tsx` holds `selectedLayerIds: string[]`; **`activeLayerId` is derived from it** (the last member — the "primary"), not stored separately, so the two can't disagree. The single-layer panels (Text, Adjustment), the layer shortcuts and the edit target all key off the primary; the set drives multi-layer operations.
+
+- Click selects, **Shift/Ctrl-click toggles** (canvas *and* Layers panel), click on empty canvas deselects.
+- **Drag on empty canvas marquee-selects** objects. This is why only the Pan tool drags the stage natively — the Select tool's drag is the marquee, so panning while it's active uses the same Space-hold / middle-drag path every other tool already had.
+- Delete removes the whole selection (`handleDeleteLayers` filters out the background and locked layers rather than special-casing each call site).
+- **Only text layers participate.** They're the only layers with Konva nodes and an `x`/`y` in the data model — see "Move tool only repositions text layers" in Known gaps.
+
+Two things here are non-obvious and were both found by testing rather than reasoning:
+
+- **Konva's Transformer already moves every attached node** when a multi-selection is dragged, and it derives the combined bounding box from its node list. Propagating the drag delta to the other selected nodes by hand double-applies it and the followers overshoot. Each node just commits its own position in `onDragEnd`.
+- A text layer's hit area is a `Rect`, and so is the page's drop-shadow backing — the stage's "did I click empty canvas?" test goes by class name, so the hit rect carries `TEXT_HIT_NAME` and is excluded explicitly. Without that, clicking text counted as clicking background and cleared the selection the click had just made.
+
+A finished marquee drag also fires a trailing stage click that would clear the selection it just made; `objectMarqueeConsumedRef` swallows it, mirroring `textDragConsumedRef`'s handling of the same problem for the Text tool.
+
 ### Text layers (`TextLayerNode.tsx`, `textLayout.ts`, `textRuns.ts`, `TextPanel.tsx`, `textGradient.ts`)
 
 A text layer is a layer-wide style **plus** `runs: TextRun[]` — per-character overrides. Photoshop's split decides what lives where, and it's the same split ag-psd's `styleRuns` uses:
@@ -182,7 +198,7 @@ Real font installation: upload TTF/OTF/WOFF/WOFF2 → `opentype.js` (dynamically
 - **No Home/landing page.** Top nav is 5 flat tabs (Library/Text Editor/Settings/Teams/Cloud); Recent/Templates/Tutorials/Plugins/Account don't exist. Building nav destinations with no real content behind them would violate the no-placeholder rule — needs real features first.
 - **Interactive control sizing** on mobile/tablet breakpoints hasn't had a systematic ≥44px touch-target pass — many buttons/sliders are still 24–32px (a few new additions, like the tablet dock icon strip, were sized to 44px; the sweep across every existing control wasn't done).
 - **Layer groups/masks/smart objects** (adjustment layers *are* implemented, background-only — see Per-page layer stack above), **magnetic lasso**, **patch tool**, **curvature pen / path selection / direct selection** — declared as intended features (in tool lists, type unions, or SPEC) but not implemented. Each is a genuinely separate chunk of work. (Selection feather/expand/contract/add-subtract, liquify's `reconstruct` mode, Crop, TypeR's Multi-Bubble mode, and brush symmetry *are* implemented — see Canvas engine / TypeR above.)
-- **Move tool only repositions text layers.** Clean-patch (raster) and adjustment layers have no `x`/`y` offset in the data model and their Konva nodes aren't draggable — Move-tool support for them would need per-layer offset fields plus a Group wrapper (and matching changes to export/flatten), a real, separate piece of work like layer groups/masks above.
+- **Move tool only repositions text layers**, and for the same reason **canvas multi-select only covers text layers** (see Canvas selection above). Clean-patch (raster) and adjustment layers have no `x`/`y` offset in the data model and their Konva nodes aren't draggable — Move-tool support for them would need per-layer offset fields plus a Group wrapper (and matching changes to export/flatten), a real, separate piece of work like layer groups/masks above.
 - **Text warp** — needs path-based glyph rendering, which Konva's `Text` has no support for; it would mean generating glyph outlines (via `opentype.js`, already a dependency) and deforming them, rather than positioning text nodes. Not blocked on the run model — that now exists (see Text layers above), so kerning, baseline shift and per-character styling are implemented.
 - **TypeR's bold/italic overrides are still whole-layer.** The run model now makes per-character TypeR styling possible, but `parseTyperScript` only marks a *whole line* bold/italic, so nothing currently produces partial runs from a script — wiring that up is a separate change to the parser and its placement path.
 - **Color**: no multi-stop gradient editor UI (saved palettes *are* implemented, see Color system above; gradient *text* is real but is a two-stop from→to ramp, same as the Gradient tool). **Fonts**: no Google Fonts (by design, offline-first; TypeR style font-family control *is* implemented, see Fonts above). **Music player, navigator/minimap, safe-area overlay** — not implemented (Grid and Rulers *are* implemented, see Canvas engine above).

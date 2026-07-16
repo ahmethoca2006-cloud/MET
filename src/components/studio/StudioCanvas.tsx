@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
 import { Stage, Layer, Image as KonvaImage, Rect, Ellipse, Line, Text as KonvaText, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import type { Page, ProcessedImage } from '../../types';
-import { BLEND_TO_COMPOSITE, type StudioLayer, type TextLayerData } from './studioTypes';
+import { BLEND_TO_COMPOSITE, type StudioLayer, type TextLayerData, type LayerSelectMode } from './studioTypes';
 import { detectBubbleCenter } from './bubbleDetect';
-import { TextLayerNode } from './TextLayerNode';
+import { TextLayerNode, TEXT_HIT_NAME } from './TextLayerNode';
 import { layoutText } from './textLayout';
 import { reflowRunsForContent } from './textRuns';
 import { swalToast } from '../../lib/swalTheme';
@@ -58,7 +58,11 @@ interface StudioCanvasProps {
   /** Non-background layers stacked above the page image, bottom to top. */
   layers: StudioLayer[];
   activeLayerId: string | null;
-  onSelectLayer: (id: string) => void;
+  onSelectLayer: (id: string, mode?: LayerSelectMode) => void;
+  /** Every layer selected on canvas (primary last). Drives the combined transform box. */
+  selectedLayerIds?: string[];
+  /** Replaces the whole selection — used by the drag-a-box object marquee. */
+  onSelectLayers?: (ids: string[]) => void;
   /** x/y are in page-image coordinates. */
   /** boxWidth given => box text of that width (click-drag); omitted => point text (click). */
   onAddTextLayer: (x: number, y: number, boxWidth?: number) => void;
@@ -120,7 +124,7 @@ export interface StudioCanvasHandle {
 
 export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(function StudioCanvas({
   page, showCleaned, overlayOpacity, showGrid = false, showRulers = false, activeTool, fitSignal, layers,
-  activeLayerId, onSelectLayer, onAddTextLayer, onUpdateTextLayer, onTextSelectionChange,
+  activeLayerId, selectedLayerIds, onSelectLayer, onSelectLayers, onAddTextLayer, onUpdateTextLayer, onTextSelectionChange,
   paintSettings, selection, onSelectionChange, onPaintStrokeEnd, onEyedropperPick, onCommitCrop,
   queuedBubbleRects,
 }, ref) {
@@ -145,6 +149,11 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const prevPinchCenterRef = useRef<{ x: number; y: number } | null>(null);
   const [touchCount, setTouchCount] = useState(0);
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  /** The canvas selection. Falls back to the primary layer when the host doesn't track a set. */
+  const selectionIds = useMemo(
+    () => selectedLayerIds ?? (activeLayerId ? [activeLayerId] : []),
+    [selectedLayerIds, activeLayerId],
+  );
   const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
   /** Text tool drag origin — a drag makes box text, a plain click makes point text. */
   const textDragRef = useRef<{ x: number; y: number } | null>(null);
@@ -458,20 +467,24 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     }
   }, [activeLayerId]);
 
-  // Keep the Transformer bound to the selected text layer's node.
+  // Keep the Transformer bound to every selected text node. Konva derives the combined bounding box
+  // from the node list itself, so a multi-selection needs no separate box maths.
   useEffect(() => {
     const transformer = transformerRef.current;
     if (!transformer) return;
-    const node = activeTool === 'select' && !editingLayerId && activeLayerId
-      ? textNodeRefs.current[activeLayerId]
-      : null;
-    transformer.nodes(node ? [node] : []);
+    const nodes = activeTool === 'select' && !editingLayerId
+      ? selectionIds.map(id => textNodeRefs.current[id]).filter((n): n is Konva.Group => !!n)
+      : [];
+    transformer.nodes(nodes);
     transformer.getLayer()?.batchDraw();
-  }, [activeLayerId, activeTool, editingLayerId, layers]);
+  }, [selectionIds, activeTool, editingLayerId, layers]);
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     const targetClass = e.target.getClassName?.();
-    const clickedBackground = e.target === e.target.getStage() || targetClass === 'Image' || targetClass === 'Rect';
+    // A text layer's hit area is a Rect too, so it must be excluded by name — otherwise clicking
+    // text counts as clicking background and clears the selection the click just made.
+    const clickedBackground = e.target === e.target.getStage() || targetClass === 'Image'
+      || (targetClass === 'Rect' && !e.target.hasName(TEXT_HIT_NAME));
 
     if (activeTool === 'zoom') {
       const stage = stageRef.current;
@@ -507,6 +520,14 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       return;
     }
 
+    // Clicking empty canvas with the Select tool clears the selection — without this there'd be no
+    // way to drop a multi-selection short of clicking another layer.
+    if (activeTool === 'select') {
+      if (objectMarqueeConsumedRef.current) { objectMarqueeConsumedRef.current = false; return; }
+      if (clickedBackground) onSelectLayers?.([]);
+      return;
+    }
+
     if (activeTool !== 'text') return;
     if (textDragConsumedRef.current) { textDragConsumedRef.current = false; return; }
     if (!clickedBackground) return;
@@ -531,6 +552,16 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     if (e.evt.button === 1 || (e.evt.button === 0 && spaceDown)) {
       e.evt.preventDefault();
       panRef.current = { active: true, lastX: e.evt.clientX, lastY: e.evt.clientY };
+      return;
+    }
+    if (activeTool === 'select') {
+      // Only a drag starting on empty canvas marquees; starting on a layer means move it.
+      const targetClass = e.target.getClassName?.();
+      const onEmpty = e.target === e.target.getStage() || targetClass === 'Image';
+      if (!onEmpty) return;
+      const p = imageSpacePointer();
+      if (!p) return;
+      objectMarqueeRef.current = { x: p.x, y: p.y, additive: e.evt.shiftKey };
       return;
     }
     if (activeTool === 'text') {
@@ -613,6 +644,18 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const handlePaintPointerMove = (e: Konva.KonvaEventObject<PointerEvent>) => {
     if (panRef.current?.active) return;
     if (e.evt.pointerType === 'touch' && touchCount >= 2) return;
+    if (objectMarqueeRef.current) {
+      const p = imageSpacePointer();
+      if (!p) return;
+      const start = objectMarqueeRef.current;
+      setObjectMarquee({
+        x: Math.min(start.x, p.x),
+        y: Math.min(start.y, p.y),
+        width: Math.abs(p.x - start.x),
+        height: Math.abs(p.y - start.y),
+      });
+      return;
+    }
     if (MARQUEE_TOOLS.has(activeTool) && marqueeStartRef.current) {
       const p = imageSpacePointer();
       if (!p) return;
@@ -651,6 +694,27 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const handlePaintPointerUp = (e: Konva.KonvaEventObject<PointerEvent>) => {
     if (e.evt.pointerType === 'touch' && touchCount >= 2) return;
     if (panRef.current?.active) { panRef.current = null; return; }
+    if (objectMarqueeRef.current) {
+      const { additive } = objectMarqueeRef.current;
+      const box = objectMarquee;
+      objectMarqueeRef.current = null;
+      setObjectMarquee(null);
+      // A tiny box is a click on empty canvas, not a drag — handleStageClick clears the selection.
+      if (!box || box.width < 4 || box.height < 4) return;
+      objectMarqueeConsumedRef.current = true;
+      const hits = layers
+        .filter(l => l.type === 'text' && !l.locked && l.visible)
+        .filter(l => {
+          const r = textLayerRect(l.id);
+          return !!r && r.x < box.x + box.width && r.x + r.width > box.x
+            && r.y < box.y + box.height && r.y + r.height > box.y;
+        })
+        .map(l => l.id);
+      // Shift keeps whatever was already selected, matching the marquee tools' add convention.
+      const next = additive ? [...new Set([...selectionIds, ...hits])] : hits;
+      onSelectLayers?.(next);
+      return;
+    }
     if (activeTool === 'text' && textDragRef.current) {
       const start = textDragRef.current;
       textDragRef.current = null;
@@ -714,6 +778,28 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   };
 
   const editingLayer = editingLayerId ? layers.find(l => l.id === editingLayerId) ?? null : null;
+
+  /**
+   * The Select tool's drag-a-box-over-empty-canvas object marquee. Distinct from `selection`, which
+   * is the *pixel* selection the paint tools clip to — this one picks layers.
+   */
+  const [objectMarquee, setObjectMarquee] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const objectMarqueeRef = useRef<{ x: number; y: number; additive: boolean } | null>(null);
+  /**
+   * A completed marquee drag still fires a trailing stage click, which would immediately clear the
+   * selection the drag just made. Mirrors `textDragConsumedRef`'s handling of the same problem.
+   */
+  const objectMarqueeConsumedRef = useRef(false);
+
+  /** Page-space bounds of a text layer's node, rotation included (Konva gives it to us). */
+  const textLayerRect = (id: string) => {
+    const node = textNodeRefs.current[id];
+    const konvaLayer = node?.getLayer();
+    // Relative to its Konva layer, which carries no transform of its own — so this comes back in
+    // page coords rather than screen coords, and stays correct under pan/zoom.
+    return node && konvaLayer ? node.getClientRect({ relativeTo: konvaLayer }) : null;
+  };
+
 
   const reportSelection = useCallback((el: HTMLTextAreaElement) => {
     if (!editingLayerId) return;
@@ -796,7 +882,10 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   // Space/middle-mouse panning is handled manually via panRef (see handlePaintPointerDown and the
   // window mousemove/mouseup effect) so it works uniformly across tools without fighting Konva's
   // own native drag-handling for the Pan/Select tools.
-  const draggable = (activeTool === 'pan' || activeTool === 'select') && !spaceDown;
+  // Only the Pan tool drags the stage natively. The Select tool's drag is the object marquee
+  // (Part E), so panning while it's active goes through the same Space-hold / middle-drag path
+  // every other tool already uses.
+  const draggable = activeTool === 'pan' && !spaceDown;
   const panning = panRef.current?.active || spaceDown;
   // Hide the OS cursor while a brush-sized tool is armed — the BrushCursor ring below
   // *is* the cursor, and showing both reads as a doubled pointer.
@@ -888,9 +977,9 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
                   layer={layer}
                   groupRef={(node) => { textNodeRefs.current[layer.id] = node; }}
                   editing={layer.id === editingLayerId}
-                  selected={layer.id === activeLayerId && activeTool === 'select'}
+                  selected={selectionIds.includes(layer.id) && activeTool === 'select'}
                   draggable={activeTool === 'select' && !layer.locked}
-                  onSelect={() => onSelectLayer(layer.id)}
+                  onSelect={(mode) => onSelectLayer(layer.id, mode)}
                   onEdit={() => { onSelectLayer(layer.id); setEditingLayerId(layer.id); }}
                   onUpdate={(patch) => onUpdateTextLayer(layer.id, patch)}
                 />
@@ -899,6 +988,17 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
           ))}
 
           <Layer listening={false}>
+            {/* Object marquee — solid accent fill, deliberately unlike the dashed white *pixel*
+                selection, since the two mean different things (pick layers vs clip paint). */}
+            {objectMarquee && (
+              <Rect
+                x={objectMarquee.x} y={objectMarquee.y}
+                width={objectMarquee.width} height={objectMarquee.height}
+                fill="rgba(56, 189, 248, 0.12)"
+                stroke="#38bdf8"
+                strokeWidth={1 / scale}
+              />
+            )}
             {selection.kind === 'rect' && (
               <Rect x={selection.x} y={selection.y} width={selection.width} height={selection.height}
                 stroke="#ffffff" strokeWidth={1 / scale} dash={[6 / scale, 4 / scale]} />

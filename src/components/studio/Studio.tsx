@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import type { Page } from '../../types';
 import { StudioToolbar } from './StudioToolbar';
@@ -33,7 +33,7 @@ import { exportPsd } from '../../lib/exportPsd';
 import {
   createBackgroundLayer, createLayer, createTextLayer, createAdjustmentLayer, parseTyperScript,
   DEFAULT_TYPER_STYLES, FONT_FAMILIES, type StudioLayer, type TextLayerData, type TyperStyle,
-  type AdjustmentLayerData,
+  type AdjustmentLayerData, type LayerSelectMode,
 } from './studioTypes';
 import { FontsPanel } from './FontsPanel';
 import { BrushesPanel } from './BrushesPanel';
@@ -239,7 +239,14 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
 
   // Per-page layer stacks. Each page always has a locked "Background" layer at index 0.
   const [layersByPage, setLayersByPage] = useState<Record<string, StudioLayer[]>>({});
-  const [activeLayerId, setActiveLayerId] = useState<string | null>('background');
+  /**
+   * Canvas selection. `activeLayerId` stays the *primary* member (the last one picked) and is what
+   * the single-layer panels, shortcuts and the Transformer's edit target key off — keeping it
+   * derived rather than a second piece of state means the two can't disagree.
+   */
+  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>(['background']);
+  const activeLayerId = selectedLayerIds.length > 0 ? selectedLayerIds[selectedLayerIds.length - 1] : null;
+  const setActiveLayerId = useCallback((id: string | null) => setSelectedLayerIds(id ? [id] : []), []);
   // The character range selected inside the text layer currently being edited on canvas. Lives here
   // rather than in StudioCanvas because TextPanel — a sibling in the dock — is what applies
   // character styling to it.
@@ -488,11 +495,27 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     ));
   }
 
-  function selectLayer(id: string) {
-    setActiveLayerId(id);
+  /**
+   * @param mode 'replace' (plain click) or 'toggle' (Shift/Ctrl-click — adds, or removes if already
+   *             selected). A toggle keeps the clicked layer primary so the panels follow it.
+   */
+  function selectLayer(id: string, mode: LayerSelectMode = 'replace') {
+    if (mode === 'toggle') {
+      setSelectedLayerIds(current => current.includes(id)
+        ? current.filter(l => l !== id)
+        : [...current, id]);
+    } else {
+      setSelectedLayerIds([id]);
+    }
     const type = layers.find(l => l.id === id)?.type;
     if (type === 'text') dock.selectTab('text');
     if (type === 'adjustment') dock.selectTab('adjustment');
+  }
+
+  /** Replaces the whole selection at once — used by the canvas's drag-a-box object marquee. */
+  function selectLayers(ids: string[]) {
+    setSelectedLayerIds(ids);
+    if (ids.length === 1 && layers.find(l => l.id === ids[0])?.type === 'text') dock.selectTab('text');
   }
 
   function handleDuplicateLayer(id: string) {
@@ -509,8 +532,16 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   }
 
   function handleDeleteLayer(id: string) {
-    updateLayers(current => current.filter(l => l.id !== id), 'Delete Layer');
-    canvasRef.current?.deletePaintCanvas(id);
+    handleDeleteLayers([id]);
+  }
+
+  /** Deletes every given layer. The background is never deletable, so it's filtered out rather
+   *  than special-cased at each call site. */
+  function handleDeleteLayers(ids: string[]) {
+    const doomed = layers.filter(l => ids.includes(l.id) && !l.isBackground && !l.locked).map(l => l.id);
+    if (doomed.length === 0) return;
+    updateLayers(current => current.filter(l => !doomed.includes(l.id)), doomed.length > 1 ? `Delete ${doomed.length} Layers` : 'Delete Layer');
+    doomed.forEach(id => canvasRef.current?.deletePaintCanvas(id));
     setActiveLayerId('background');
   }
 
@@ -643,6 +674,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     <LayersPanel
       layers={layers}
       activeLayerId={activeLayerId}
+      selectedLayerIds={selectedLayerIds}
       onSelect={selectLayer}
       onToggleVisible={handleToggleVisible}
       onToggleLocked={handleToggleLocked}
@@ -763,7 +795,8 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     toggleDock: () => setDockOpen(v => !v),
     addLayer: handleAddLayer,
     duplicateLayer: () => activeLayerId && handleDuplicateLayer(activeLayerId),
-    deleteLayer: () => activeLayerId && handleDeleteLayer(activeLayerId),
+    // Delete removes the whole selection, not just the primary layer.
+    deleteLayer: () => handleDeleteLayers(selectedLayerIds),
     moveLayerUp: () => activeLayerId && handleMoveLayer(activeLayerId, 'up'),
     moveLayerDown: () => activeLayerId && handleMoveLayer(activeLayerId, 'down'),
     hasActiveLayer: !!activeLayer && !activeLayer.isBackground,
@@ -904,7 +937,9 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
                 fitSignal={fitSignal}
                 layers={layers}
                 activeLayerId={activeLayerId}
+                selectedLayerIds={selectedLayerIds}
                 onSelectLayer={selectLayer}
+                onSelectLayers={selectLayers}
                 onAddTextLayer={handleAddTextLayer}
                 onUpdateTextLayer={handleUpdateTextLayer}
                 onTextSelectionChange={setTextSelection}

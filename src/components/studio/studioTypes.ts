@@ -25,6 +25,9 @@ export const BLEND_TO_COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = {
 
 export type StudioLayerType = 'background' | 'clean-patch' | 'text' | 'bubble-mask' | 'adjustment';
 
+/** How a click changes the canvas selection: plain click replaces it, Shift/Ctrl-click toggles. */
+export type LayerSelectMode = 'replace' | 'toggle';
+
 export const LAYER_TYPE_ICON: Record<StudioLayerType, LucideIcon> = {
   background: ImageIcon,
   'clean-patch': Eraser,

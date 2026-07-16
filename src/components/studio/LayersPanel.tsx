@@ -3,12 +3,15 @@ import { Eye, EyeOff, Lock, Unlock, Plus, Copy, Trash2, ChevronUp, ChevronDown, 
 import { IconButton } from '../ui';
 import { cn } from '../ui/cn';
 import { StudioPanel } from './StudioPanel';
-import { LAYER_TYPE_ICON, BLEND_MODES, type StudioLayer } from './studioTypes';
+import { LAYER_TYPE_ICON, BLEND_MODES, type StudioLayer, type LayerSelectMode } from './studioTypes';
 
 interface LayersPanelProps {
   layers: StudioLayer[];
+  /** The primary layer — the one the single-layer panels follow. Always the last of `selectedLayerIds`. */
   activeLayerId: string | null;
-  onSelect: (id: string) => void;
+  /** The full canvas selection; the primary is highlighted more strongly than the rest. */
+  selectedLayerIds?: string[];
+  onSelect: (id: string, mode?: LayerSelectMode) => void;
   onToggleVisible: (id: string) => void;
   onToggleLocked: (id: string) => void;
   onOpacityChange: (id: string, opacity: number) => void;
@@ -21,9 +24,10 @@ interface LayersPanelProps {
 }
 
 export function LayersPanel({
-  layers, activeLayerId, onSelect, onToggleVisible, onToggleLocked,
+  layers, activeLayerId, selectedLayerIds, onSelect, onToggleVisible, onToggleLocked,
   onOpacityChange, onBlendChange, onAdd, onAddAdjustment, onDuplicate, onDelete, onMove,
 }: LayersPanelProps) {
+  const selected = selectedLayerIds ?? (activeLayerId ? [activeLayerId] : []);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // Render top-most layer first, matching Photoshop's stacking convention.
   const ordered = [...layers].reverse();
@@ -47,6 +51,7 @@ export function LayersPanel({
         {ordered.map((layer) => {
           const Icon = LAYER_TYPE_ICON[layer.type];
           const active = layer.id === activeLayerId;
+          const inSelection = selected.includes(layer.id);
           const expanded = expandedId === layer.id;
           const realIndex = layers.findIndex(l => l.id === layer.id);
 
@@ -55,12 +60,19 @@ export function LayersPanel({
               key={layer.id}
               className={cn(
                 'rounded-control border transition-colors',
-                active ? 'bg-accent-soft border-accent/30' : 'bg-ink/5 border-transparent hover:bg-ink/5'
+                active ? 'bg-accent-soft border-accent/30'
+                  // Also selected, but not the primary — dimmer, so it's clear which layer the
+                  // single-layer panels are actually following.
+                  : inSelection ? 'bg-accent-soft/40 border-accent/20'
+                  : 'bg-ink/5 border-transparent hover:bg-ink/5'
               )}
             >
               <button
                 type="button"
-                onClick={() => { onSelect(layer.id); setExpandedId(expanded ? null : layer.id); }}
+                onClick={(e) => {
+                  onSelect(layer.id, e.shiftKey || e.ctrlKey || e.metaKey ? 'toggle' : 'replace');
+                  setExpandedId(expanded ? null : layer.id);
+                }}
                 className="w-full flex items-center gap-2 px-2 h-11"
               >
                 <span
