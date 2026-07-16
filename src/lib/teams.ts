@@ -7,8 +7,14 @@ export interface Team {
   logo: string;
   owner_id: string;
   telegram_channel_id: string;
+  description: string;
+  visibility: 'public' | 'private';
+  pay_note: string;
   created_at: string;
 }
+
+export type JobTitle = 'Cleaning' | 'Translation' | 'Typesetting' | 'Proofreading' | 'Coloring' | 'Design';
+export const JOB_TITLES: JobTitle[] = ['Cleaning', 'Translation', 'Typesetting', 'Proofreading', 'Coloring', 'Design'];
 
 export interface TeamMember {
   id: string;
@@ -18,20 +24,65 @@ export interface TeamMember {
   role: 'member' | 'leader';
   status: 'pending' | 'active';
   created_at: string;
+  job_title: JobTitle | null;
+  priority: number | null;
+  balance: number;
+  is_active: boolean;
+  member_status: 'active' | 'on_leave' | 'resigned';
+  streak_count: number;
+  last_check_in: string | null;
+  can_review_tasks: boolean;
+  can_manage_bank: boolean;
+  can_manage_join_requests: boolean;
+  can_manage_vacations: boolean;
   profile?: { name: string; avatar: string; email: string } | null;
 }
 
-export async function createTeam(name: string, logo: string): Promise<{ team: Team | null; error: string | null }> {
+export async function updateMemberFields(memberRowId: string, fields: Partial<Pick<TeamMember,
+  'job_title' | 'priority' | 'balance' | 'can_review_tasks' | 'can_manage_bank' | 'can_manage_join_requests' | 'can_manage_vacations'
+>>): Promise<string | null> {
+  const { error } = await supabase.from('team_members').update(fields).eq('id', memberRowId);
+  return error ? error.message : null;
+}
+
+export async function createTeam(input: { name: string; logo: string; description: string; visibility: 'public' | 'private'; payNote: string }): Promise<{ team: Team | null; error: string | null }> {
   const { data: userData } = await supabase.auth.getUser();
   const ownerId = userData.user?.id;
   if (!ownerId) return { team: null, error: 'Not signed in.' };
 
   const { data, error } = await supabase
     .from('teams')
-    .insert({ name, logo, owner_id: ownerId })
+    .insert({ name: input.name, logo: input.logo, owner_id: ownerId, description: input.description, visibility: input.visibility, pay_note: input.payNote })
     .select()
     .single();
   return { team: error ? null : (data as Team), error: error ? error.message : null };
+}
+
+export async function updateTeamSettings(teamId: string, fields: Partial<Pick<Team, 'name' | 'logo' | 'description' | 'visibility' | 'pay_note'>>): Promise<string | null> {
+  const { error } = await supabase.from('teams').update(fields).eq('id', teamId);
+  return error ? error.message : null;
+}
+
+export async function deleteTeam(teamId: string): Promise<string | null> {
+  const { error } = await supabase.from('teams').delete().eq('id', teamId);
+  return error ? error.message : null;
+}
+
+export async function broadcastToTeam(teamId: string, title: string, body: string): Promise<string | null> {
+  const [{ data: activeMembers }, { data: team }] = await Promise.all([
+    supabase.from('team_members').select('user_id').eq('team_id', teamId).eq('status', 'active').not('user_id', 'is', null),
+    supabase.from('teams').select('owner_id').eq('id', teamId).single(),
+  ]);
+  const recipients = new Set((activeMembers ?? []).map(m => m.user_id as string));
+  if (team?.owner_id) recipients.delete(team.owner_id);
+  await Promise.all(Array.from(recipients).map(userId => notify(userId, title, body)));
+
+  const { data: userData } = await supabase.auth.getUser();
+  const senderId = userData.user?.id;
+  if (senderId) {
+    await supabase.from('team_messages').insert({ team_id: teamId, sender_id: senderId, body: `📢 ${title}\n${body}` });
+  }
+  return null;
 }
 
 export async function getMyOwnedTeam(): Promise<Team | null> {
@@ -126,6 +177,17 @@ export async function promoteToLeader(memberRowId: string): Promise<string | nul
 
 export async function demoteToMember(memberRowId: string): Promise<string | null> {
   return setRole(memberRowId, 'member', 'Role updated');
+}
+
+export async function getLeaderboard(teamId: string): Promise<TeamMember[]> {
+  const { data } = await supabase
+    .from('team_members')
+    .select('*, profile:profiles(name, avatar, email)')
+    .eq('team_id', teamId)
+    .eq('status', 'active')
+    .order('balance', { ascending: false })
+    .limit(5);
+  return (data as unknown as TeamMember[]) ?? [];
 }
 
 export async function listTeamMembers(teamId: string): Promise<TeamMember[]> {

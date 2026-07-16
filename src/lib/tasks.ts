@@ -1,6 +1,8 @@
 import { supabase } from './supabaseClient';
 import { notify } from './notifications';
 
+export type TaskStatus = 'todo' | 'in_progress' | 'under_review' | 'done' | 'cancelled';
+
 export interface Task {
   id: string;
   team_id: string;
@@ -8,31 +10,58 @@ export interface Task {
   assignee_id: string;
   title: string;
   description: string;
-  status: 'todo' | 'done';
+  status: TaskStatus;
   due_date: string | null;
   attachment_name: string;
   attachment_size: number;
   attachment_msg_id: number | null;
   created_at: string;
   completed_at: string | null;
+  reward: number | null;
+  job_types: string[];
+  submission_type: 'file' | 'link' | null;
+  submission_content: string | null;
+  rating: number | null;
+  priority_index: number;
   assignee?: { name: string; avatar: string; email: string } | null;
 }
 
-export async function createTask(input: { teamId: string; assigneeId: string; title: string; description: string; dueDate: string | null }): Promise<string | null> {
-  const { data: userData } = await supabase.auth.getUser();
-  const creatorId = userData.user?.id;
-  if (!creatorId) return 'Not signed in.';
-  const { error } = await supabase.from('tasks').insert({
-    team_id: input.teamId,
-    creator_id: creatorId,
-    assignee_id: input.assigneeId,
-    title: input.title,
-    description: input.description,
-    due_date: input.dueDate,
+async function rpc(fn: string, args: Record<string, unknown>): Promise<string | null> {
+  const { error } = await supabase.rpc(fn, args);
+  return error ? error.message : null;
+}
+
+export async function createTaskWithWorkflow(input: {
+  teamId: string; title: string; description: string;
+  jobTypes: string[]; dueDate: string | null; reward?: number;
+}): Promise<string | null> {
+  const { data, error } = await supabase.rpc('task_create', {
+    _team_id: input.teamId, _title: input.title, _description: input.description,
+    _difficulty: 'Medium', _job_types: input.jobTypes, _due_date: input.dueDate,
+    _reward: input.reward ?? null,
   });
   if (error) return error.message;
-  await notify(input.assigneeId, 'New task assigned', input.title);
+  const created = data as Task | null;
+  if (created?.assignee_id) await notify(created.assignee_id, 'New task assigned', input.title);
   return null;
+}
+
+export const acceptTask = (taskId: string) => rpc('task_accept', { _task_id: taskId });
+export const declineTask = (taskId: string) => rpc('task_decline', { _task_id: taskId });
+export const submitTask = (taskId: string, type: 'file' | 'link', content: string) =>
+  rpc('task_submit', { _task_id: taskId, _type: type, _content: content });
+export const approveTask = (taskId: string, rating: number) =>
+  rpc('task_approve', { _task_id: taskId, _rating: rating });
+export const rejectSubmission = (taskId: string, notes: string) =>
+  rpc('task_reject_submission', { _task_id: taskId, _notes: notes });
+export const checkIn = (teamId: string) => rpc('team_check_in', { _team_id: teamId });
+export const setMemberActive = (teamId: string, isActive: boolean) =>
+  rpc('team_set_active', { _team_id: teamId, _is_active: isActive });
+export const changePriority = (teamId: string, requested: number) =>
+  rpc('team_change_priority', { _team_id: teamId, _requested: requested });
+
+export async function expireStaleOffers(teamId: string): Promise<void> {
+  await supabase.rpc('expire_stale_task_offers', { _team_id: teamId });
 }
 
 export async function listTeamTasks(teamId: string): Promise<Task[]> {
@@ -55,14 +84,6 @@ export async function listMyTasks(teamId: string): Promise<Task[]> {
     .eq('assignee_id', userId)
     .order('created_at', { ascending: false });
   return (data as Task[]) ?? [];
-}
-
-export async function markTaskDone(taskId: string): Promise<string | null> {
-  const { error } = await supabase
-    .from('tasks')
-    .update({ status: 'done', completed_at: new Date().toISOString() })
-    .eq('id', taskId);
-  return error ? error.message : null;
 }
 
 export async function deleteTask(taskId: string): Promise<string | null> {
