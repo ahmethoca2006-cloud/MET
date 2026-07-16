@@ -25,6 +25,9 @@ export const BLEND_TO_COMPOSITE: Record<BlendMode, GlobalCompositeOperation> = {
 
 export type StudioLayerType = 'background' | 'clean-patch' | 'text' | 'bubble-mask' | 'adjustment';
 
+/** How a click changes the canvas selection: plain click replaces it, Shift/Ctrl-click toggles. */
+export type LayerSelectMode = 'replace' | 'toggle';
+
 export const LAYER_TYPE_ICON: Record<StudioLayerType, LucideIcon> = {
   background: ImageIcon,
   'clean-patch': Eraser,
@@ -33,13 +36,62 @@ export const LAYER_TYPE_ICON: Record<StudioLayerType, LucideIcon> = {
   adjustment: SlidersHorizontal,
 };
 
-export type TextAlign = 'left' | 'center' | 'right';
+export type TextAlign = 'left' | 'center' | 'right' | 'justify';
 
 export const FONT_FAMILIES = [
   'Anime Ace', 'CC Wild Words', 'Comic Sans MS', 'Arial', 'Georgia', 'Impact',
 ];
 
 export type TranslationStatus = 'draft' | 'translated' | 'reviewed';
+
+export interface TextShadow {
+  enabled: boolean;
+  color: string;
+  blur: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+/** Linear gradient fill. When enabled it overrides the flat `color` fill. */
+export interface TextGradient {
+  enabled: boolean;
+  from: string;
+  to: string;
+  /** Degrees clockwise from left-to-right, matching the panel's control. */
+  angle: number;
+}
+
+/**
+ * Character-level overrides for a span of `content`.
+ *
+ * Runs are contiguous and cover `content` exactly — `sum(run.length) === content.length`. A run
+ * with no overrides just renders in the layer's own style, so plain text is one full-length empty
+ * run. `textRuns.ts` owns that invariant; don't hand-edit `runs` anywhere else.
+ *
+ * Only the properties Photoshop treats as *character* properties live here. Stroke, shadow/glow and
+ * gradient are layer effects, and align/lineHeight/wrap are paragraph properties — those stay on
+ * TextLayerData. This split is also what maps onto ag-psd's `styleRuns` for PSD export.
+ */
+export interface TextRun {
+  length: number;
+  fontFamily?: string;
+  fontSize?: number;
+  /** Falls back to `bold ? 700 : 400`. Families that ship a single weight get browser synthesis. */
+  fontWeight?: number;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  /** Tracking within this run (extra px between characters). */
+  letterSpacing?: number;
+  /**
+   * Extra px inserted *before* this run — Photoshop's manual kern, which is applied at a caret
+   * position between two characters. A caret position is exactly a run boundary, which is what
+   * makes "advance before the run" a faithful model rather than an approximation.
+   */
+  kerning?: number;
+  /** Raises (+) or lowers (-) this run off the baseline. */
+  baselineShift?: number;
+}
 
 export interface TextLayerData {
   content: string;
@@ -56,10 +108,32 @@ export interface TextLayerData {
   strokeColor: string;
   strokeWidth: number;
   rotation: number;
+  /**
+   * Point text (Photoshop's click-to-type) grows to fit its content and never wraps;
+   * box text (click-drag) wraps inside a fixed `width`. Stored as a flag rather than
+   * width=0 so a point layer keeps a usable width if it's later converted to a box.
+   */
+  autoWidth: boolean;
+  /** Extra px between characters (Konva `letterSpacing`; canvas 2D letterSpacing on export). */
+  letterSpacing: number;
+  /** Drop shadow / glow — a glow is just a shadow at offset 0 with a wide blur. */
+  shadow: TextShadow;
+  /** Gradient fill; overrides `color` while enabled. */
+  gradient: TextGradient;
+  /** Per-character overrides over the layer style above. See TextRun; maintained by textRuns.ts. */
+  runs: TextRun[];
   /** Translator workflow metadata — surfaced in the Translation Preview panel. */
   status: TranslationStatus;
   comment: string;
 }
+
+export const DEFAULT_TEXT_SHADOW: TextShadow = {
+  enabled: false, color: '#000000', blur: 6, offsetX: 0, offsetY: 2,
+};
+
+export const DEFAULT_TEXT_GRADIENT: TextGradient = {
+  enabled: false, from: '#ffffff', to: '#000000', angle: 90,
+};
 
 export type AdjustmentKind = 'brightness-contrast' | 'hue-saturation' | 'levels';
 
@@ -159,7 +233,11 @@ export function createAdjustmentLayer(kind: AdjustmentKind = 'brightness-contras
   };
 }
 
-export function createTextLayer(x: number, y: number): StudioLayer {
+/**
+ * @param boxWidth When given, creates *box* text of that width (click-drag);
+ *                 omitted creates *point* text that grows with its content (click).
+ */
+export function createTextLayer(x: number, y: number, boxWidth?: number): StudioLayer {
   layerCounter += 1;
   return {
     id: `layer-${Date.now()}-${layerCounter}`,
@@ -173,7 +251,13 @@ export function createTextLayer(x: number, y: number): StudioLayer {
       content: '',
       x,
       y,
-      width: 240,
+      width: boxWidth ?? 240,
+      autoWidth: boxWidth === undefined,
+      letterSpacing: 0,
+      shadow: { ...DEFAULT_TEXT_SHADOW },
+      gradient: { ...DEFAULT_TEXT_GRADIENT },
+      // Empty content -> no runs; normalizeRuns keeps them in step as the content grows.
+      runs: [],
       fontFamily: FONT_FAMILIES[0],
       fontSize: 28,
       color: '#000000',
