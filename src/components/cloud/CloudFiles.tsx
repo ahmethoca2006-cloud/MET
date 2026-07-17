@@ -38,6 +38,13 @@ function TagChip({ tag, onRemove, onClick, active }: { tag: string; onRemove?: (
   );
 }
 
+const SCOPE_LABELS: Record<string, string> = {
+  workspace: 'Workspace',
+  series: 'Series',
+  volume: 'Volume',
+  chapter: 'Chapter',
+};
+
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -236,6 +243,21 @@ export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine
         </div>
       </Modal>
 
+      {/* Restore progress modal */}
+      <Modal open={cc.isRestoring} onClose={() => {}} dismissible={false} title="Fetching from Cloud" size="sm">
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-ink truncate">{cc.restoreLabel}</p>
+            <p className="text-xs text-ink-faint font-mono mt-0.5">{cc.formatSize(Math.round(cc.restoreTotalBytes * (cc.restoreProgress / 100)))} / {cc.formatSize(cc.restoreTotalBytes)}</p>
+          </div>
+          <div className="w-full bg-ink/10 border border-hairline h-3 rounded-full overflow-hidden relative">
+            <div className="absolute top-0 left-0 bg-accent h-full transition-all duration-300" style={{ width: `${cc.restoreProgress}%` }} />
+            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white mix-blend-difference">{cc.restoreProgress}%</span>
+          </div>
+          <AdSlot placement="restore-progress" />
+        </div>
+      </Modal>
+
       <ScheduleTransferModal
         open={showScheduleModal}
         onClose={() => setShowScheduleModal(false)}
@@ -343,7 +365,7 @@ export function CloudFiles({ cc, workspaces, onImportWorkspace, automationEngine
                     </>
                   )}
                   <span className="absolute top-2 left-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-black/50 text-white backdrop-blur-sm">
-                    <Boxes size={10} /> Workspace
+                    <Boxes size={10} /> {SCOPE_LABELS[file.scope] ?? 'Workspace'}
                   </span>
                   <button
                     onClick={(e) => { e.stopPropagation(); handleMoveFile(file); }}
