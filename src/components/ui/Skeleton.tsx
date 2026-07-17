@@ -26,6 +26,20 @@ export function SkeletonCard({ className, ...props }: HTMLAttributes<HTMLDivElem
   );
 }
 
+/** A single shimmering list row (avatar/icon + two text bars) — for chat lists, leaderboards,
+ *  member/invite lists, and any other row-per-item section waiting on data. */
+export function SkeletonRow({ className }: { className?: string }) {
+  return (
+    <div className={cn('flex items-center gap-3 p-3', className)} aria-hidden="true">
+      <Skeleton className="w-9 h-9 rounded-full shrink-0" />
+      <div className="flex-1 space-y-1.5 min-w-0">
+        <Skeleton className="h-3" style={{ width: '55%' }} />
+        <Skeleton className="h-2.5" style={{ width: '32%' }} />
+      </div>
+    </div>
+  );
+}
+
 /** A few lines of shimmering text-width bars, for list rows / detail panels waiting on data. */
 export function SkeletonLines({ lines = 3, className }: { lines?: number; className?: string }) {
   return (

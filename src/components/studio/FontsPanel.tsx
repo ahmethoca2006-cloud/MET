@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Upload, Trash2 } from 'lucide-react';
-import { IconButton } from '../ui';
+import { IconButton, Skeleton } from '../ui';
 import { swal, swalToast } from '../../lib/swalTheme';
 import { genId } from '../../lib/id';
 import { loadCustomFont, registerStoredFont } from '../../lib/fontLoader';
@@ -73,7 +73,15 @@ export function FontsPanel({ onFamiliesChange }: FontsPanelProps) {
     await saveStoredFonts(next);
   }
 
-  if (!loaded) return null;
+  if (!loaded) {
+    return (
+      <StudioPanel title="Fonts" bodyClassName="!gap-2">
+        <div className="space-y-1.5 p-1">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-7" />)}
+        </div>
+      </StudioPanel>
+    );
+  }
 
   return (
     <StudioPanel

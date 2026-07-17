@@ -3,9 +3,9 @@ import {
   Users, ImagePlus, Plus, Mail, Check, X, Crown, ShieldCheck, ArrowUpCircle, ArrowDownCircle, UserMinus,
   Send, ListTodo, Paperclip, CalendarClock, Trash2, Wallet, Flame, Trophy, BarChart3, Link as LinkIcon,
   ThumbsUp, ThumbsDown, Pencil, LogOut, Clock3, PiggyBank, Home, MessageCircle, Globe, Lock, ArrowLeft, UserPlus, Hash,
-  Megaphone, AlertTriangle,
+  Megaphone, AlertTriangle, ChevronDown,
 } from 'lucide-react';
-import { GlassCard, Button, Input, Textarea, Modal, Switch } from './ui';
+import { GlassCard, Button, Input, Textarea, Modal, Switch, SkeletonCard, SkeletonRow } from './ui';
 import { swal, swalToast } from '../lib/swalTheme';
 import { readAvatarFile, uploadImageToStorage } from '../lib/image';
 import { useTeamAuth } from '../lib/teamAuth';
@@ -762,7 +762,11 @@ function AdminTeamSection({ cc }: { cc: CloudClient }) {
     swalToast({ icon: 'success', title: 'Team created' });
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <SkeletonCard className="max-w-md h-72" />
+    );
+  }
 
   if (!team) {
     return (
@@ -861,7 +865,17 @@ function MemberTeamSection({ cc }: { cc: CloudClient }) {
     await refresh();
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-4">
+          <SkeletonCard className="h-40" />
+          <SkeletonCard className="h-40" />
+        </div>
+        <SkeletonCard className="h-52" />
+      </div>
+    );
+  }
 
   if (membership) {
     const freshMe = members.find(m => m.id === membership.id) || membership;
@@ -966,7 +980,13 @@ function PublicTeamLeaderboard() {
     getPublicTeamLeaderboard().then(r => { setRows(r); setLoading(false); });
   }, []);
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <GlassCard className="overflow-hidden divide-y divide-hairline">
+        {Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)}
+      </GlassCard>
+    );
+  }
   if (rows.length === 0) return <GlassCard className="p-8 text-center"><p className="text-sm text-ink-muted">No leaderboard data yet.</p></GlassCard>;
 
   return (
@@ -1011,7 +1031,13 @@ function CurrentSeasonLeaderboard() {
     refresh();
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <GlassCard className="overflow-hidden divide-y divide-hairline">
+        {Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)}
+      </GlassCard>
+    );
+  }
 
   return (
     <div className="space-y-2">
@@ -1063,7 +1089,16 @@ function TeamDirectory() {
     setJoinTarget({ id: teamIdInput.trim(), name: 'this team' });
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <SkeletonCard className="h-24" />
+        <div className="grid sm:grid-cols-2 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} className="h-32" />)}
+        </div>
+      </div>
+    );
+  }
 
   const allTags = Array.from(new Set(teams.flatMap(t => t.tags || []))).sort();
   let filteredTeams = teams;
@@ -1147,35 +1182,35 @@ function TeamDirectory() {
             <p className="text-sm text-ink-muted">No public teams yet.</p>
           </GlassCard>
         ) : (
-          <div className="flex flex-wrap justify-center gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {sortedTeams.map(t => (
-              <GlassCard key={t.id} className="overflow-hidden flex flex-col w-full sm:w-[300px]">
+              <GlassCard key={t.id} className="overflow-hidden flex flex-col w-full">
                 {t.join_ad_url && (
-                  <div className="w-full aspect-[16/7] overflow-hidden border-b border-hairline bg-ink/[0.03]">
-                    <img src={t.join_ad_url} alt="" className="w-full h-full object-cover" />
+                  <div className="w-full overflow-hidden border-b border-hairline bg-ink/[0.04] flex items-center justify-center">
+                    <img src={t.join_ad_url} alt="" className="w-full max-h-56 object-contain" />
                   </div>
                 )}
-                <div className="p-5 flex flex-col items-center text-center gap-2 border-b border-hairline bg-ink/[0.02]">
+                <div className="p-4 flex items-center gap-3 border-b border-hairline bg-ink/[0.02]">
                   <div className="w-14 h-14 rounded-xl overflow-hidden bg-accent-soft border border-hairline shrink-0 flex items-center justify-center">
                     {t.logo ? <img src={t.logo} alt={t.name} className="w-full h-full object-cover" /> : <Users size={20} className="text-accent" />}
                   </div>
-                  <div className="min-w-0">
+                  <div className="min-w-0 text-left">
                     <p className="text-sm font-semibold text-ink truncate">{t.name}</p>
                     <p className="text-[10px] text-ink-faint">{t.member_count} member{t.member_count === 1 ? '' : 's'}</p>
                   </div>
                 </div>
-                <div className="p-4 space-y-2 text-center flex-1 flex flex-col">
+                <div className="p-4 space-y-2 text-left flex-1 flex flex-col">
                   {t.description && <p className="text-xs text-ink-muted line-clamp-2">{t.description}</p>}
                   {t.pay_note && <p className="text-xs font-semibold text-accent">{t.pay_note}</p>}
                   {t.tags && t.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1 justify-center">
+                    <div className="flex flex-wrap gap-1">
                       {t.tags.map(tag => (
                         <span key={tag} className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-ink/5 text-ink-muted">{tag}</span>
                       ))}
                     </div>
                   )}
                   {t.badges && t.badges.length > 0 && (
-                    <div className="flex flex-wrap gap-1 justify-center">
+                    <div className="flex flex-wrap gap-1">
                       {t.badges.map(b => (
                         <span key={b.code} className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-accent-soft text-accent flex items-center gap-1"><Trophy size={9} /> {b.label}</span>
                       ))}
@@ -1397,6 +1432,9 @@ function TasksSection({ team, members, canManageTasks, canReviewTasks, myMember,
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [templateId, setTemplateId] = useState('');
   const [recurrence, setRecurrence] = useState<'none' | 'daily' | 'weekly' | 'monthly'>('none');
+  const [assignMode, setAssignMode] = useState<'auto' | 'manual'>('auto');
+  const [assigneeId, setAssigneeId] = useState('');
+  const [offerExpiresAt, setOfferExpiresAt] = useState('');
 
   useEffect(() => { if (canManageTasks) listTemplates(team.id).then(setTemplates); }, [team.id, canManageTasks]);
 
@@ -1504,7 +1542,13 @@ function TasksSection({ team, members, canManageTasks, canReviewTasks, myMember,
     refresh();
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <GlassCard className="overflow-hidden max-w-2xl divide-y divide-hairline">
+        {Array.from({ length: 5 }).map((_, i) => <SkeletonRow key={i} />)}
+      </GlassCard>
+    );
+  }
 
   return (
     <GlassCard className="overflow-hidden max-w-2xl">
@@ -1898,7 +1942,14 @@ function BankTab({ team, members, myMember, canManageBank: canManage }: { team: 
     refresh();
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="grid lg:grid-cols-2 gap-4">
+        <SkeletonCard className="h-64" />
+        <SkeletonCard className="h-64" />
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -2183,7 +2234,16 @@ function AnalyticsSection({ team, members }: { team: Team; members: TeamMember[]
     setExporting(false);
   };
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="grid lg:grid-cols-2 gap-4">
+        <SkeletonCard className="h-40" />
+        <SkeletonCard className="h-52" />
+        <SkeletonCard className="h-52" />
+        <SkeletonCard className="h-52" />
+      </div>
+    );
+  }
 
   const done = tasks.filter(t => t.status === 'done').length;
   const overdue = tasks.filter(t => t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done' && t.status !== 'cancelled');
@@ -2324,7 +2384,13 @@ function TeamFilesSection({ team, canManage, cc }: { team: Team; canManage: bool
     );
   }
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} className="aspect-square" />)}
+      </div>
+    );
+  }
 
   const filesInFolder = files.filter(f => f.folderId === currentFolderId);
 
@@ -2503,7 +2569,10 @@ function TeamChatThread({ team, members, myMember, canManage, onOpenProfile, cc 
   const [search, setSearch] = useState('');
   const [typingLabel, setTypingLabel] = useState('');
   const [attaching, setAttaching] = useState(false);
+  const [showJumpToEnd, setShowJumpToEnd] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nearBottomRef = useRef(true);
   const typingRef = useRef<ReturnType<typeof subscribeToTyping> | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2521,14 +2590,31 @@ function TeamChatThread({ team, members, myMember, canManage, onOpenProfile, cc 
     const unsubReactions = subscribeToReactions(team.id, () => listReactions(team.id, 'team_messages').then(setReactions));
     typingRef.current = subscribeToTyping(team.id, (userId, name) => {
       if (userId === myUserId) return;
-      setTypingLabel(`${name} is typing...`);
+      setTypingLabel(`${name} is typing`);
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => setTypingLabel(''), 3000);
     });
     return () => { mounted = false; unsubMsgs(); unsubReactions(); typingRef.current?.unsubscribe(); };
   }, [team.id, members, search]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'end' }); }, [messages.length]);
+  useEffect(() => {
+    if (nearBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' });
+    else setShowJumpToEnd(true);
+  }, [messages.length]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    nearBottomRef.current = near;
+    if (near) setShowJumpToEnd(false);
+  };
+
+  const jumpToEnd = () => {
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    nearBottomRef.current = true;
+    setShowJumpToEnd(false);
+  };
 
   useEffect(() => {
     if (messages.length > 0 && myUserId) markTeamChatRead(team.id, messages[messages.length - 1].id);
@@ -2603,23 +2689,23 @@ function TeamChatThread({ team, members, myMember, canManage, onOpenProfile, cc 
       <div className="px-3 py-2 border-b border-hairline shrink-0">
         <Input placeholder="Search messages..." value={search} onChange={e => setSearch(e.target.value)} className="text-xs" />
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-3 relative">
         {messages.length === 0 && <p className="text-xs text-ink-faint text-center py-6">No messages yet — say hello.</p>}
         {messages.map(m => {
           const replied = m.reply_to_id ? messageById.get(m.reply_to_id) : null;
           const isMine = m.sender_id === myUserId;
           return (
-            <div key={m.id} className="flex items-start gap-2 max-w-md group">
+            <div key={m.id} className={`flex items-start gap-2 max-w-md group ${isMine ? 'ml-auto flex-row-reverse' : ''}`}>
               <button type="button" onClick={() => onOpenProfile(m.sender_id)} className="shrink-0">
                 <ChatAvatar name={m.sender?.name || 'Member'} avatar={m.sender?.avatar} />
               </button>
               <div className="min-w-0 flex-1">
-                <div className="p-2.5 rounded-xl bg-ink/[0.03] min-w-0">
-                  <div className="flex items-center gap-2">
+                <div className={`p-2.5 rounded-2xl min-w-0 backdrop-blur-sm shadow-sm transition-all duration-200 ${isMine ? 'bg-gradient-to-br from-accent-soft to-accent-soft/60 rounded-tr-sm' : 'bg-gradient-to-br from-ink/[0.04] to-ink/[0.02] rounded-tl-sm'}`}>
+                  <div className={`flex items-center gap-2 ${isMine ? 'flex-row-reverse' : ''}`}>
                     <button type="button" onClick={() => onOpenProfile(m.sender_id)} className="text-[10px] font-semibold text-accent hover:underline">{m.sender?.name || 'Member'}</button>
                     {m.pinned && <span className="text-[9px] text-ink-faint">📌</span>}
                     {m.edited_at && !m.deleted && <span className="text-[9px] text-ink-faint">(edited)</span>}
-                    <span className="text-[9px] text-ink-faint opacity-0 group-hover:opacity-100 transition-opacity ml-auto flex gap-1.5">
+                    <span className={`text-[9px] text-ink-faint opacity-0 group-hover:opacity-100 transition-opacity flex gap-1.5 ${isMine ? 'mr-auto' : 'ml-auto'}`}>
                       {!m.deleted && <button onClick={() => setReplyTo(m)} className="hover:text-accent">Reply</button>}
                       {!m.deleted && isMine && <button onClick={() => { setEditingId(m.id); setBody(m.body); }} className="hover:text-accent">Edit</button>}
                       {!m.deleted && isMine && <button onClick={() => deleteTeamMessage(m.id)} className="hover:text-danger">Delete</button>}
@@ -2653,8 +2739,25 @@ function TeamChatThread({ team, members, myMember, canManage, onOpenProfile, cc 
           );
         })}
         <div ref={bottomRef} />
+        {showJumpToEnd && (
+          <button
+            onClick={jumpToEnd}
+            className="absolute right-4 bottom-2 z-10 px-3 py-1.5 rounded-full bg-accent text-white text-[11px] font-semibold shadow-lg flex items-center gap-1 hover:brightness-110 transition-all"
+          >
+            <ChevronDown size={12} /> New messages
+          </button>
+        )}
       </div>
-      {typingLabel && <p className="px-3 text-[11px] text-ink-faint italic shrink-0">{typingLabel}</p>}
+      {typingLabel && (
+        <p className="px-3 text-[11px] text-ink-faint italic shrink-0 flex items-center gap-1">
+          {typingLabel}
+          <span className="inline-flex gap-0.5">
+            <span className="animate-pulse [animation-delay:0ms]">›</span>
+            <span className="animate-pulse [animation-delay:150ms]">›</span>
+            <span className="animate-pulse [animation-delay:300ms]">›</span>
+          </span>
+        </p>
+      )}
       {replyTo && (
         <div className="px-3 py-1.5 border-t border-hairline bg-ink/[0.02] flex items-center justify-between gap-2 shrink-0">
           <p className="text-[11px] text-ink-muted truncate">Replying to <span className="font-semibold">{replyTo.sender?.name}</span>: {replyTo.body}</p>
@@ -2695,7 +2798,13 @@ function ConversationList({ team, members, myMember, onSelect }: { team: Team; m
   const others = members.filter(m => m.status === 'active' && m.user_id && m.user_id !== myMember?.user_id);
   const contacted = new Set(conversations.map(c => c.otherUserId));
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="divide-y divide-hairline">
+        {Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
@@ -2729,7 +2838,10 @@ function DirectThread({ team, partnerId, partnerName, partnerAvatar, onBack, onO
   const [replyTo, setReplyTo] = useState<DirectMessage | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [attaching, setAttaching] = useState(false);
+  const [showJumpToEnd, setShowJumpToEnd] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nearBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { session } = useTeamAuth();
   const myUserId = session?.user.id;
@@ -2746,7 +2858,24 @@ function DirectThread({ team, partnerId, partnerName, partnerAvatar, onBack, onO
     return () => { mounted = false; unsubscribe(); unsubReactions(); };
   }, [team.id, partnerId]);
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ block: 'end' }); }, [messages.length]);
+  useEffect(() => {
+    if (nearBottomRef.current) bottomRef.current?.scrollIntoView({ block: 'end' });
+    else setShowJumpToEnd(true);
+  }, [messages.length]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    nearBottomRef.current = near;
+    if (near) setShowJumpToEnd(false);
+  };
+
+  const jumpToEnd = () => {
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    nearBottomRef.current = true;
+    setShowJumpToEnd(false);
+  };
 
   const messageById = new Map(messages.map(m => [m.id, m]));
   const reactionsFor = (id: string) => reactions.filter(r => r.message_id === id);
@@ -2790,7 +2919,7 @@ function DirectThread({ team, partnerId, partnerName, partnerAvatar, onBack, onO
           <p className="text-sm font-semibold text-ink">{partnerName}</p>
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-4 space-y-3 relative">
         {messages.map(m => {
           const replied = m.reply_to_id ? messageById.get(m.reply_to_id) : null;
           const isMine = m.sender_id !== partnerId;
@@ -2798,7 +2927,7 @@ function DirectThread({ team, partnerId, partnerName, partnerAvatar, onBack, onO
             <div key={m.id} className={`flex items-end gap-2 max-w-md group ${isMine ? 'ml-auto flex-row-reverse' : ''}`}>
               <ChatAvatar name={partnerName} avatar={m.sender_id === partnerId ? partnerAvatar : undefined} size={22} />
               <div className="min-w-0">
-                <div className={`p-2.5 rounded-xl min-w-0 ${m.sender_id === partnerId ? 'bg-ink/[0.03]' : 'bg-accent-soft'}`}>
+                <div className={`p-2.5 rounded-2xl min-w-0 backdrop-blur-sm shadow-sm transition-all duration-200 ${m.sender_id === partnerId ? 'bg-gradient-to-br from-ink/[0.04] to-ink/[0.02] rounded-bl-sm' : 'bg-gradient-to-br from-accent-soft to-accent-soft/60 rounded-br-sm'}`}>
                   {(m.edited_at || isMine) && !m.deleted && (
                     <div className="flex items-center gap-1.5 justify-end mb-0.5">
                       {m.edited_at && <span className="text-[9px] text-ink-faint">(edited)</span>}
@@ -2836,6 +2965,14 @@ function DirectThread({ team, partnerId, partnerName, partnerAvatar, onBack, onO
           );
         })}
         <div ref={bottomRef} />
+        {showJumpToEnd && (
+          <button
+            onClick={jumpToEnd}
+            className="absolute right-4 bottom-2 z-10 px-3 py-1.5 rounded-full bg-accent text-white text-[11px] font-semibold shadow-lg flex items-center gap-1 hover:brightness-110 transition-all"
+          >
+            <ChevronDown size={12} /> New messages
+          </button>
+        )}
       </div>
       {replyTo && (
         <div className="px-3 py-1.5 border-t border-hairline bg-ink/[0.02] flex items-center justify-between gap-2 shrink-0">

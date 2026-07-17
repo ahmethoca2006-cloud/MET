@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { UserPlus, LogIn, Mail, Lock, User, ImagePlus, MailCheck, Check, X, KeyRound } from 'lucide-react';
-import { GlassCard, Button, Input, Captcha } from './ui';
+import { GlassCard, Button, Input, Captcha, Skeleton } from './ui';
 import { swal } from '../lib/swalTheme';
 import { readAvatarFile } from '../lib/image';
 import { useTeamAuth, getKnownEmails } from '../lib/teamAuth';
@@ -46,7 +46,21 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center text-ink-faint text-sm">Loading...</div>;
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <GlassCard className="p-8 w-full max-w-sm space-y-5">
+          <div className="flex flex-col items-center gap-3">
+            <Skeleton className="w-12 h-12 rounded-2xl" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <div className="space-y-3">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+          </div>
+          <Skeleton className="h-9 w-full" />
+        </GlassCard>
+      </div>
+    );
   }
 
   const switchMode = (next: 'signin' | 'signup' | 'forgot') => {

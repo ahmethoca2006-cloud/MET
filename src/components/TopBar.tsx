@@ -4,7 +4,11 @@ import { useTheme } from '../contexts/ThemeContext';
 import { IconButton } from './ui';
 import { useTeamAuth, profileFromSession } from '../lib/teamAuth';
 import { unreadCount, subscribeToNotifications } from '../lib/notifications';
+import { getMyOwnedTeam, getMyMembership } from '../lib/teams';
 import { NotificationsPanel } from './NotificationsPanel';
+import { Skeleton } from './ui';
+import { playNotificationSound } from '../lib/notifySound';
+import { swalToast } from '../lib/swalTheme';
 import logo from '../assets/logo-new.jpg';
 
 export function TopBar() {
@@ -13,14 +17,31 @@ export function TopBar() {
   const profile = profileFromSession(session);
   const [notifOpen, setNotifOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [teamName, setTeamName] = useState<string | null>(null);
+  const [loadingTeam, setLoadingTeam] = useState(true);
 
   const refreshUnread = () => { if (session) unreadCount().then(setUnread); };
   useEffect(refreshUnread, [session]);
 
   useEffect(() => {
+    if (!session) { setLoadingTeam(false); return; }
+    setLoadingTeam(true);
+    (async () => {
+      const owned = await getMyOwnedTeam();
+      if (owned) { setTeamName(owned.name); return; }
+      const membership = await getMyMembership();
+      setTeamName(membership?.team.name ?? null);
+    })().finally(() => setLoadingTeam(false));
+  }, [session]);
+
+  useEffect(() => {
     const userId = session?.user.id;
     if (!userId) return;
-    const unsubscribe = subscribeToNotifications(userId, () => setUnread(u => u + 1));
+    const unsubscribe = subscribeToNotifications(userId, n => {
+      setUnread(u => u + 1);
+      playNotificationSound();
+      swalToast({ icon: 'info', title: n.title, text: n.body || undefined });
+    });
     return unsubscribe;
   }, [session]);
 
@@ -66,8 +87,13 @@ export function TopBar() {
 
         {/* Profile */}
         <div className="flex items-center gap-2.5 bg-ink/5 border border-hairline rounded-full pl-1 pr-1 sm:pr-3.5 py-1">
-          <div className="hidden md:flex flex-col text-right items-start">
-            <span className="text-sm font-bold text-ink leading-none mb-1">{profile.name || 'Team Member'}</span>
+          <div className="hidden md:flex flex-col text-right items-start gap-1">
+            <span className="text-sm font-bold text-ink leading-none">{profile.name || 'Team Member'}</span>
+            {loadingTeam ? (
+              <Skeleton className="h-2.5 w-16" />
+            ) : teamName ? (
+              <span className="text-[10px] text-ink-faint leading-none truncate max-w-[9rem]">{teamName}</span>
+            ) : null}
           </div>
           <div className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-full border-2 border-accent/30 overflow-hidden bg-accent-soft flex items-center justify-center p-0.5">
             {profile.avatar ? (

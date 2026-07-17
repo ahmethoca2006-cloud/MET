@@ -4,6 +4,6 @@ export { Input, Textarea } from './Input';
 export { GlassCard } from './GlassCard';
 export { Modal } from './Modal';
 export { Switch } from './Switch';
-export { Skeleton, SkeletonCard, SkeletonLines } from './Skeleton';
+export { Skeleton, SkeletonCard, SkeletonLines, SkeletonRow } from './Skeleton';
 export { Captcha } from './Captcha';
 export { cn } from './cn';
