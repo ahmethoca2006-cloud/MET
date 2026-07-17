@@ -54,7 +54,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md', cla
             )}
           </div>
         )}
-        <div className="px-6 py-4 overflow-y-auto">{children}</div>
+        <div className="px-6 py-4 overflow-y-auto flex-1 min-h-0">{children}</div>
         {footer && <div className="px-6 py-4 border-t border-hairline shrink-0">{footer}</div>}
       </GlassCard>
     </div>,
