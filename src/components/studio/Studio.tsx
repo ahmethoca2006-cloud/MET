@@ -158,6 +158,27 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     setSelection(sel => growSelection(sel, -amount, activePage.original.width, activePage.original.height));
   }
 
+  // Select > Transform Selection: StudioCanvas owns the interactive box and calls back here only
+  // to flip the mode off again once the user commits (Enter) or cancels (Escape).
+  const [transformingSelection, setTransformingSelection] = useState(false);
+  function handleTransformSelection() {
+    if (!hasSelection(selection)) return;
+    setTransformingSelection(true);
+  }
+
+  // Quick Mask: painting with any tool edits a scratch alpha buffer instead of the active layer,
+  // shown as a red rubylith tint; toggling off reads that buffer back into a real selection.
+  const [quickMaskActive, setQuickMaskActive] = useState(false);
+  function handleToggleQuickMask() {
+    if (quickMaskActive) {
+      const result = canvasRef.current?.commitQuickMask();
+      if (result) setSelection(result);
+      setQuickMaskActive(false);
+    } else {
+      setQuickMaskActive(true);
+    }
+  }
+
   /** Commits the Crop tool's rect selection: trims the background + every raster layer's canvas,
    *  shifts text layers to match, and persists the new page dimensions back up to App.tsx. */
   async function handleCommitCrop() {
@@ -215,6 +236,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     onExport: () => setExportOpen(true),
     onGroupLayers: () => handleGroupLayers(),
     onUngroupLayers: () => { if (activeLayerId) handleUngroupLayer(activeLayerId); },
+    onToggleQuickMask: handleToggleQuickMask,
   });
   const [activePageId, setActivePageId] = useState<string | null>(pages[0]?.id ?? null);
   const [activeTool, setActiveTool] = useState('select');
@@ -405,6 +427,12 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     })();
     return () => { cancelled = true; };
   }, [chapterId]);
+
+  // A pixel selection is in the *previous* page's image-space coordinates — carrying it over
+  // makes the marching ants stale/meaningless the moment the page changes.
+  useEffect(() => {
+    setSelection(NO_SELECTION);
+  }, [activePageId]);
 
   // Hydrate the active page's raster (painted pixel) layers once its canvas is ready.
   useEffect(() => {
@@ -742,6 +770,9 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   // a fresh chapter is opened (Background is the default active layer). Reuse the topmost existing
   // raster layer if there is one; only create a fresh one if the stack has none at all.
   useEffect(() => {
+    // Quick Mask paints onto its own scratch buffer regardless of the active layer — forcing a
+    // layer switch here would be pointless churn (and could create an unwanted layer) mid-edit.
+    if (quickMaskActive) return;
     if (!(PAINT_TOOLS as readonly string[]).includes(activeTool) || !activeLayer) return;
     if (activeLayer.type === 'clean-patch') return;
     const existing = [...layers].reverse().find(l => l.type === 'clean-patch');
@@ -920,6 +951,9 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     featherSelection: handleFeatherSelection,
     expandSelection: handleExpandSelection,
     contractSelection: handleContractSelection,
+    transformSelection: handleTransformSelection,
+    quickMaskActive,
+    toggleQuickMask: handleToggleQuickMask,
   });
 
   const [layoutMode, setLayoutMode] = useState<'desktop' | 'tablet' | 'phone'>(() => {
@@ -989,6 +1023,9 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
       onEyedropperPick={setForeground}
       onCommitCrop={handleCommitCrop}
       queuedBubbleRects={multiBubbleRects}
+      transformingSelection={transformingSelection}
+      onExitTransformSelection={() => setTransformingSelection(false)}
+      quickMaskActive={quickMaskActive}
     />
   );
 

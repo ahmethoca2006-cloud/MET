@@ -15,6 +15,7 @@ interface UseStudioShortcutsArgs {
   onExport: () => void;
   onGroupLayers: () => void;
   onUngroupLayers: () => void;
+  onToggleQuickMask: () => void;
 }
 
 function isTextInputFocused(): boolean {
@@ -27,6 +28,7 @@ function isTextInputFocused(): boolean {
 export function useStudioShortcuts({
   onToolChange, onBrushSizeStep, onSwapColors, onResetColors, onZoomIn, onZoomOut, onFit,
   onToggleCleaned, onToggleFullscreen, onTogglePanelsHidden, onExport, onGroupLayers, onUngroupLayers,
+  onToggleQuickMask,
 }: UseStudioShortcutsArgs) {
   const toolMap = useMemo(() => buildToolShortcutMap(), []);
 
@@ -58,11 +60,12 @@ export function useStudioShortcuts({
       if (key === 'x') { onSwapColors(); return; }
       if (key === 'd') { onResetColors(); return; }
       if (key === 'o') { onToggleCleaned(); return; }
+      if (key === 'q') { onToggleQuickMask(); return; }
 
       const toolId = toolMap[key];
       if (toolId) { e.preventDefault(); onToolChange(toolId); }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [toolMap, onToolChange, onBrushSizeStep, onSwapColors, onResetColors, onZoomIn, onZoomOut, onFit, onToggleCleaned, onToggleFullscreen, onTogglePanelsHidden, onExport]);
+  }, [toolMap, onToolChange, onBrushSizeStep, onSwapColors, onResetColors, onZoomIn, onZoomOut, onFit, onToggleCleaned, onToggleFullscreen, onTogglePanelsHidden, onExport, onToggleQuickMask]);
 }

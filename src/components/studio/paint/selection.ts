@@ -58,6 +58,58 @@ export function clipToSelection(ctx: CanvasRenderingContext2D, sel: Selection): 
   if (path) ctx.clip(path);
 }
 
+// Scratch context reused for point-in-path hit tests — never drawn to, just borrowed for its
+// `isPointInPath`, so one shared instance avoids allocating a canvas per hit test.
+const hitTestCanvas = document.createElement('canvas');
+const hitTestCtx = hitTestCanvas.getContext('2d')!;
+
+/** Whether image-space point (x, y) falls inside the selection's own shape (not just its bounding box). */
+export function selectionContainsPoint(sel: Selection, x: number, y: number): boolean {
+  if (sel.kind === 'none') return false;
+  if (sel.kind === 'mask') {
+    const px = Math.floor(x), py = Math.floor(y);
+    if (px < 0 || py < 0 || px >= sel.width || py >= sel.height) return false;
+    return sel.data[py * sel.width + px] > 0;
+  }
+  const path = pathForSelection(sel);
+  return !!path && hitTestCtx.isPointInPath(path, x, y);
+}
+
+/** Shifts a selection by (dx, dy), used to keep a selection tracking pixel content dragged within it. */
+export function translateSelection(sel: Selection, dx: number, dy: number, width: number, height: number): Selection {
+  if (dx === 0 && dy === 0) return sel;
+  if (sel.kind === 'none') return sel;
+  if (sel.kind === 'rect' || sel.kind === 'ellipse') return { ...sel, x: sel.x + dx, y: sel.y + dy };
+  if (sel.kind === 'polygon') return { ...sel, points: sel.points.map(p => ({ x: p.x + dx, y: p.y + dy })) };
+  // mask: only the old bounds region can possibly be non-zero, so only copy that rect across.
+  const data = new Uint8ClampedArray(width * height);
+  const b = sel.bounds;
+  let minX = width, maxX = 0, minY = height, maxY = 0, any = false;
+  for (let row = 0; row < b.height; row++) {
+    const srcY = b.y + row;
+    const destY = srcY + dy;
+    if (destY < 0 || destY >= height) continue;
+    for (let col = 0; col < b.width; col++) {
+      const srcX = b.x + col;
+      const destX = srcX + dx;
+      if (destX < 0 || destX >= width) continue;
+      const v = sel.data[srcY * sel.width + srcX];
+      if (v > 0) {
+        data[destY * width + destX] = v;
+        any = true;
+        if (destX < minX) minX = destX;
+        if (destX > maxX) maxX = destX;
+        if (destY < minY) minY = destY;
+        if (destY > maxY) maxY = destY;
+      }
+    }
+  }
+  const bounds = any
+    ? { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 }
+    : { x: 0, y: 0, width: 0, height: 0 };
+  return { kind: 'mask', data, width, height, bounds };
+}
+
 /**
  * After a masked stroke commits, re-applies the bitmap mask's exact alpha to
  * the bounding-box region that was just painted (undoes the bbox-only
@@ -91,6 +143,7 @@ export function refineMaskedRegion(ctx: CanvasRenderingContext2D, sel: Selection
 export type SelectionCombineMode = 'replace' | 'add' | 'subtract' | 'intersect';
 
 export function combineModeFromModifiers(shiftKey: boolean, altKey: boolean): SelectionCombineMode {
+  if (shiftKey && altKey) return 'intersect';
   if (shiftKey) return 'add';
   if (altKey) return 'subtract';
   return 'replace';
@@ -299,4 +352,110 @@ export function magicWandMask(source: CanvasRenderingContext2D, width: number, h
     height,
     bounds: { x: minX, y: minY, width: Math.max(1, maxX - minX + 1), height: Math.max(1, maxY - minY + 1) },
   };
+}
+
+function boundsOfMask(data: Uint8ClampedArray, width: number, height: number): { x: number; y: number; width: number; height: number } {
+  let minX = width, maxX = 0, minY = height, maxY = 0, any = false;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (data[y * width + x] > 0) {
+        any = true;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  return any ? { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 } : { x: 0, y: 0, width: 0, height: 0 };
+}
+
+/** Affine transform for Transform Selection: rotate/scale around (pivotX, pivotY), then translate by (dx, dy). */
+export interface SelectionTransform {
+  dx: number;
+  dy: number;
+  scaleX: number;
+  scaleY: number;
+  rotationRad: number;
+  pivotX: number;
+  pivotY: number;
+}
+
+/**
+ * Reshapes a selection by an arbitrary affine transform (Select > Transform Selection) — moves,
+ * scales and/or rotates the selection's own geometry, without touching any pixel content. Any
+ * selection kind (rect/ellipse/polygon/mask) is rasterized first and transformed as a bitmap via a
+ * canvas 2D transform, since rotation and non-uniform scale can't be represented by the vector
+ * kinds (an ellipse selection has no rotation field, a rect can't shear into a rotated rect). This
+ * costs precision on an unrotated pure move/resize (which the vector kinds would represent
+ * exactly) in exchange for one implementation that handles every transform uniformly.
+ */
+export function transformSelectionMask(sel: Selection, t: SelectionTransform, width: number, height: number): Selection {
+  if (sel.kind === 'none') return sel;
+  const rasterized = rasterizeSelectionMask(sel, width, height);
+  const srcCanvas = document.createElement('canvas');
+  srcCanvas.width = width;
+  srcCanvas.height = height;
+  const srcImg = srcCanvas.getContext('2d')!.createImageData(width, height);
+  for (let i = 0; i < rasterized.data.length; i++) {
+    srcImg.data[i * 4] = 255;
+    srcImg.data[i * 4 + 1] = 255;
+    srcImg.data[i * 4 + 2] = 255;
+    srcImg.data[i * 4 + 3] = rasterized.data[i];
+  }
+  srcCanvas.getContext('2d')!.putImageData(srcImg, 0, 0);
+
+  const dstCanvas = document.createElement('canvas');
+  dstCanvas.width = width;
+  dstCanvas.height = height;
+  const dstCtx = dstCanvas.getContext('2d')!;
+  dstCtx.translate(t.pivotX + t.dx, t.pivotY + t.dy);
+  dstCtx.rotate(t.rotationRad);
+  dstCtx.scale(t.scaleX, t.scaleY);
+  dstCtx.translate(-t.pivotX, -t.pivotY);
+  dstCtx.drawImage(srcCanvas, 0, 0);
+
+  const out = dstCtx.getImageData(0, 0, width, height);
+  const data = new Uint8ClampedArray(width * height);
+  for (let i = 0; i < data.length; i++) data[i] = out.data[i * 4 + 3];
+  return { kind: 'mask', data, width, height, bounds: boundsOfMask(data, width, height) };
+}
+
+/**
+ * Builds a transparent canvas whose alpha channel is the selection's mask strength (RGB is
+ * irrelevant, kept white) — used to seed Quick Mask mode's paint buffer from the current selection.
+ */
+export function selectionToAlphaCanvas(sel: Selection, width: number, height: number): HTMLCanvasElement {
+  const rasterized = rasterizeSelectionMask(sel, width, height);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.createImageData(width, height);
+  for (let i = 0; i < rasterized.data.length; i++) {
+    img.data[i * 4] = 255;
+    img.data[i * 4 + 1] = 255;
+    img.data[i * 4 + 2] = 255;
+    img.data[i * 4 + 3] = rasterized.data[i];
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
+/**
+ * Reads a Quick Mask paint buffer's alpha channel back into a selection. Any normal paint tool
+ * (brush, eraser, shapes, gradient…) already accumulates alpha exactly like this when painted onto
+ * a transparent canvas, which is what lets Quick Mask reuse the whole existing paint engine
+ * unmodified — painting adds to the mask, erasing removes from it, a soft brush edge gives a
+ * feathered partial selection, all for free.
+ */
+export function alphaMaskToSelection(canvas: HTMLCanvasElement): Selection {
+  const { width, height } = canvas;
+  const ctx = canvas.getContext('2d')!;
+  const img = ctx.getImageData(0, 0, width, height);
+  const data = new Uint8ClampedArray(width * height);
+  for (let i = 0; i < data.length; i++) data[i] = img.data[i * 4 + 3];
+  const bounds = boundsOfMask(data, width, height);
+  if (bounds.width === 0) return NO_SELECTION;
+  return { kind: 'mask', data, width, height, bounds };
 }

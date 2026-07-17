@@ -53,7 +53,7 @@ test('a clipped layer is trimmed to the alpha of the layer below', async ({ page
   await page.getByRole('button', { name: 'Add layer' }).click();
   await page.waitForTimeout(400);
   await row(page, 'Layer 2').click();
-  await page.locator('select').first().selectOption('multiply');
+  await page.getByRole('combobox', { name: 'Blend' }).selectOption('multiply');
   await page.waitForTimeout(400);
   expect(near((await sampleStageColor(page)).r, MULTIPLIED), 'multiply should darken the centre').toBe(true);
 
@@ -74,7 +74,7 @@ test('releasing a clipping mask restores the layer', async ({ page }) => {
   await page.getByRole('button', { name: 'Add layer' }).click();
   await page.waitForTimeout(400);
   await row(page, 'Layer 2').click();
-  await page.locator('select').first().selectOption('multiply');
+  await page.getByRole('combobox', { name: 'Blend' }).selectOption('multiply');
   await page.getByRole('button', { name: 'Create clipping mask' }).click();
   await page.waitForTimeout(400);
   expect(near((await sampleStageColor(page)).r, GREY)).toBe(true);
@@ -93,7 +93,7 @@ test('a clipped layer keeps its own blend mode', async ({ page }) => {
   await page.getByRole('button', { name: 'Add layer' }).click();
   await page.waitForTimeout(400);
   await row(page, 'Layer 2').click();
-  await page.locator('select').first().selectOption('multiply');
+  await page.getByRole('combobox', { name: 'Blend' }).selectOption('multiply');
   await page.getByRole('button', { name: 'Create clipping mask' }).click();
   await page.waitForTimeout(600);
 
@@ -109,7 +109,7 @@ test('a clipped layer exports the same as it renders', async ({ page }) => {
   await page.getByRole('button', { name: 'Add layer' }).click();
   await page.waitForTimeout(400);
   await row(page, 'Layer 2').click();
-  await page.locator('select').first().selectOption('multiply');
+  await page.getByRole('combobox', { name: 'Blend' }).selectOption('multiply');
   await page.getByRole('button', { name: 'Create clipping mask' }).click();
   await page.waitForTimeout(600);
 

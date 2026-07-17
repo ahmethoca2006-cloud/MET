@@ -15,7 +15,11 @@ import { reflowRunsForContent } from './textRuns';
 import { swalToast } from '../../lib/swalTheme';
 import { getOrCreateCanvasFor, deleteCanvasFor, clonePaintCanvas, type PaintCanvasRegistry } from './paint/paintCanvasRegistry';
 import { usePaintLayer, PAINT_TOOLS } from './paint/usePaintLayer';
-import { NO_SELECTION, combineModeFromModifiers, combineSelections, type Selection, type SelectionCombineMode } from './paint/selection';
+import {
+  NO_SELECTION, combineModeFromModifiers, combineSelections, hasSelection, rasterizeSelectionMask,
+  selectionContainsPoint, translateSelection, transformSelectionMask, selectionToAlphaCanvas, alphaMaskToSelection,
+  type Selection, type SelectionCombineMode,
+} from './paint/selection';
 import { strokePenPath, type PaintSettings } from './paint/paintEngine';
 import { BrushCursor } from './paint/BrushCursor';
 import type { SerializedStudioLayer } from '../../lib/studioProjectStore';
@@ -90,6 +94,13 @@ interface StudioCanvasProps {
   onCommitCrop?: () => void;
   /** TypeR Multi-Bubble mode's already-queued rects, drawn as a distinct overlay from the live selection. */
   queuedBubbleRects?: { x: number; y: number; width: number; height: number }[];
+  /** Select > Transform Selection: shows a free-transform box around the selection's bounds instead
+   *  of the normal marquee/paint tool dispatch. Enter commits (reshapes `selection`), Escape cancels. */
+  transformingSelection?: boolean;
+  onExitTransformSelection?: () => void;
+  /** Quick Mask mode: every paint tool draws onto a scratch alpha buffer instead of the active
+   *  layer, shown as a red rubylith tint over deselected areas. */
+  quickMaskActive?: boolean;
 }
 
 export interface StudioCanvasHandle {
@@ -129,13 +140,16 @@ export interface StudioCanvasHandle {
    * only ever read/write the active layer's own canvas, never the background underneath it.
    */
   seedLayerWithBackground: (layerId: string) => void;
+  /** Reads the Quick Mask scratch buffer back into a Selection as mode is turned off; null if no
+   *  mask buffer exists (Quick Mask was never entered, or no page is loaded). */
+  commitQuickMask: () => Selection | null;
 }
 
 export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(function StudioCanvas({
   page, showCleaned, overlayOpacity, showGrid = false, showRulers = false, activeTool, fitSignal, layers,
   activeLayerId, selectedLayerIds, onSelectLayer, onSelectLayers, onAddTextLayer, onUpdateTextLayer, onTextSelectionChange,
   paintSettings, selection, onSelectionChange, onPaintStrokeEnd, onEyedropperPick, onCommitCrop,
-  queuedBubbleRects,
+  queuedBubbleRects, transformingSelection = false, onExitTransformSelection, quickMaskActive = false,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -183,7 +197,35 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   /** Selection to combine against and how, captured from Shift/Alt at the start of a marquee/lasso drag. */
   const combineBaseRef = useRef<Selection>(NO_SELECTION);
   const combineModeRef = useRef<SelectionCombineMode>('replace');
+  /**
+   * Move tool (activeTool 'select') dragging the pixel content trapped inside the active
+   * selection on the active clean-patch layer — distinct from objectMarqueeRef (which
+   * drag-selects text layers): this fires instead of it when the pointerdown lands inside the
+   * selection's own shape rather than on empty canvas.
+   */
+  const movingSelectionRef = useRef<{
+    layerId: string;
+    originalSelection: Selection;
+    before: ImageData;
+    pieceCanvas: HTMLCanvasElement;
+    origin: { x: number; y: number; width: number; height: number };
+    cutBase: ImageData;
+    dragStart: { x: number; y: number };
+    lastOffset: { dx: number; dy: number };
+  } | null>(null);
   const sampleCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  /** Quick Mask's scratch paint buffer — alpha channel is the in-progress selection strength. */
+  const quickMaskCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  /** The red rubylith tint derived from quickMaskCanvasRef, regenerated after every paint change. */
+  // Always a real (possibly 0x0) canvas, never null, so the Konva Image node below always has a
+  // valid `image` prop to satisfy its type — content is filled in once Quick Mask is entered.
+  const quickMaskOverlayCanvasRef = useRef<HTMLCanvasElement>(document.createElement('canvas'));
+  /** Select > Transform Selection's live box (image-space centre + size + rotation) and the
+   *  original selection/bounds it started from, needed to compute the final transform on commit. */
+  const [transformBox, setTransformBox] = useState<{ x: number; y: number; width: number; height: number; rotation: number } | null>(null);
+  const transformOriginRef = useRef<{ selection: Selection; bounds: { x: number; y: number; width: number; height: number } } | null>(null);
+  const transformRectRef = useRef<Konva.Rect>(null);
+  const transformerRef2 = useRef<Konva.Transformer>(null);
   /** Pointer position in container/CSS px for the live brush outline; null when off-canvas. */
   const [brushCursorPos, setBrushCursorPos] = useState<{ x: number; y: number } | null>(null);
   const [penPoints, setPenPoints] = useState<{ x: number; y: number }[]>([]);
@@ -219,19 +261,73 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const paintLayerIdRef = useRef<string | null>(null);
   paintLayerIdRef.current = activeLayer?.type === 'clean-patch' ? activeLayer.id : null;
 
+  // Quick Mask's red rubylith tint, regenerated from quickMaskCanvasRef after every paint change.
+  // The `destination-out` trick punches the mask's own alpha out of a flat red rect natively, so no
+  // per-pixel JS loop is needed even on a live per-pointermove redraw.
+  const quickMaskImageRef = useRef<Konva.Image>(null);
+  const redrawQuickMaskOverlay = useCallback(() => {
+    const mask = quickMaskCanvasRef.current;
+    if (!mask) return;
+    let overlay = quickMaskOverlayCanvasRef.current;
+    if (!overlay || overlay.width !== mask.width || overlay.height !== mask.height) {
+      overlay = document.createElement('canvas');
+      overlay.width = mask.width;
+      overlay.height = mask.height;
+      quickMaskOverlayCanvasRef.current = overlay;
+    }
+    const ctx = overlay.getContext('2d')!;
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(0, 0, overlay.width, overlay.height);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.drawImage(mask, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    // Set imperatively rather than via the `image` prop: the canvas is mutated in place (never a
+    // new element), so a React re-render wouldn't see a changed prop value to diff against and
+    // react-konva would never call the underlying Konva setter on its own.
+    const node = quickMaskImageRef.current;
+    if (node) {
+      node.image(overlay);
+      node.getLayer()?.batchDraw();
+    }
+  }, []);
+
+  // Seed the Quick Mask paint buffer from the current selection the moment mode is entered — not
+  // every render, or repeated toggles would keep resetting mid-edit.
+  useEffect(() => {
+    if (!quickMaskActive || !image) return;
+    if (!quickMaskCanvasRef.current) {
+      quickMaskCanvasRef.current = selectionToAlphaCanvas(selection, image.width, image.height);
+      redrawQuickMaskOverlay();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickMaskActive, image]);
+
   const getActivePaintCanvas = useCallback(() => {
+    if (quickMaskActive) return quickMaskCanvasRef.current;
     const layerId = paintLayerIdRef.current;
     const img = imageRef.current;
     if (!layerId || !img) return null;
     return getOrCreateCanvasFor(paintCanvasRegistry.current, layerId, img.width, img.height);
-  }, []);
+  }, [quickMaskActive]);
+
+  /** Redraws whatever the active tool is actually painting onto — the active layer normally, or
+   *  the Quick Mask buffer's tint while that mode is active. */
+  const redrawActivePaintTarget = useCallback(() => {
+    if (quickMaskActive) { redrawQuickMaskOverlay(); return; }
+    redrawLayerNode(paintLayerIdRef.current);
+  }, [quickMaskActive, redrawQuickMaskOverlay, redrawLayerNode]);
 
   const paint = usePaintLayer({
     getCanvas: getActivePaintCanvas,
     settings: paintSettings,
-    selection,
+    // Quick Mask must be paintable everywhere, not clipped to the selection it's redefining.
+    selection: quickMaskActive ? NO_SELECTION : selection,
     onSelectionChange,
     onStrokeEnd: (before) => {
+      if (quickMaskActive) { redrawQuickMaskOverlay(); return; }
       const layerId = paintLayerIdRef.current;
       redrawLayerNode(layerId ?? '');
       if (layerId) onPaintStrokeEnd(layerId, before);
@@ -389,6 +485,11 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       ctx.drawImage(img, 0, 0);
       redrawLayerNode(layerId);
     },
+    commitQuickMask() {
+      const canvas = quickMaskCanvasRef.current;
+      quickMaskCanvasRef.current = null;
+      return canvas ? alphaMaskToSelection(canvas) : null;
+    },
   }), [onUpdateTextLayer, scale, pos, containerSize, page]);
 
   const activeSource = showCleaned && page?.cleaned ? page.cleaned : page?.original ?? null;
@@ -413,19 +514,21 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     return () => { img.onload = null; };
   }, [overlaySource]);
 
-  // Esc cancels an in-progress Pen path or polygonal lasso; Enter commits either (or a pending Crop).
+  // Esc cancels an in-progress Pen path, polygonal lasso, or Transform Selection; Enter commits any of them (or a pending Crop).
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape' && penPoints.length > 0) setPenPoints([]);
       if (e.key === 'Escape' && lassoPolyPoints.length > 0) setLassoPolyPoints([]);
+      if (e.key === 'Escape' && transformingSelection) cancelTransformSelection();
       if (e.key === 'Enter' && activeTool === 'pen' && penPoints.length > 1) commitPenPath();
       if (e.key === 'Enter' && activeTool === 'lasso-polygon' && lassoPolyPoints.length > 2) commitLassoPolygon();
       if (e.key === 'Enter' && activeTool === 'crop') onCommitCrop?.();
+      if (e.key === 'Enter' && transformingSelection) commitTransformSelection();
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [penPoints, lassoPolyPoints, activeTool, onCommitCrop]);
+  }, [penPoints, lassoPolyPoints, activeTool, onCommitCrop, transformingSelection, transformBox]);
 
   // Eyedropper samples from a hidden replica of the background image (approximation — doesn't include raster layers yet).
   useEffect(() => {
@@ -610,6 +713,49 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     transformer.getLayer()?.batchDraw();
   }, [selectionIds, activeTool, editingLayerId, layers]);
 
+  // Seed Select > Transform Selection's box from the current selection's bounds the moment the
+  // mode is entered — not every render, or a mid-transform re-render would snap the box back.
+  useEffect(() => {
+    if (!transformingSelection || !image) return;
+    if (!transformOriginRef.current) {
+      const bounds = rasterizeSelectionMask(selection, image.width, image.height).bounds;
+      transformOriginRef.current = { selection, bounds };
+      setTransformBox({ x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2, width: bounds.width, height: bounds.height, rotation: 0 });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transformingSelection, image]);
+
+  // Keep the second Transformer bound to the transform-selection box while it's up.
+  useEffect(() => {
+    const transformer = transformerRef2.current;
+    if (!transformer) return;
+    transformer.nodes(transformBox && transformRectRef.current ? [transformRectRef.current] : []);
+    transformer.getLayer()?.batchDraw();
+  }, [transformBox]);
+
+  const commitTransformSelection = () => {
+    const origin = transformOriginRef.current;
+    if (origin && transformBox && image && origin.bounds.width > 0 && origin.bounds.height > 0) {
+      const pivotX = origin.bounds.x + origin.bounds.width / 2;
+      const pivotY = origin.bounds.y + origin.bounds.height / 2;
+      const scaleX = transformBox.width / origin.bounds.width;
+      const scaleY = transformBox.height / origin.bounds.height;
+      const rotationRad = (transformBox.rotation * Math.PI) / 180;
+      const dx = transformBox.x - pivotX;
+      const dy = transformBox.y - pivotY;
+      onSelectionChange(transformSelectionMask(origin.selection, { dx, dy, scaleX, scaleY, rotationRad, pivotX, pivotY }, image.width, image.height));
+    }
+    transformOriginRef.current = null;
+    setTransformBox(null);
+    onExitTransformSelection?.();
+  };
+
+  const cancelTransformSelection = () => {
+    transformOriginRef.current = null;
+    setTransformBox(null);
+    onExitTransformSelection?.();
+  };
+
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
     const targetClass = e.target.getClassName?.();
     // A text layer's hit area is a Rect too, so it must be excluded by name — otherwise clicking
@@ -685,7 +831,53 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       panRef.current = { active: true, lastX: e.evt.clientX, lastY: e.evt.clientY };
       return;
     }
+    // While transforming the selection box, only its own Konva drag/Transformer should respond —
+    // no marquee/paint/lasso dispatch until it's committed (Enter) or cancelled (Escape).
+    if (transformingSelection) return;
     if (activeTool === 'select') {
+      // Dragging inside an active selection on the active raster layer moves the pixel content
+      // it encloses, rather than starting a text-multi-select marquee box over it.
+      const layerId = paintLayerIdRef.current;
+      const paintCanvas = layerId ? getActivePaintCanvas() : null;
+      if (paintCanvas && layerId && hasSelection(selection)) {
+        const p = imageSpacePointer();
+        if (p && selectionContainsPoint(selection, p.x, p.y)) {
+          const ctx = paintCanvas.getContext('2d')!;
+          const before = ctx.getImageData(0, 0, paintCanvas.width, paintCanvas.height);
+          const mask = rasterizeSelectionMask(selection, paintCanvas.width, paintCanvas.height);
+          const { bounds } = mask;
+          if (bounds.width > 0 && bounds.height > 0) {
+            const content = ctx.getImageData(bounds.x, bounds.y, bounds.width, bounds.height);
+            const erased = ctx.getImageData(bounds.x, bounds.y, bounds.width, bounds.height);
+            for (let row = 0; row < bounds.height; row++) {
+              for (let col = 0; col < bounds.width; col++) {
+                const maskAlpha = mask.data[(bounds.y + row) * mask.width + (bounds.x + col)] / 255;
+                const i = (row * bounds.width + col) * 4;
+                content.data[i + 3] = content.data[i + 3] * maskAlpha;
+                erased.data[i + 3] = erased.data[i + 3] * (1 - maskAlpha);
+              }
+            }
+            const pieceCanvas = document.createElement('canvas');
+            pieceCanvas.width = bounds.width;
+            pieceCanvas.height = bounds.height;
+            pieceCanvas.getContext('2d')!.putImageData(content, 0, 0);
+            ctx.putImageData(erased, bounds.x, bounds.y);
+            const cutBase = ctx.getImageData(0, 0, paintCanvas.width, paintCanvas.height);
+            movingSelectionRef.current = {
+              layerId,
+              originalSelection: selection,
+              before,
+              pieceCanvas,
+              origin: bounds,
+              cutBase,
+              dragStart: p,
+              lastOffset: { dx: 0, dy: 0 },
+            };
+            redrawLayerNode(layerId);
+          }
+          return;
+        }
+      }
       // Only a drag starting on empty canvas marquees; starting on a layer means move it.
       const targetClass = e.target.getClassName?.();
       const onEmpty = e.target === e.target.getStage() || targetClass === 'Image';
@@ -715,7 +907,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       onEyedropperPick(`#${[d[0], d[1], d[2]].map(v => v.toString(16).padStart(2, '0')).join('')}`);
       return;
     }
-    if (MARQUEE_TOOLS.has(activeTool)) {
+    if (MARQUEE_TOOLS.has(activeTool) && !quickMaskActive) {
       const p = imageSpacePointer();
       if (!p || !image) return;
       const mode = combineModeFromModifiers(e.evt.shiftKey, e.evt.altKey);
@@ -734,7 +926,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       marqueeStartRef.current = p;
       return;
     }
-    if (LASSO_TOOLS.has(activeTool)) {
+    if (LASSO_TOOLS.has(activeTool) && !quickMaskActive) {
       const p = imageSpacePointer();
       if (!p) return;
       combineBaseRef.current = selection;
@@ -778,6 +970,35 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const handlePaintPointerMove = (e: Konva.KonvaEventObject<PointerEvent>) => {
     if (panRef.current?.active) return;
     if (e.evt.pointerType === 'touch' && touchCount >= 2) return;
+    if (transformingSelection) return;
+    if (movingSelectionRef.current) {
+      const p = imageSpacePointer();
+      const m = movingSelectionRef.current;
+      const canvas = getActivePaintCanvas();
+      if (!p || !canvas || !image) return;
+      const dx = Math.round(p.x - m.dragStart.x);
+      const dy = Math.round(p.y - m.dragStart.y);
+      if (dx === m.lastOffset.dx && dy === m.lastOffset.dy) return;
+      const ctx = canvas.getContext('2d')!;
+      const prevRect = { x: m.origin.x + m.lastOffset.dx, y: m.origin.y + m.lastOffset.dy, width: m.origin.width, height: m.origin.height };
+      const nextRect = { x: m.origin.x + dx, y: m.origin.y + dy, width: m.origin.width, height: m.origin.height };
+      const unionX0 = Math.min(prevRect.x, nextRect.x);
+      const unionY0 = Math.min(prevRect.y, nextRect.y);
+      const unionX1 = Math.max(prevRect.x + prevRect.width, nextRect.x + nextRect.width);
+      const unionY1 = Math.max(prevRect.y + prevRect.height, nextRect.y + nextRect.height);
+      const clampX0 = Math.max(0, unionX0);
+      const clampY0 = Math.max(0, unionY0);
+      const clampX1 = Math.min(canvas.width, unionX1);
+      const clampY1 = Math.min(canvas.height, unionY1);
+      if (clampX1 > clampX0 && clampY1 > clampY0) {
+        ctx.putImageData(m.cutBase, 0, 0, clampX0, clampY0, clampX1 - clampX0, clampY1 - clampY0);
+      }
+      ctx.drawImage(m.pieceCanvas, m.origin.x + dx, m.origin.y + dy);
+      m.lastOffset = { dx, dy };
+      redrawLayerNode(m.layerId);
+      onSelectionChange(translateSelection(m.originalSelection, dx, dy, image.width, image.height));
+      return;
+    }
     if (objectMarqueeRef.current) {
       const p = imageSpacePointer();
       if (!p) return;
@@ -823,11 +1044,30 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     if (!p) return;
     const pressure = e.evt.pointerType === 'pen' ? e.evt.pressure || 0.5 : 1;
     paint.pointerMove(activeTool as Parameters<typeof paint.pointerMove>[0], p.x, p.y, pressure);
-    redrawLayerNode(paintLayerIdRef.current);
+    redrawActivePaintTarget();
   };
   const handlePaintPointerUp = (e: Konva.KonvaEventObject<PointerEvent>) => {
     if (e.evt.pointerType === 'touch' && touchCount >= 2) return;
     if (panRef.current?.active) { panRef.current = null; return; }
+    if (transformingSelection) return;
+    if (movingSelectionRef.current) {
+      const m = movingSelectionRef.current;
+      movingSelectionRef.current = null;
+      // A click with no drag is not an intentional edit — revert the cut and skip history/autosave.
+      if (m.lastOffset.dx === 0 && m.lastOffset.dy === 0) {
+        const canvas = getActivePaintCanvas();
+        const ctx = canvas?.getContext('2d');
+        if (canvas && ctx) {
+          ctx.putImageData(m.before, 0, 0);
+          redrawLayerNode(m.layerId);
+        }
+        onSelectionChange(m.originalSelection);
+        return;
+      }
+      if (image) onSelectionChange(translateSelection(m.originalSelection, m.lastOffset.dx, m.lastOffset.dy, image.width, image.height));
+      onPaintStrokeEnd(m.layerId, m.before);
+      return;
+    }
     if (objectMarqueeRef.current) {
       const { additive } = objectMarqueeRef.current;
       const box = objectMarquee;
@@ -880,7 +1120,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     const p = imageSpacePointer();
     if (!p) return;
     paint.pointerUp(activeTool as Parameters<typeof paint.pointerUp>[0], p.x, p.y);
-    redrawLayerNode(paintLayerIdRef.current);
+    redrawActivePaintTarget();
     restoreAncestorCaches();
   };
 
@@ -1259,6 +1499,14 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
             )}
           </Layer>
 
+          {quickMaskActive && image && (
+            <Layer listening={false}>
+              {/* Rubylith tint: red over everything NOT currently selected in the quick mask buffer.
+                  Regenerated by redrawQuickMaskOverlay after every paint change, not on every render. */}
+              <KonvaImage ref={quickMaskImageRef} image={quickMaskOverlayCanvasRef.current} width={image.width} height={image.height} />
+            </Layer>
+          )}
+
           <Layer listening={false}>
             {/* Object marquee — solid accent fill, deliberately unlike the dashed white *pixel*
                 selection, since the two mean different things (pick layers vs clip paint). */}
@@ -1330,6 +1578,48 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
               boundBoxFunc={(oldBox, newBox) => (newBox.width < 20 ? oldBox : newBox)}
             />
           </Layer>
+
+          {transformingSelection && transformBox && (
+            <Layer>
+              {/* Select > Transform Selection: reshapes the selection's own geometry only, never the
+                  pixels underneath — Enter commits (see commitTransformSelection), Escape cancels. */}
+              <Rect
+                ref={transformRectRef}
+                x={transformBox.x}
+                y={transformBox.y}
+                width={transformBox.width}
+                height={transformBox.height}
+                offsetX={transformBox.width / 2}
+                offsetY={transformBox.height / 2}
+                rotation={transformBox.rotation}
+                draggable
+                fill="rgba(56, 189, 248, 0.08)"
+                stroke="#38bdf8"
+                strokeWidth={1 / scale}
+                dash={[6 / scale, 4 / scale]}
+                onDragEnd={(e) => setTransformBox(b => (b ? { ...b, x: e.target.x(), y: e.target.y() } : b))}
+                onTransformEnd={(e) => {
+                  const node = e.target as Konva.Rect;
+                  const sX = node.scaleX();
+                  const sY = node.scaleY();
+                  node.scaleX(1);
+                  node.scaleY(1);
+                  setTransformBox(b => (b ? {
+                    x: node.x(),
+                    y: node.y(),
+                    rotation: node.rotation(),
+                    width: Math.max(4, b.width * sX),
+                    height: Math.max(4, b.height * sY),
+                  } : b));
+                }}
+              />
+              <Transformer
+                ref={transformerRef2}
+                rotateEnabled
+                boundBoxFunc={(oldBox, newBox) => (newBox.width < 8 || newBox.height < 8 ? oldBox : newBox)}
+              />
+            </Layer>
+          )}
         </Stage>
       )}
       {editingLayer?.text && (
