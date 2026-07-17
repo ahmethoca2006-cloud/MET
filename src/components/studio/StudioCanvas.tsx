@@ -565,7 +565,18 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     });
   }, [image, containerSize]);
 
-  useEffect(() => { fitToScreen(); }, [fitToScreen, page?.id, fitSignal]);
+  // Only auto-fit once per page (or on an explicit Fit-to-Screen command via fitSignal) — not on
+  // every container resize. Selecting a text/adjustment layer opens its dock panel and shrinks the
+  // canvas container; without this gate, that resize alone would re-run fitToScreen and recentre
+  // the whole view out from under an in-progress drag (e.g. moving a text layer with the Move tool).
+  const didFitRef = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${page?.id ?? ''}:${fitSignal}`;
+    if (didFitRef.current === key) return;
+    if (!image || containerSize.width === 0 || containerSize.height === 0) return;
+    didFitRef.current = key;
+    fitToScreen();
+  }, [fitToScreen, page?.id, fitSignal, image, containerSize]);
 
   /**
    * Each adjustment renders as a wrapper Group around everything below it (see
