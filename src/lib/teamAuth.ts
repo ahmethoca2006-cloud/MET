@@ -51,6 +51,7 @@ export function useTeamAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isRecovery, setIsRecovery] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -63,6 +64,8 @@ export function useTeamAuth() {
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
+      if (_event === 'PASSWORD_RECOVERY') setIsRecovery(true);
+      if (_event === 'SIGNED_OUT') setIsRecovery(false);
       if (newSession) syncProfile(newSession).then(setIsAdmin);
       else setIsAdmin(false);
     });
@@ -101,5 +104,16 @@ export function useTeamAuth() {
     await supabase.auth.signOut();
   }, []);
 
-  return { session, loading, isAdmin, signIn, signUp, signOut, updateProfile };
+  const resetPasswordForEmail = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+    return error ? error.message : null;
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (!error) setIsRecovery(false);
+    return error ? error.message : null;
+  }, []);
+
+  return { session, loading, isAdmin, isRecovery, signIn, signUp, signOut, updateProfile, resetPasswordForEmail, updatePassword };
 }

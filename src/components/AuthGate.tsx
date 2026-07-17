@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { UserPlus, LogIn, Mail, Lock, User, ImagePlus, MailCheck, Check, X } from 'lucide-react';
+import { UserPlus, LogIn, Mail, Lock, User, ImagePlus, MailCheck, Check, X, KeyRound } from 'lucide-react';
 import { GlassCard, Button, Input } from './ui';
 import { swal } from '../lib/swalTheme';
 import { readAvatarFile } from '../lib/image';
@@ -30,8 +30,8 @@ function PasswordChecklist({ password }: { password: string }) {
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { session, loading, signIn, signUp } = useTeamAuth();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signup');
+  const { session, loading, signIn, signUp, isRecovery, resetPasswordForEmail, updatePassword } = useTeamAuth();
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signup');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -39,13 +39,139 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [avatar, setAvatar] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-ink-faint text-sm">Loading...</div>;
   }
 
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      swal({ icon: 'error', title: 'Missing email', text: 'Enter your email address.' });
+      return;
+    }
+    setSubmitting(true);
+    const error = await resetPasswordForEmail(email.trim());
+    setSubmitting(false);
+    if (error) {
+      swal({ icon: 'error', title: 'Could not send reset link', text: error });
+      return;
+    }
+    setResetSent(true);
+  };
+
+  const handleUpdatePassword = async () => {
+    if (!PASSWORD_RULES.every(rule => rule.test(newPassword))) {
+      swal({ icon: 'error', title: 'Weak Password', text: 'Your new password must meet all the requirements below.' });
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      swal({ icon: 'error', title: "Passwords don't match", text: 'Re-enter your new password to confirm it.' });
+      return;
+    }
+    setSubmitting(true);
+    const error = await updatePassword(newPassword);
+    setSubmitting(false);
+    if (error) {
+      swal({ icon: 'error', title: 'Could not update password', text: error });
+      return;
+    }
+    setNewPassword('');
+    setConfirmNewPassword('');
+  };
+
+  if (isRecovery) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <GlassCard className="p-8 w-full max-w-sm space-y-5">
+          <div className="text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-accent-soft border border-accent/30 flex items-center justify-center mb-3">
+              <KeyRound className="text-accent" size={22} />
+            </div>
+            <h2 className="text-lg font-display font-bold text-ink">Set a new password</h2>
+            <p className="text-xs text-ink-muted mt-1">Choose a new password for your account.</p>
+          </div>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs text-accent font-semibold flex items-center gap-1"><Lock size={12} /> New Password</label>
+              <Input type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              <PasswordChecklist password={newPassword} />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-accent font-semibold flex items-center gap-1"><Lock size={12} /> Confirm New Password</label>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleUpdatePassword(); }}
+              />
+              {confirmNewPassword && (
+                <p className={`text-[11px] flex items-center gap-1.5 ${confirmNewPassword === newPassword ? 'text-success' : 'text-danger'}`}>
+                  {confirmNewPassword === newPassword ? <Check size={11} /> : <X size={11} />}
+                  {confirmNewPassword === newPassword ? 'Passwords match' : "Passwords don't match"}
+                </p>
+              )}
+            </div>
+          </div>
+          <Button onClick={handleUpdatePassword} disabled={submitting} className="w-full">
+            <KeyRound size={14} /> {submitting ? 'Please wait...' : 'Update Password'}
+          </Button>
+        </GlassCard>
+      </div>
+    );
+  }
+
   if (session) return <>{children}</>;
+
+  if (mode === 'forgot') {
+    if (resetSent) {
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <GlassCard className="p-8 w-full max-w-sm space-y-4 text-center">
+            <div className="w-12 h-12 mx-auto rounded-full bg-accent-soft border border-accent/30 flex items-center justify-center">
+              <MailCheck className="text-accent" size={22} />
+            </div>
+            <h2 className="text-lg font-display font-bold text-ink">Check your email</h2>
+            <p className="text-sm text-ink-muted">We sent a password reset link to <span className="font-semibold text-ink">{email}</span>. Click it to choose a new password.</p>
+            <Button className="w-full" onClick={() => { setResetSent(false); setMode('signin'); }}>Back to Sign In</Button>
+          </GlassCard>
+        </div>
+      );
+    }
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <GlassCard className="p-8 w-full max-w-sm space-y-5">
+          <div className="text-center">
+            <h2 className="text-lg font-display font-bold text-ink">Reset your password</h2>
+            <p className="text-xs text-ink-muted mt-1">Enter your email and we'll send you a reset link.</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs text-accent font-semibold flex items-center gap-1"><Mail size={12} /> Email</label>
+            <Input
+              type="email"
+              placeholder="you@team.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleForgotPassword(); }}
+            />
+          </div>
+          <Button onClick={handleForgotPassword} disabled={submitting} className="w-full">
+            <Mail size={14} /> {submitting ? 'Please wait...' : 'Send Reset Link'}
+          </Button>
+          <button
+            onClick={() => setMode('signin')}
+            className="w-full text-center text-xs text-ink-muted hover:text-accent transition-colors"
+          >
+            Back to Sign In
+          </button>
+        </GlassCard>
+      </div>
+    );
+  }
 
   if (awaitingConfirmation) {
     return (
@@ -169,6 +295,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
               onKeyDown={(e) => { if (e.key === 'Enter' && mode === 'signin') handleSignIn(); }}
             />
             {mode === 'signup' && <PasswordChecklist password={password} />}
+            {mode === 'signin' && (
+              <button
+                type="button"
+                onClick={() => setMode('forgot')}
+                className="text-[11px] text-ink-faint hover:text-accent transition-colors"
+              >
+                Forgot password?
+              </button>
+            )}
           </div>
           {mode === 'signup' && (
             <div className="space-y-1">

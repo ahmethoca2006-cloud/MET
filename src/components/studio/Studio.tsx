@@ -14,8 +14,6 @@ import { HistoryProvider, useHistory } from './history/HistoryContext';
 import { HistoryPanel } from './history/HistoryPanel';
 import { useKeyboardUndo } from './history/useKeyboardUndo';
 import { DockProvider, useDock } from './dock/DockContext';
-import { FloatingPanel } from './dock/FloatingPanel';
-import { DOCK_PANEL_GROUP_AUTOSAVE_ID } from './dock/dockLayout';
 import {
   flattenTree, findLayer, updateLayer, mapTree, removeLayers, insertAfter, moveWithinParent, cloneSubtree,
   collectSubtree, getParent, getSiblings, groupLayers, ungroup, reparent, canBeClipBase,
