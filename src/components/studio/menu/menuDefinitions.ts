@@ -43,6 +43,8 @@ export interface MenuActions {
   isClipped: boolean;
   addTextLayer: () => void;
   centerTextInBubble: () => void;
+  increaseTextSize: () => void;
+  decreaseTextSize: () => void;
   hasActiveTextLayer: boolean;
   panelTabs: { id: string; label: string }[];
   showPanel: (id: string) => void;
@@ -61,6 +63,9 @@ export interface MenuActions {
   featherSelection: () => void;
   expandSelection: () => void;
   contractSelection: () => void;
+  transformSelection: () => void;
+  quickMaskActive: boolean;
+  toggleQuickMask: () => void;
 }
 
 export function buildMenus(a: MenuActions): MenuDef[] {
@@ -91,6 +96,9 @@ export function buildMenus(a: MenuActions): MenuDef[] {
         { id: 'feather', label: 'Feather…', action: a.featherSelection, disabled: !a.hasSelection },
         { id: 'expand', label: 'Expand…', action: a.expandSelection, disabled: !a.hasSelection },
         { id: 'contract', label: 'Contract…', action: a.contractSelection, disabled: !a.hasSelection },
+        { id: 'transform', label: 'Transform Selection', action: a.transformSelection, disabled: !a.hasSelection },
+        { id: 'sep2', label: '', separator: true },
+        { id: 'quick-mask', label: 'Quick Mask', shortcut: 'Q', action: a.toggleQuickMask, checked: a.quickMaskActive },
       ],
     },
     {
@@ -137,6 +145,8 @@ export function buildMenus(a: MenuActions): MenuDef[] {
       items: [
         { id: 'add-text', label: 'New Text Layer', action: a.addTextLayer },
         { id: 'center-bubble', label: 'Center in Bubble', action: a.centerTextInBubble, disabled: !a.hasActiveTextLayer },
+        { id: 'increase-text-size', label: 'Increase Size', shortcut: 'Ctrl+.', action: a.increaseTextSize, disabled: !a.hasActiveTextLayer },
+        { id: 'decrease-text-size', label: 'Decrease Size', shortcut: 'Ctrl+,', action: a.decreaseTextSize, disabled: !a.hasActiveTextLayer },
       ],
     },
     {
