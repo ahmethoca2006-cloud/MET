@@ -858,10 +858,16 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     if (transformingSelection) return;
     if (activeTool === 'select') {
       // Dragging inside an active selection on the active raster layer moves the pixel content
-      // it encloses, rather than starting a text-multi-select marquee box over it.
+      // it encloses, rather than starting a text-multi-select marquee box over it. But a click that
+      // lands directly on a text layer's own hit rect must let *that* layer's own Konva drag win —
+      // otherwise an unrelated, leftover selection (e.g. from a prior Quick Mask/marquee/wand) that
+      // happens to overlap the text would hijack the gesture into cutting/moving the raster layer's
+      // pixels instead of repositioning the text, which looks like the page's artwork randomly
+      // rearranging itself out from under the user.
+      const clickedTextHit = e.target?.hasName?.(TEXT_HIT_NAME);
       const layerId = paintLayerIdRef.current;
       const paintCanvas = layerId ? getActivePaintCanvas() : null;
-      if (paintCanvas && layerId && hasSelection(selection)) {
+      if (paintCanvas && layerId && hasSelection(selection) && !clickedTextHit) {
         const p = imageSpacePointer();
         if (p && selectionContainsPoint(selection, p.x, p.y)) {
           const ctx = paintCanvas.getContext('2d')!;
