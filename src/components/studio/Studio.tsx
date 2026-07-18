@@ -18,8 +18,8 @@ import {
   flattenTree, findLayer, updateLayer, mapTree, removeLayers, insertAfter, moveWithinParent, cloneSubtree,
   collectSubtree, getParent, getSiblings, groupLayers, ungroup, reparent, canBeClipBase,
 } from './layerTree';
-import { NO_SELECTION, hasSelection, featherSelection, growSelection, type Selection } from './paint/selection';
-import type { PaintSettings, LiquifyMode, SymmetryMode } from './paint/paintEngine';
+import { NO_SELECTION, hasSelection, featherSelection, growSelection, pathToSelection, type Selection } from './paint/selection';
+import { strokePathOntoCanvas, fillPathOntoCanvas, type PaintSettings, type LiquifyMode, type SymmetryMode } from './paint/paintEngine';
 import type { BrushShape } from './paint/brushTip';
 import { PAINT_TOOLS } from './paint/usePaintLayer';
 import { ToolOptionsBar } from './toolOptions/ToolOptionsBar';
@@ -31,9 +31,11 @@ import { swal, swalToast } from '../../lib/swalTheme';
 import { ExportDialog } from './ExportDialog';
 import { TranslationPreviewPanel } from './TranslationPreviewPanel';
 import { exportPsd } from '../../lib/exportPsd';
+import { renderFlattenedPage, compositeFlattenedSlice, downloadBlob } from '../../lib/exportImage';
+import JSZip from 'jszip';
 import {
-  createBackgroundLayer, createLayer, createTextLayer, createAdjustmentLayer, createGroupLayer, parseTyperScript,
-  createLayerMask, DEFAULT_TYPER_STYLES, DEFAULT_TYPER_FOLDERS, FONT_FAMILIES, type StudioLayer, type TextLayerData,
+  createBackgroundLayer, createLayer, createTextLayer, createAdjustmentLayer, createGroupLayer, createPathLayer, parseTyperScript,
+  createLayerMask, DEFAULT_TYPER_STYLES, DEFAULT_TYPER_FOLDERS, FONT_FAMILIES, type StudioLayer, type TextLayerData, type PathLayerData, type PathAnchor,
   type TyperStyle, type TyperFolder, type AdjustmentLayerData, type LayerSelectMode,
 } from './studioTypes';
 import { layoutText } from './textLayout';
@@ -383,6 +385,45 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     setMultiBubbleRects([]);
     setActiveTool('select');
     swalToast({ icon: 'success', title: `Placed ${newLayers.length} line${newLayers.length === 1 ? '' : 's'}` });
+  }
+
+  // Slice tool: draw a rect per slice (reuses the Rectangular-Marquee-style drag via MARQUEE_TOOLS),
+  // queue it, then export every queued rect as one cropped PNG each, bundled into a zip — mirrors
+  // the Multi-Bubble queue above.
+  const [sliceRects, setSliceRects] = useState<{ x: number; y: number; width: number; height: number }[]>([]);
+
+  function handleAddSliceRect() {
+    if (selection.kind !== 'rect') {
+      swalToast({ icon: 'info', title: 'Draw a rectangle first' });
+      return;
+    }
+    setSliceRects(prev => [...prev, selection]);
+    setSelection(NO_SELECTION);
+  }
+
+  async function handleExportSlices() {
+    if (sliceRects.length === 0) return;
+    const snapshot = canvasRef.current?.getExportSnapshot();
+    if (!snapshot) {
+      swalToast({ icon: 'warning', title: 'Nothing to export' });
+      return;
+    }
+    try {
+      const fullCanvas = await renderFlattenedPage(snapshot);
+      const zip = new JSZip();
+      for (let i = 0; i < sliceRects.length; i++) {
+        const blob = await compositeFlattenedSlice(fullCanvas, sliceRects[i]);
+        zip.file(`slice-${String(i + 1).padStart(2, '0')}.png`, blob);
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+      const baseName = `${chapterName}${activePage ? `_${activePage.original.filename.replace(/\.[^.]+$/, '')}` : ''}`.replace(/\s+/g, '_');
+      downloadBlob(zipBlob, `${baseName}-slices.zip`);
+      setSliceRects([]);
+      swalToast({ icon: 'success', title: `Exported ${sliceRects.length} slice${sliceRects.length === 1 ? '' : 's'}` });
+    } catch (err) {
+      console.error(err);
+      swalToast({ icon: 'error', title: 'Slice export failed' });
+    }
   }
 
   // Pick up text sent from the Text Editor's "Send to TypeR" button, if any is waiting.
@@ -882,6 +923,19 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     ));
   }
 
+  function handleUpdatePathLayer(id: string, patch: Partial<PathLayerData>) {
+    updateLayers(current => updateLayer(current, id, l =>
+      l.type === 'path' && l.path ? { ...l, path: { ...l.path, ...patch } } : l
+    ));
+  }
+
+  function handleAddPathLayer(anchors: PathAnchor[], closed: boolean) {
+    const layer = createPathLayer(anchors, closed, { strokeColor: paintSettings.color, strokeWidth: Math.max(2, paintSettings.size / 6) });
+    updateLayers(current => [...current, layer], 'Add Path Layer');
+    setActiveLayerId(layer.id);
+    setActiveTool('path-select');
+  }
+
   /** Cross-page text edit, for the Translation Preview panel (search/replace, status, comments). */
   function handleUpdateTextLayerOnPage(pageId: string, id: string, patch: Partial<TextLayerData>) {
     updateLayersOnPage(pageId, current => updateLayer(current, id, l =>
@@ -918,6 +972,36 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   }
 
   const activeLayer = findLayer(layers, activeLayerId) ?? null;
+
+  /** Stroke/Fill Path's bake target — same "topmost existing raster layer" convention the
+   *  paint-tool raster-auto-create effect below already uses, so both features pick the same
+   *  layer a user would expect a paint-family action to land on. */
+  function topmostRasterLayer(): StudioLayer | null {
+    return [...layers].reverse().find(l => l.type === 'clean-patch') ?? null;
+  }
+
+  function bakeActivePath(bake: (ctx: CanvasRenderingContext2D, path: NonNullable<StudioLayer['path']>, selection: Selection) => void) {
+    const pathLayer = activeLayer?.type === 'path' ? activeLayer : null;
+    const target = topmostRasterLayer();
+    if (!pathLayer?.path || !target) return;
+    const canvas = canvasRef.current?.getPaintCanvas(target.id);
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    const before = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    bake(ctx, pathLayer.path, selection);
+    canvasRef.current?.redrawLayer(target.id);
+    handlePaintStrokeEnd(target.id, before);
+  }
+
+  const handleStrokeActivePath = () => bakeActivePath(strokePathOntoCanvas);
+  const handleFillActivePath = () => bakeActivePath(fillPathOntoCanvas);
+  const canBakePath = activeLayer?.type === 'path' && !!topmostRasterLayer();
+
+  function handleMakeSelectionFromPath() {
+    if (activeLayer?.type !== 'path' || !activeLayer.path) return;
+    setSelection(pathToSelection(activeLayer.path));
+  }
+
   /** The layer directly beneath the active one among its siblings — its clip base, if it can be one. */
   const layerBelowActive = (() => {
     if (!activeLayerId) return null;
@@ -1085,6 +1169,8 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
   const menus = buildMenus({
     onBack: onBack,
     onExport: () => setExportOpen(true),
+    onExportSlices: handleExportSlices,
+    hasSliceRects: sliceRects.length > 0,
     undo: history.undo,
     redo: history.redo,
     canUndo: history.canUndo,
@@ -1106,6 +1192,11 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
     isGroupActive: activeLayer?.type === 'group',
     toggleClipped: () => { if (activeLayerId) handleToggleClipped(activeLayerId); },
     canClip: !!activeLayer && !activeLayer.isBackground && canBeClipBase(layerBelowActive),
+    strokeActivePath: handleStrokeActivePath,
+    fillActivePath: handleFillActivePath,
+    canBakePath,
+    makeSelectionFromPath: handleMakeSelectionFromPath,
+    hasActivePathLayer: activeLayer?.type === 'path',
     isClipped: activeLayer?.clipped === true,
     toggleMask: () => {
       if (!activeLayerId) return;
@@ -1203,6 +1294,8 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
       onSelectLayers={selectLayers}
       onAddTextLayer={handleAddTextLayer}
       onUpdateTextLayer={handleUpdateTextLayer}
+      onUpdatePathLayer={handleUpdatePathLayer}
+      onAddPathLayer={handleAddPathLayer}
       onTextSelectionChange={setTextSelection}
       paintSettings={paintSettings}
       selection={selection}
@@ -1211,6 +1304,7 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
       onEyedropperPick={setForeground}
       onCommitCrop={handleCommitCrop}
       queuedBubbleRects={multiBubbleRects}
+      queuedSliceRects={sliceRects}
       transformingSelection={transformingSelection}
       onExitTransformSelection={() => setTransformingSelection(false)}
       quickMaskActive={quickMaskActive}
@@ -1279,6 +1373,9 @@ function StudioInner({ chapterId, chapterName, pages, onBack, pendingTyperScript
           onScatterChange={setScatter}
           smoothing={smoothing}
           onSmoothingChange={setSmoothing}
+          sliceRectCount={sliceRects.length}
+          onAddSliceRect={handleAddSliceRect}
+          onExportSlices={handleExportSlices}
         />
       )}
 

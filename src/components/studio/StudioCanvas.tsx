@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState, useCallback, forwardRef, useImperativeHandle, type ReactNode } from 'react';
 import { Image as ImageIcon } from 'lucide-react';
-import { Stage, Layer, Group, Image as KonvaImage, Rect, Ellipse, Line, Text as KonvaText, Transformer } from 'react-konva';
+import { Stage, Layer, Group, Image as KonvaImage, Rect, Ellipse, Line, Text as KonvaText, Transformer, Shape } from 'react-konva';
 import type Konva from 'konva';
 import type { Page, ProcessedImage } from '../../types';
-import { BLEND_TO_COMPOSITE, type StudioLayer, type TextLayerData, type LayerSelectMode } from './studioTypes';
+import { BLEND_TO_COMPOSITE, type StudioLayer, type TextLayerData, type PathLayerData, type PathAnchor, type LayerSelectMode } from './studioTypes';
 import { detectBubbleCenter } from './bubbleDetect';
 import { TextLayerNode, TEXT_HIT_NAME } from './TextLayerNode';
+import { PathLayerNode } from './PathLayerNode';
+import { traceAnchors, applyCurvatureSmoothing } from './pathGeometry';
+import { genId } from '../../lib/id';
 import {
   findLayer, findPath, getAtPath, getSiblings, flattenTree, mapTree, partitionAdjustments, groupClipRuns,
   type RenderNode, type ClipRun,
@@ -20,7 +23,8 @@ import {
   selectionContainsPoint, translateSelection, transformSelectionMask, selectionToAlphaCanvas, alphaMaskToSelection,
   type Selection, type SelectionCombineMode,
 } from './paint/selection';
-import { strokePenPath, type PaintSettings } from './paint/paintEngine';
+import { applyPatch, type PaintSettings } from './paint/paintEngine';
+import { snapSegmentToEdges } from './paint/magneticLasso';
 import { BrushCursor } from './paint/BrushCursor';
 import type { SerializedStudioLayer } from '../../lib/studioProjectStore';
 import { filterForAdjustment, withStrength } from '../../lib/adjustments';
@@ -45,11 +49,11 @@ const MAX_SCALE = 8;
 const GRID_SIZE = 100;
 const RULER_SIZE = 20;
 const RULER_STEP = 100;
-const MARQUEE_TOOLS = new Set(['marquee-rect', 'marquee-ellipse', 'marquee-row', 'marquee-col', 'crop']);
+const MARQUEE_TOOLS = new Set(['marquee-rect', 'marquee-ellipse', 'marquee-row', 'marquee-col', 'crop', 'slice']);
 const LASSO_TOOLS = new Set(['lasso-freehand']);
 /** Tools whose footprint is brush-sized, so they get the live outline cursor instead of the OS one. */
 const BRUSH_CURSOR_TOOLS = new Set([
-  'brush', 'pencil', 'eraser', 'clone', 'blur', 'sharpen', 'smudge',
+  'brush', 'pencil', 'eraser', 'clone', 'heal', 'blur', 'sharpen', 'smudge',
   'dodge', 'burn', 'sponge', 'spot-heal', 'liquify',
 ]);
 
@@ -75,6 +79,9 @@ interface StudioCanvasProps {
   /** boxWidth given => box text of that width (click-drag); omitted => point text (click). */
   onAddTextLayer: (x: number, y: number, boxWidth?: number) => void;
   onUpdateTextLayer: (id: string, patch: Partial<TextLayerData>) => void;
+  onUpdatePathLayer: (id: string, patch: Partial<PathLayerData>) => void;
+  /** Commits the Pen/Curvature Pen tool's in-progress anchors as a new persisted path layer. */
+  onAddPathLayer: (anchors: PathAnchor[], closed: boolean) => void;
   /**
    * The character range selected inside the text layer being edited, or null when nothing is being
    * edited. Lifted out of the canvas so TextPanel can apply character styling to the selection —
@@ -99,6 +106,8 @@ interface StudioCanvasProps {
   onCommitCrop?: () => void;
   /** TypeR Multi-Bubble mode's already-queued rects, drawn as a distinct overlay from the live selection. */
   queuedBubbleRects?: { x: number; y: number; width: number; height: number }[];
+  /** Slice tool's already-queued rects, drawn as a distinct overlay from the live selection. */
+  queuedSliceRects?: { x: number; y: number; width: number; height: number }[];
   /** Select > Transform Selection: shows a free-transform box around the selection's bounds instead
    *  of the normal marquee/paint tool dispatch. Enter commits (reshapes `selection`), Escape cancels. */
   transformingSelection?: boolean;
@@ -178,15 +187,19 @@ export interface StudioCanvasHandle {
 
 export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(function StudioCanvas({
   page, showCleaned, overlayOpacity, showGrid = false, showRulers = false, activeTool, fitSignal, layers,
-  activeLayerId, selectedLayerIds, onSelectLayer, onSelectLayers, onAddTextLayer, onUpdateTextLayer, onTextSelectionChange,
+  activeLayerId, selectedLayerIds, onSelectLayer, onSelectLayers, onAddTextLayer, onUpdateTextLayer, onUpdatePathLayer, onAddPathLayer, onTextSelectionChange,
   paintSettings, selection, onSelectionChange, onPaintStrokeEnd, onEyedropperPick, onCommitCrop,
-  queuedBubbleRects, transformingSelection = false, onExitTransformSelection, quickMaskActive = false,
+  queuedBubbleRects, queuedSliceRects, transformingSelection = false, onExitTransformSelection, quickMaskActive = false,
   activeMaskLayerId = null,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
   const textNodeRefs = useRef<Record<string, Konva.Group | null>>({});
+  /** Path layers keep their own ref map, separate from textNodeRefs — they deliberately don't
+   *  participate in the Transformer (Path Selection is a plain whole-path drag, no resize handles,
+   *  matching real Photoshop), so there's no shared-map generalization to keep in sync here. */
+  const pathNodeRefs = useRef<Record<string, Konva.Group | null>>({});
   /**
    * One Konva `Group` per StudioLayer. These used to be Konva `Layer`s — one canvas each — which
    * is why blend modes silently did nothing: `Container.drawScene` applies the composite op while
@@ -248,6 +261,20 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     dragStart: { x: number; y: number };
     lastOffset: { dx: number; dy: number };
   } | null>(null);
+  /**
+   * Patch tool: dragging from inside the active selection to elsewhere on the canvas. Unlike
+   * movingSelectionRef above, no pixel content is cut/redrawn during the drag — only the marquee
+   * slides live, matching Photoshop's own Patch UX (you see the outline slide over the "good" area
+   * while the defect's pixels stay untouched until release). The one-shot blend happens on pointerUp.
+   */
+  const patchDragRef = useRef<{
+    layerId: string;
+    originalSelection: Selection;
+    originBounds: { x: number; y: number; width: number; height: number };
+    dragStart: { x: number; y: number };
+    before: ImageData;
+    lastOffset: { dx: number; dy: number };
+  } | null>(null);
   const sampleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   /** Quick Mask's scratch paint buffer — alpha channel is the in-progress selection strength. */
   const quickMaskCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -263,7 +290,13 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const transformerRef2 = useRef<Konva.Transformer>(null);
   /** Pointer position in container/CSS px for the live brush outline; null when off-canvas. */
   const [brushCursorPos, setBrushCursorPos] = useState<{ x: number; y: number } | null>(null);
-  const [penPoints, setPenPoints] = useState<{ x: number; y: number }[]>([]);
+  /** Pen/Curvature Pen's in-progress path — real anchors with bezier handles, persisted as a
+   *  `path`-type layer on commit (Enter/dblclick/closing-click), never rasterized directly. */
+  const [penDraft, setPenDraft] = useState<PathAnchor[]>([]);
+  /** Set while a mousedown-to-placement gesture is live on the anchor just pushed to `penDraft` —
+   *  tracks the drag vector so pointerup/move can tell a plain click (corner) from a click-drag
+   *  (smooth, handles pulled out symmetrically along the drag). Cleared on pointerup. */
+  const penPlacingRef = useRef<{ index: number; start: { x: number; y: number } } | null>(null);
   const [lassoPolyPoints, setLassoPolyPoints] = useState<{ x: number; y: number }[]>([]);
   const [overlayImage, setOverlayImage] = useState<HTMLImageElement | null>(null);
 
@@ -650,18 +683,18 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   // Esc cancels an in-progress Pen path, polygonal lasso, or Transform Selection; Enter commits any of them (or a pending Crop).
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape' && penPoints.length > 0) setPenPoints([]);
+      if (e.key === 'Escape' && penDraft.length > 0) { setPenDraft([]); penPlacingRef.current = null; }
       if (e.key === 'Escape' && lassoPolyPoints.length > 0) setLassoPolyPoints([]);
       if (e.key === 'Escape' && transformingSelection) cancelTransformSelection();
-      if (e.key === 'Enter' && activeTool === 'pen' && penPoints.length > 1) commitPenPath();
-      if (e.key === 'Enter' && activeTool === 'lasso-polygon' && lassoPolyPoints.length > 2) commitLassoPolygon();
+      if (e.key === 'Enter' && (activeTool === 'pen' || activeTool === 'curvature-pen') && penDraft.length > 1) commitPenLayer(false);
+      if (e.key === 'Enter' && (activeTool === 'lasso-polygon' || activeTool === 'lasso-magnetic') && lassoPolyPoints.length > 2) commitLassoPolygon();
       if (e.key === 'Enter' && activeTool === 'crop') onCommitCrop?.();
       if (e.key === 'Enter' && transformingSelection) commitTransformSelection();
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [penPoints, lassoPolyPoints, activeTool, onCommitCrop, transformingSelection, transformBox]);
+  }, [penDraft, lassoPolyPoints, activeTool, onCommitCrop, transformingSelection, transformBox]);
 
   // Eyedropper samples from a hidden replica of the background image (approximation — doesn't include raster layers yet).
   useEffect(() => {
@@ -939,21 +972,21 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       return;
     }
 
-    if (activeTool === 'pen') {
-      const stage = stageRef.current;
-      const pointer = stage?.getPointerPosition();
-      if (!stage || !pointer) return;
-      setPenPoints(prev => [...prev, { x: (pointer.x - pos.x) / scale, y: (pointer.y - pos.y) / scale }]);
-      return;
-    }
-
-    if (activeTool === 'lasso-polygon') {
+    if (activeTool === 'lasso-polygon' || activeTool === 'lasso-magnetic') {
       const p = imageSpacePointer();
       if (!p) return;
       setLassoPolyPoints(prev => {
         if (prev.length === 0) {
           combineBaseRef.current = selection;
           combineModeRef.current = combineModeFromModifiers(e.evt.shiftKey, e.evt.altKey);
+          return [p];
+        }
+        // Magnetic Lasso: snap this new segment onto nearby strong edges (Dijkstra over a Sobel
+        // gradient-magnitude cost field, see magneticLasso.ts) instead of taking the raw click point.
+        if (activeTool === 'lasso-magnetic' && sampleCanvasRef.current) {
+          const last = prev[prev.length - 1];
+          const snapped = snapSegmentToEdges(sampleCanvasRef.current, last, p);
+          return [...prev, ...snapped];
         }
         return [...prev, p];
       });
@@ -1056,6 +1089,42 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       objectMarqueeRef.current = { x: p.x, y: p.y, additive: e.evt.shiftKey };
       return;
     }
+    if (activeTool === 'patch') {
+      const layerId = paintLayerIdRef.current;
+      const paintCanvas = layerId ? getActivePaintCanvas() : null;
+      if (!paintCanvas || !layerId || !hasSelection(selection)) return;
+      const p = imageSpacePointer();
+      if (!p || !selectionContainsPoint(selection, p.x, p.y)) return;
+      const ctx = paintCanvas.getContext('2d')!;
+      const before = ctx.getImageData(0, 0, paintCanvas.width, paintCanvas.height);
+      const { bounds } = rasterizeSelectionMask(selection, paintCanvas.width, paintCanvas.height);
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+      patchDragRef.current = { layerId, originalSelection: selection, originBounds: bounds, dragStart: p, before, lastOffset: { dx: 0, dy: 0 } };
+      return;
+    }
+    if (activeTool === 'pen' || activeTool === 'curvature-pen') {
+      const p = imageSpacePointer();
+      if (!p) return;
+      // Clicking back on the first anchor (once there's enough to make a real shape) closes the
+      // path instead of adding a new one — the same gesture Photoshop uses to finish a closed path.
+      if (penDraft.length >= 3) {
+        const first = penDraft[0].point;
+        if (Math.hypot(p.x - first.x, p.y - first.y) <= 8 / scale) {
+          commitPenLayer(true);
+          return;
+        }
+      }
+      const newAnchor: PathAnchor = { id: genId('anchor'), point: p, type: 'corner' };
+      const placedAt = penDraft.length;
+      setPenDraft(prev => {
+        const next = [...prev, newAnchor];
+        return activeTool === 'curvature-pen' ? applyCurvatureSmoothing(next) : next;
+      });
+      // Curvature Pen doesn't use the click-drag handle gesture below (its smoothness comes from
+      // applyCurvatureSmoothing instead, computed from neighboring anchors, not a drag vector).
+      if (activeTool === 'pen') penPlacingRef.current = { index: placedAt, start: p };
+      return;
+    }
     if (activeTool === 'text') {
       const p = imageSpacePointer();
       if (p) textDragRef.current = p;
@@ -1145,6 +1214,32 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     if (panRef.current?.active) return;
     if (e.evt.pointerType === 'touch' && touchCount >= 2) return;
     if (transformingSelection) return;
+    if (penPlacingRef.current) {
+      const p = imageSpacePointer();
+      const { index, start } = penPlacingRef.current;
+      if (!p) return;
+      const dx = p.x - start.x;
+      const dy = p.y - start.y;
+      // Below the drag dead-zone this still reads as a plain click (corner anchor, no handles) —
+      // matching Photoshop's own click-vs-click-drag pen gesture.
+      if (Math.hypot(dx, dy) <= 3 / scale) return;
+      setPenDraft(prev => prev.map((a, i) => i === index
+        ? { ...a, type: 'smooth', handleOut: { x: dx, y: dy }, handleIn: { x: -dx, y: -dy } }
+        : a));
+      return;
+    }
+    if (patchDragRef.current) {
+      const p = imageSpacePointer();
+      const m = patchDragRef.current;
+      if (!p || !image) return;
+      const dx = Math.round(p.x - m.dragStart.x);
+      const dy = Math.round(p.y - m.dragStart.y);
+      if (dx === m.lastOffset.dx && dy === m.lastOffset.dy) return;
+      m.lastOffset = { dx, dy };
+      // Only the marquee slides live — no pixel redraw here, unlike movingSelectionRef's cut-preview.
+      onSelectionChange(translateSelection(m.originalSelection, dx, dy, image.width, image.height));
+      return;
+    }
     if (movingSelectionRef.current) {
       const p = imageSpacePointer();
       const m = movingSelectionRef.current;
@@ -1224,6 +1319,25 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     if (e.evt.pointerType === 'touch' && touchCount >= 2) return;
     if (panRef.current?.active) { panRef.current = null; return; }
     if (transformingSelection) return;
+    if (penPlacingRef.current) {
+      // The anchor was already committed into penDraft on pointerdown and kept up to date live on
+      // pointermove — pointerup just ends the placement gesture, nothing left to commit here.
+      penPlacingRef.current = null;
+      return;
+    }
+    if (patchDragRef.current) {
+      const m = patchDragRef.current;
+      patchDragRef.current = null;
+      onSelectionChange(m.originalSelection); // marquee always returns to its pre-drag spot, Photoshop-style
+      if (m.lastOffset.dx === 0 && m.lastOffset.dy === 0) return; // click with no drag: no-op
+      const canvas = getActivePaintCanvas();
+      const ctx = canvas?.getContext('2d');
+      if (!canvas || !ctx) return;
+      applyPatch(ctx, m.originBounds, m.lastOffset.dx, m.lastOffset.dy);
+      redrawLayerNode(m.layerId);
+      onPaintStrokeEnd(m.layerId, m.before);
+      return;
+    }
     if (movingSelectionRef.current) {
       const m = movingSelectionRef.current;
       movingSelectionRef.current = null;
@@ -1298,18 +1412,11 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     restoreAncestorCaches();
   };
 
-  const commitPenPath = () => {
-    if (penPoints.length < 2) { setPenPoints([]); return; }
-    const canvas = getActivePaintCanvas();
-    const ctx = canvas?.getContext('2d');
-    const layerId = paintLayerIdRef.current;
-    if (canvas && ctx && layerId) {
-      const before = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      strokePenPath(ctx, penPoints, true, { fillColor: null, strokeColor: paintSettings.color, strokeWidth: Math.max(2, paintSettings.size / 6) }, selection);
-      redrawLayerNode(layerId);
-      onPaintStrokeEnd(layerId, before);
-    }
-    setPenPoints([]);
+  const commitPenLayer = (closed: boolean) => {
+    if (penDraft.length < 2) { setPenDraft([]); penPlacingRef.current = null; return; }
+    onAddPathLayer(penDraft, closed);
+    setPenDraft([]);
+    penPlacingRef.current = null;
   };
 
   const commitLassoPolygon = () => {
@@ -1321,8 +1428,21 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   };
 
   const handleStageDblClick = () => {
-    if (activeTool === 'pen') commitPenPath();
-    if (activeTool === 'lasso-polygon') commitLassoPolygon();
+    if (activeTool === 'pen' || activeTool === 'curvature-pen') {
+      // Konva synthesizes 'dblclick' from any two 'click' events within its own timing window,
+      // regardless of where they landed on the stage — and each click already placed its own
+      // anchor via pointerdown/up, independent of this handler. Two ordinary clicks placing two
+      // *different* anchors in quick succession (a real, not-even-that-fast usage pattern) can
+      // therefore misfire this as a "finish" signal. Only treat it as a real double-click-to-finish
+      // if the last two placed anchors are actually at (near) the same spot — what an actual
+      // double-click always is — otherwise leave the path open for more anchors/Enter/closing-click.
+      const n = penDraft.length;
+      const last = penDraft[n - 1];
+      const prev = penDraft[n - 2];
+      const sameSpot = !prev || !last || Math.hypot(last.point.x - prev.point.x, last.point.y - prev.point.y) <= 3 / scale;
+      if (sameSpot) commitPenLayer(false);
+    }
+    if (activeTool === 'lasso-polygon' || activeTool === 'lasso-magnetic') commitLassoPolygon();
     if (activeTool === 'crop') onCommitCrop?.();
   };
 
@@ -1608,6 +1728,18 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
           />
         )}
 
+        {layer.type === 'path' && layer.path && (
+          <PathLayerNode
+            layer={layer}
+            groupRef={(node) => { pathNodeRefs.current[layer.id] = node; }}
+            selected={selectionIds.includes(layer.id)}
+            draggable={activeTool === 'path-select' && !layer.locked}
+            directSelect={activeTool === 'direct-select' && !layer.locked}
+            onSelect={(mode) => onSelectLayer(layer.id, mode)}
+            onUpdate={(patch) => onUpdatePathLayer(layer.id, patch)}
+          />
+        )}
+
       </Group>
     );
   }
@@ -1715,11 +1847,47 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
               <Rect key={i} x={rect.x} y={rect.y} width={rect.width} height={rect.height}
                 stroke="#f59e0b" strokeWidth={1.5 / scale} dash={[4 / scale, 3 / scale]} />
             ))}
-            {penPoints.length > 0 && (
+            {queuedSliceRects?.map((rect, i) => (
+              <Rect key={i} x={rect.x} y={rect.y} width={rect.width} height={rect.height}
+                stroke="#22d3ee" strokeWidth={1.5 / scale} dash={[4 / scale, 3 / scale]} />
+            ))}
+            {penDraft.length > 0 && (
               <>
-                <Line points={penPoints.flatMap(p => [p.x, p.y])} stroke={paintSettings.color} strokeWidth={2 / scale} />
-                {penPoints.map((p, i) => (
-                  <Rect key={i} x={p.x - 3 / scale} y={p.y - 3 / scale} width={6 / scale} height={6 / scale} fill={paintSettings.color} />
+                {/* Live curved preview — real bezier via traceAnchors, the same function the
+                    committed PathLayerNode and export/bake paths use, so what's shown while
+                    placing anchors is exactly what gets persisted, not an approximation. */}
+                <Shape
+                  sceneFunc={(ctx, shape) => {
+                    ctx.beginPath();
+                    traceAnchors(ctx, penDraft, false);
+                    ctx.fillStrokeShape(shape);
+                  }}
+                  stroke={paintSettings.color}
+                  strokeWidth={2 / scale}
+                  listening={false}
+                />
+                {penDraft.map((a, i) => (
+                  <Group key={a.id}>
+                    {(a.handleIn || a.handleOut) && (
+                      <Line
+                        points={[
+                          a.point.x + (a.handleIn?.x ?? 0), a.point.y + (a.handleIn?.y ?? 0),
+                          a.point.x + (a.handleOut?.x ?? 0), a.point.y + (a.handleOut?.y ?? 0),
+                        ]}
+                        stroke="#38bdf8" strokeWidth={1 / scale} listening={false}
+                      />
+                    )}
+                    {a.handleOut && (
+                      <Ellipse x={a.point.x + a.handleOut.x} y={a.point.y + a.handleOut.y} radiusX={3 / scale} radiusY={3 / scale} fill="#38bdf8" listening={false} />
+                    )}
+                    {a.handleIn && (
+                      <Ellipse x={a.point.x + a.handleIn.x} y={a.point.y + a.handleIn.y} radiusX={3 / scale} radiusY={3 / scale} fill="#38bdf8" listening={false} />
+                    )}
+                    <Rect
+                      x={a.point.x - 3 / scale} y={a.point.y - 3 / scale} width={6 / scale} height={6 / scale}
+                      fill={i === 0 ? '#ffffff' : paintSettings.color} stroke="#000000" strokeWidth={0.5 / scale} listening={false}
+                    />
+                  </Group>
                 ))}
               </>
             )}

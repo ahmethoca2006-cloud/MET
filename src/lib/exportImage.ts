@@ -1,4 +1,5 @@
 import { BLEND_TO_COMPOSITE, type TextLayerData } from '../components/studio/studioTypes';
+import { traceAnchors } from '../components/studio/pathGeometry';
 import { gradientVector } from '../components/studio/textGradient';
 import { layoutText, applyLetterSpacing } from '../components/studio/textLayout';
 import { runFontString } from '../components/studio/textRuns';
@@ -205,6 +206,13 @@ async function drawLeafContent(
     ctx.drawImage(img, 0, 0, width, height);
   } else if (layer.type === 'text' && layer.text && layer.text.content) {
     drawTextLayer(ctx, layer.text);
+  } else if (layer.type === 'path' && layer.path) {
+    // Flattened export has no vector concept regardless of format, so rasterizing here at export
+    // resolution is simply correct — the same reasoning text glyphs already get.
+    ctx.beginPath();
+    traceAnchors(ctx, layer.path.anchors, layer.path.closed);
+    if (layer.path.fill.enabled) { ctx.fillStyle = layer.path.fill.color; ctx.fill(layer.path.fillRule === 'evenodd' ? 'evenodd' : 'nonzero'); }
+    if (layer.path.stroke.enabled) { ctx.strokeStyle = layer.path.stroke.color; ctx.lineWidth = layer.path.stroke.width; ctx.stroke(); }
   }
 }
 
@@ -255,17 +263,18 @@ async function compositeLeaf(
   ctx.restore();
 }
 
-/** Flattens a Studio export snapshot (background + visible layers, respecting opacity/blend
- *  mode/visibility) into a single raster image blob. JPG has no alpha channel, so it flattens
- *  onto white first, matching standard export conventions. */
-export async function compositeFlattenedImage(snapshot: ExportSnapshot, format: ImageExportFormat): Promise<Blob> {
+/** Builds the flattened page canvas a Studio export snapshot represents (background + visible
+ *  layers, respecting opacity/blend mode/visibility). Shared by whole-page export and Slice export
+ *  (`compositeFlattenedSlice`), which crops this same render N times instead of re-flattening per
+ *  slice. `forJpg` pre-fills white since JPG has no alpha channel. */
+async function renderFlattenedCanvas(snapshot: ExportSnapshot, forJpg: boolean): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas');
   canvas.width = snapshot.width;
   canvas.height = snapshot.height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
 
-  if (format === 'jpg') {
+  if (forJpg) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
@@ -274,11 +283,35 @@ export async function compositeFlattenedImage(snapshot: ExportSnapshot, format: 
   // adjustment above it has to be able to enclose and filter it, same as on the canvas.
   const background = await loadImage(snapshot.backgroundDataUrl);
   await compositeLayers(ctx, snapshot.layers, canvas.width, canvas.height, background);
+  return canvas;
+}
 
+/** Flattens a Studio export snapshot into a single raster image blob. */
+export async function compositeFlattenedImage(snapshot: ExportSnapshot, format: ImageExportFormat): Promise<Blob> {
+  const canvas = await renderFlattenedCanvas(snapshot, format === 'jpg');
   const mime = format === 'png' ? 'image/png' : format === 'webp' ? 'image/webp' : 'image/jpeg';
   const quality = format === 'jpg' ? 0.92 : undefined;
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Failed to encode exported image'))), mime, quality);
+  });
+}
+
+/** Renders the whole flattened page once (for the Slice tool's export, so N queued rects don't each
+ *  trigger a full re-flatten) — call once, then pass the result to `compositeFlattenedSlice` per rect. */
+export async function renderFlattenedPage(snapshot: ExportSnapshot): Promise<HTMLCanvasElement> {
+  return renderFlattenedCanvas(snapshot, false);
+}
+
+/** Crops a pre-rendered flattened page (from `renderFlattenedPage`) to `rect` and encodes it as a PNG. */
+export async function compositeFlattenedSlice(fullCanvas: HTMLCanvasElement, rect: { x: number; y: number; width: number; height: number }): Promise<Blob> {
+  const cropped = document.createElement('canvas');
+  cropped.width = Math.max(1, Math.round(rect.width));
+  cropped.height = Math.max(1, Math.round(rect.height));
+  const ctx = cropped.getContext('2d');
+  if (!ctx) throw new Error('Canvas 2D context unavailable');
+  ctx.drawImage(fullCanvas, rect.x, rect.y, rect.width, rect.height, 0, 0, cropped.width, cropped.height);
+  return new Promise((resolve, reject) => {
+    cropped.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Failed to encode slice'))), 'image/png');
   });
 }
 

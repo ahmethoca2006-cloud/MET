@@ -216,6 +216,37 @@ async function buildPsdLayer(layer: SerializedStudioLayer, width: number, height
     if (t.gradient?.enabled) {
       base.effects = { gradientOverlay: [buildGradientOverlay(t.gradient)] };
     }
+  } else if (layer.type === 'path' && layer.path) {
+    // Real vector path support, not a rasterize fallback — ag-psd's BezierKnot format was
+    // confirmed with an actual writePsd/readPsd round-trip during implementation: each knot's
+    // `points` is [inHandleX, inHandleY, anchorX, anchorY, outHandleX, outHandleY] in absolute
+    // page-pixel coordinates (ag-psd normalizes by width/height internally on write/read).
+    const p = layer.path;
+    base.vectorMask = {
+      paths: [{
+        open: !p.closed,
+        fillRule: p.fillRule === 'evenodd' ? 'even-odd' : 'non-zero',
+        knots: p.anchors.map(a => ({
+          linked: a.type === 'smooth',
+          points: [
+            a.point.x + (a.handleIn?.x ?? 0), a.point.y + (a.handleIn?.y ?? 0),
+            a.point.x, a.point.y,
+            a.point.x + (a.handleOut?.x ?? 0), a.point.y + (a.handleOut?.y ?? 0),
+          ],
+        })),
+      }],
+    };
+    if (p.fill.enabled) {
+      base.vectorFill = { type: 'color', color: hexToRgb(p.fill.color) };
+    }
+    if (p.stroke.enabled) {
+      base.vectorStroke = {
+        strokeEnabled: true,
+        fillEnabled: false,
+        lineWidth: { units: 'Pixels', value: p.stroke.width },
+        content: { type: 'color', color: hexToRgb(p.stroke.color) },
+      };
+    }
   }
 
   return base;
