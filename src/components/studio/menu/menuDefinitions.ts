@@ -41,6 +41,11 @@ export interface MenuActions {
   /** False when the layer below can't be a clip base — only raster layers can, see `canBeClipBase`. */
   canClip: boolean;
   isClipped: boolean;
+  toggleMask: () => void;
+  /** False for adjustment layers — they have no paintable content to trim to a mask. Any other
+   *  non-background type (groups included) is fair game. */
+  canMask: boolean;
+  hasMask: boolean;
   addTextLayer: () => void;
   centerTextInBubble: () => void;
   increaseTextSize: () => void;
@@ -128,6 +133,12 @@ export function buildMenus(a: MenuActions): MenuDef[] {
         { id: 'sep1', label: '', separator: true },
         { id: 'group-layers', label: 'Group Layers', shortcut: 'Ctrl+G', action: a.groupLayers, disabled: !a.hasActiveLayer },
         { id: 'ungroup-layers', label: 'Ungroup Layers', shortcut: 'Ctrl+Shift+G', action: a.ungroupLayers, disabled: !a.isGroupActive },
+        {
+          id: 'layer-mask',
+          label: a.hasMask ? 'Delete Layer Mask' : 'Add Layer Mask',
+          action: a.toggleMask,
+          disabled: !a.canMask && !a.hasMask,
+        },
         {
           id: 'clip-layer',
           label: a.isClipped ? 'Release Clipping Mask' : 'Create Clipping Mask',

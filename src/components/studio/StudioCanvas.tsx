@@ -86,8 +86,13 @@ interface StudioCanvasProps {
   /** Active selection (marquee/lasso/wand); paint ops clip to this when present. */
   selection: Selection;
   onSelectionChange: (sel: Selection) => void;
-  /** Fired once per committed stroke/fill/etc. on a raster layer, with its pixels just before the op, for the history stack. */
-  onPaintStrokeEnd: (layerId: string, before: ImageData) => void;
+  /**
+   * Fired once per committed stroke/fill/etc., with its pixels just before the op, for the history
+   * stack. `maskId` is set when the stroke landed on a layer's mask rather than its own raster
+   * canvas — `layerId` is still the owning layer either way (masks have no Konva node of their own
+   * to redraw).
+   */
+  onPaintStrokeEnd: (layerId: string, before: ImageData, maskId?: string) => void;
   /** Fired when the Eyedropper samples a pixel from the background page image. */
   onEyedropperPick?: (hex: string) => void;
   /** Fired on Enter/double-click while the Crop tool is active, to commit the current rect selection as a crop. */
@@ -101,6 +106,9 @@ interface StudioCanvasProps {
   /** Quick Mask mode: every paint tool draws onto a scratch alpha buffer instead of the active
    *  layer, shown as a red rubylith tint over deselected areas. */
   quickMaskActive?: boolean;
+  /** The layer whose *mask* (not its own content) is the current paint target, or null when
+   *  painting normally. Set by clicking a mask's thumbnail in the Layers panel. */
+  activeMaskLayerId?: string | null;
 }
 
 export interface StudioCanvasHandle {
@@ -147,6 +155,25 @@ export interface StudioCanvasHandle {
   /** Reads the Quick Mask scratch buffer back into a Selection as mode is turned off; null if no
    *  mask buffer exists (Quick Mask was never entered, or no page is loaded). */
   commitQuickMask: () => Selection | null;
+  /** Returns a layer mask's own canvas, creating it (blank) if it has no backing yet — mirrors
+   *  `getPaintCanvas`, just keyed by mask id instead of layer id. */
+  getMaskCanvas: (maskId: string) => HTMLCanvasElement | null;
+  /** Frees a mask's canvas when the mask is removed or its owning layer is deleted. */
+  deleteMaskCanvas: (maskId: string) => void;
+  /** Clones mask pixels for every old→new id pair — shares the same `idMap` `clonePaintCanvases`
+   *  takes, since `cloneSubtree` interleaves layer and mask id remaps in one map. */
+  cloneMaskCanvases: (idMap: Map<string, string>) => void;
+  /** Snapshots every mask with a live canvas backing as PNG data URLs, keyed by mask id. */
+  exportMaskLayers: () => Record<string, string>;
+  /** Decodes a saved data URL back into a mask's canvas (for restoring persisted state). Takes the
+   *  owning layer's id too, purely to redraw its Konva node once the pixels land. */
+  loadMaskLayer: (layerId: string, maskId: string, dataUrl: string) => Promise<void>;
+  /**
+   * Seeds a newly-created mask's canvas: fully opaque (reveal everything) if there's no active
+   * selection, or the selection's own shape (`selectionToAlphaCanvas`) if there is — matching
+   * Photoshop's "Add Layer Mask" behavior of masking to the current selection when one exists.
+   */
+  createMask: (maskId: string) => void;
 }
 
 export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(function StudioCanvas({
@@ -154,6 +181,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   activeLayerId, selectedLayerIds, onSelectLayer, onSelectLayers, onAddTextLayer, onUpdateTextLayer, onTextSelectionChange,
   paintSettings, selection, onSelectionChange, onPaintStrokeEnd, onEyedropperPick, onCommitCrop,
   queuedBubbleRects, transformingSelection = false, onExitTransformSelection, quickMaskActive = false,
+  activeMaskLayerId = null,
 }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
@@ -172,6 +200,9 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     layerNodeRefs.current[layerId ?? '']?.getLayer()?.batchDraw();
   }, []);
   const paintCanvasRegistry = useRef<PaintCanvasRegistry>({});
+  /** A layer's mask and its own raster content are two separate registry entries, keyed by the
+   *  mask's own id — mirrors `paintCanvasRegistry` exactly (same generic functions, second ref). */
+  const maskCanvasRegistry = useRef<PaintCanvasRegistry>({});
   /** Per-layer pristine pre-liquify snapshot, for Liquify's Reconstruct mode — see usePaintLayer.ts. */
   const liquifySnapshots = useRef<Record<string, ImageData>>({}).current;
   const layersRef = useRef(layers);
@@ -265,6 +296,11 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   const paintLayerIdRef = useRef<string | null>(null);
   paintLayerIdRef.current = activeLayer?.type === 'clean-patch' ? activeLayer.id : null;
 
+  // The layer whose mask is being painted, and that mask's own registry id — derived from the
+  // current tree rather than passed as two separate props, so they can never disagree.
+  const editingMaskLayer = activeMaskLayerId ? findLayer(layers, activeMaskLayerId) : null;
+  const editingMaskId = editingMaskLayer?.mask?.id ?? null;
+
   // Quick Mask's red rubylith tint, regenerated from quickMaskCanvasRef after every paint change.
   // The `destination-out` trick punches the mask's own alpha out of a flat red rect natively, so no
   // per-pixel JS loop is needed even on a live per-pointermove redraw.
@@ -310,27 +346,62 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   }, [quickMaskActive, image]);
 
   const getActivePaintCanvas = useCallback(() => {
+    const img = imageRef.current;
+    // A layer mask being edited takes priority — it's a more specific target than Quick Mask or
+    // the active layer's own canvas, and the two shouldn't normally coincide anyway.
+    if (editingMaskId) return img ? getOrCreateCanvasFor(maskCanvasRegistry.current, editingMaskId, img.width, img.height) : null;
     if (quickMaskActive) return quickMaskCanvasRef.current;
     const layerId = paintLayerIdRef.current;
-    const img = imageRef.current;
     if (!layerId || !img) return null;
     return getOrCreateCanvasFor(paintCanvasRegistry.current, layerId, img.width, img.height);
-  }, [quickMaskActive]);
+  }, [editingMaskId, quickMaskActive]);
 
-  /** Redraws whatever the active tool is actually painting onto — the active layer normally, or
-   *  the Quick Mask buffer's tint while that mode is active. */
+  /**
+   * Sets (or clears) a layer's mask filter to match its current `mask` field, reading the mask
+   * canvas's pixels fresh each call — safe to call again after every stroke, unlike re-running
+   * `.cache()` (see `maskAlphaFilter`'s doc comment for why compositing the mask as a cached
+   * sibling image instead went stale on a live-edited mask).
+   */
+  const refreshMaskFilter = useCallback((layerId: string) => {
+    const layer = findLayer(layersRef.current, layerId);
+    // Adjustment wrappers reuse this same node ref (`adjustmentNodeRefs`/`layerNodeRefs` both point
+    // at it) and own their filter via the effect below — clearing it here would silently wipe the
+    // adjustment's own brightness/hue/levels filter. Adjustments have no paintable content to trim
+    // to a mask anyway, so this is a real exclusion, not just a guard against clobbering.
+    if (layer?.type === 'adjustment') return;
+    const node = layerNodeRefs.current[layerId];
+    const img = imageRef.current;
+    if (!node) return;
+    if (layer?.mask?.enabled && img) {
+      const canvas = getOrCreateCanvasFor(maskCanvasRegistry.current, layer.mask.id, img.width, img.height);
+      node.filters([maskAlphaFilter(canvas)]);
+    } else {
+      node.filters([]);
+    }
+  }, []);
+
+  /** Redraws whatever the active tool is actually painting onto — a layer's mask, the active layer
+   *  normally, or the Quick Mask buffer's tint while that mode is active. */
   const redrawActivePaintTarget = useCallback(() => {
+    if (editingMaskLayer) { refreshMaskFilter(editingMaskLayer.id); redrawLayerNode(editingMaskLayer.id); return; }
     if (quickMaskActive) { redrawQuickMaskOverlay(); return; }
     redrawLayerNode(paintLayerIdRef.current);
-  }, [quickMaskActive, redrawQuickMaskOverlay, redrawLayerNode]);
+  }, [editingMaskLayer, quickMaskActive, redrawQuickMaskOverlay, redrawLayerNode, refreshMaskFilter]);
 
   const paint = usePaintLayer({
     getCanvas: getActivePaintCanvas,
     settings: paintSettings,
-    // Quick Mask must be paintable everywhere, not clipped to the selection it's redefining.
+    // Quick Mask must be paintable everywhere, not clipped to the selection it's redefining. A
+    // layer mask being edited *does* respect the active selection, like any other paint target.
     selection: quickMaskActive ? NO_SELECTION : selection,
     onSelectionChange,
     onStrokeEnd: (before) => {
+      if (editingMaskLayer && editingMaskId) {
+        refreshMaskFilter(editingMaskLayer.id);
+        redrawLayerNode(editingMaskLayer.id);
+        onPaintStrokeEnd(editingMaskLayer.id, before, editingMaskId);
+        return;
+      }
       if (quickMaskActive) { redrawQuickMaskOverlay(); return; }
       const layerId = paintLayerIdRef.current;
       redrawLayerNode(layerId ?? '');
@@ -501,7 +572,58 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       quickMaskCanvasRef.current = null;
       return canvas ? alphaMaskToSelection(canvas) : null;
     },
-  }), [onUpdateTextLayer, scale, pos, containerSize, page]);
+    getMaskCanvas(maskId: string) {
+      const img = imageRef.current;
+      if (!img) return null;
+      return getOrCreateCanvasFor(maskCanvasRegistry.current, maskId, img.width, img.height);
+    },
+    deleteMaskCanvas(maskId: string) {
+      deleteCanvasFor(maskCanvasRegistry.current, maskId);
+    },
+    cloneMaskCanvases(idMap: Map<string, string>) {
+      for (const [fromId, toId] of idMap) clonePaintCanvas(maskCanvasRegistry.current, fromId, toId);
+    },
+    exportMaskLayers() {
+      const out: Record<string, string> = {};
+      for (const [maskId, canvas] of Object.entries(maskCanvasRegistry.current)) {
+        if (canvas) out[maskId] = canvas.toDataURL('image/png');
+      }
+      return out;
+    },
+    async loadMaskLayer(layerId: string, maskId: string, dataUrl: string) {
+      const img = imageRef.current ?? await waitForImage(imageRef);
+      if (!img) return;
+      const source = new window.Image();
+      await new Promise<void>((resolve, reject) => {
+        source.onload = () => resolve();
+        source.onerror = () => reject(new Error(`Failed to decode mask ${maskId}`));
+        source.src = dataUrl;
+      });
+      const canvas = getOrCreateCanvasFor(maskCanvasRegistry.current, maskId, img.width, img.height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+      redrawLayerNode(layerId);
+    },
+    createMask(maskId: string) {
+      const img = imageRef.current;
+      if (!img) return;
+      let canvas: HTMLCanvasElement;
+      if (hasSelection(selection)) {
+        canvas = selectionToAlphaCanvas(selection, img.width, img.height);
+      } else {
+        // No selection: reveal everything, matching Photoshop's default "Add Layer Mask".
+        canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      maskCanvasRegistry.current[maskId] = canvas;
+    },
+  }), [onUpdateTextLayer, scale, pos, containerSize, page, selection]);
 
   const activeSource = showCleaned && page?.cleaned ? page.cleaned : page?.original ?? null;
   // Only meaningful when the cleaned page is the base — overlaying the original above itself is a no-op.
@@ -658,7 +780,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
   // subtree, so calling it per slider frame would turn a blit into a full page render.
   const groupStructureKey = useMemo(
     () => flattenTree(layers)
-      .map(l => `${l.id}:${l.type}:${l.visible}:${l.opacity}:${l.blendMode}:${l.clipped ?? false}:${l.children?.length ?? 0}`)
+      .map(l => `${l.id}:${l.type}:${l.visible}:${l.opacity}:${l.blendMode}:${l.clipped ?? false}:${l.children?.length ?? 0}:${l.mask?.id ?? ''}:${l.mask?.enabled ?? false}`)
       .join('|'),
     [layers],
   );
@@ -673,9 +795,14 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       // A clip run must be cached too, and that one is a correctness requirement rather than a
       // fidelity one: its trailing `destination-in` pass would otherwise composite against the
       // shared stage canvas and erase every layer already drawn beneath it — the whole page.
+      //
+      // A layer with an enabled mask needs the identical reasoning: its mask filter (below) only
+      // has something to read once the layer is cached — `renderLeaf`'s own content would otherwise
+      // draw straight onto the shared canvas with nothing to trim it.
       const isolate = needsIsolation(layer)
         || (layer.type === 'adjustment' && layer.visible)
-        || hasClippedFollowers(layer.id);
+        || hasClippedFollowers(layer.id)
+        || layer.mask?.enabled === true;
       if (isolate) {
         // pixelRatio 1 = page-space pixels. The stage scale is a transform above the cache, so
         // caching at devicePixelRatio would make cost (and memory) scale with zoom for no gain.
@@ -683,9 +810,14 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
       } else if (node.isCached()) {
         node.clearCache();
       }
+      // Set in the same pass as the cache decision above, not a separate effect: `.filters()` only
+      // does anything once a node is cached, so the two have to land in the same commit — two
+      // effects each calling their own `batchDraw()` risks the browser painting a frame where one
+      // updated and the other hasn't yet.
+      refreshMaskFilter(layer.id);
     }
     stageRef.current?.batchDraw();
-  }, [groupStructureKey, image, needsIsolation]);
+  }, [groupStructureKey, image, needsIsolation, refreshMaskFilter]);
 
   /**
    * A cached ancestor holds a stale snapshot of its subtree, so a brush stroke on a layer inside an
@@ -693,6 +825,12 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
    * is a full page redraw per pointermove. Instead, drop those caches for the duration of the
    * stroke and restore them on commit. The group is transiently un-isolated while drawing, which is
    * what Photoshop does on a heavy file too.
+   *
+   * Includes the paint target's *own* cache too, not just its ancestors': an ordinary clean-patch
+   * layer never caches itself, so "ancestors only" used to be exactly every cache that could go
+   * stale. A layer with an enabled mask breaks that assumption — masking makes the leaf isolate
+   * (cache) itself, so painting its mask now has the identical stale-snapshot problem one level
+   * lower, on the target rather than an ancestor.
    */
   const suspendedCachesRef = useRef<string[]>([]);
 
@@ -701,7 +839,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     const path = findPath(layersRef.current, layerId);
     if (!path) return;
     const ids: string[] = [];
-    for (let i = 1; i < path.length; i += 1) {
+    for (let i = 1; i <= path.length; i += 1) {
       const ancestor = getAtPath(layersRef.current, path.slice(0, i));
       const node = ancestor ? layerNodeRefs.current[ancestor.id] : null;
       if (ancestor && node?.isCached()) { node.clearCache(); ids.push(ancestor.id); }
@@ -969,8 +1107,13 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     // meaningful pressure data, so only let pen input affect brush size.
     const pressure = e.evt.pointerType === 'pen' ? e.evt.pressure || 0.5 : 1;
     // Drop any cached ancestor group for the duration of the stroke, or its stale snapshot hides
-    // every segment until commit and the brush reads as broken.
-    suspendAncestorCaches(paintLayerIdRef.current);
+    // every segment until commit and the brush reads as broken. Painting a *mask* deliberately
+    // doesn't go through this at all: the mask's own cached scene (the layer's raster content) is
+    // untouched by a mask edit, only the filter reading it needs to refresh — clearing and
+    // re-establishing the scene cache around every mask stroke was pure overhead that (empirically)
+    // raced with the filter update rather than protecting anything.
+    if (editingMaskLayer) suspendedCachesRef.current = [];
+    else suspendAncestorCaches(paintLayerIdRef.current);
     paint.pointerDown(activeTool as Parameters<typeof paint.pointerDown>[0], p.x, p.y, e.evt.altKey, pressure);
   };
   // Window-level mousemove/mouseup for middle-mouse/space-drag panning, so the drag keeps
@@ -1461,6 +1604,7 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
             onUpdate={(patch) => onUpdateTextLayer(layer.id, patch)}
           />
         )}
+
       </Group>
     );
   }
@@ -1730,6 +1874,29 @@ function loadImageFromSrc(src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error('Failed to decode image'));
     img.src = src;
   });
+}
+
+/**
+ * A layer-mask trim, applied as a Konva filter rather than a `destination-in` sibling `KonvaImage`
+ * inside the cached group. Konva's `filters()` reruns just `getImageData -> filter -> putImageData`
+ * over the *already-cached* scene canvas (see the adjustment-filter effect above for the same
+ * mechanism, proven live) — cheap, and safe to call again after every mask stroke. Compositing the
+ * mask as a sibling image instead (drawn once, at `.cache()` time) turned out to go stale after a
+ * live-edited mask was re-cached, because Konva's shape-level buffer-canvas draw path re-applies a
+ * shape's own composite operation relative to whichever node is being cached — correct for a single
+ * cache pass, but not something to re-derive per keystroke. A filter avoids the whole question: it
+ * reads the mask canvas's current pixels fresh on every invocation.
+ */
+function maskAlphaFilter(maskCanvas: HTMLCanvasElement) {
+  return function (this: Konva.Node, imageData: ImageData) {
+    const maskCtx = maskCanvas.getContext('2d');
+    if (!maskCtx) return;
+    const maskData = maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height).data;
+    const data = imageData.data;
+    for (let i = 3; i < data.length; i += 4) {
+      data[i] = (data[i] * maskData[i]) / 255;
+    }
+  };
 }
 
 function waitForImage(imageRef: { current: HTMLImageElement | null }, timeoutMs = 3000): Promise<HTMLImageElement | null> {

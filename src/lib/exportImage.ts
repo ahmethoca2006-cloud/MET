@@ -180,24 +180,15 @@ async function compositeClipRun(
   ctx.restore();
 }
 
-async function compositeLeaf(
+/** Draws a leaf's own content (background image / nested group / raster / text) with no opacity,
+ *  blend, or mask applied — `compositeLeaf` decides how the result gets composited. */
+async function drawLeafContent(
   ctx: CanvasRenderingContext2D,
   layer: SerializedStudioLayer,
   width: number,
   height: number,
   background?: HTMLImageElement,
 ): Promise<void> {
-  if (!layer.visible) return;
-
-  if (layer.type === 'group' && !isolatesGroup(layer)) {
-    await compositeLayers(ctx, layer.children ?? [], width, height, background);
-    return;
-  }
-
-  ctx.save();
-  ctx.globalAlpha = layer.opacity;
-  ctx.globalCompositeOperation = BLEND_TO_COMPOSITE[layer.blendMode];
-
   if (layer.type === 'background') {
     if (background) ctx.drawImage(background, 0, 0, width, height);
   } else if (layer.type === 'group') {
@@ -215,7 +206,52 @@ async function compositeLeaf(
   } else if (layer.type === 'text' && layer.text && layer.text.content) {
     drawTextLayer(ctx, layer.text);
   }
+}
 
+async function compositeLeaf(
+  ctx: CanvasRenderingContext2D,
+  layer: SerializedStudioLayer,
+  width: number,
+  height: number,
+  background?: HTMLImageElement,
+): Promise<void> {
+  if (!layer.visible) return;
+  // A disabled mask has no effect at all, matching PSD's own `disabled` flag and the live canvas.
+  const activeMaskRaster = layer.mask?.enabled ? layer.maskRaster : undefined;
+
+  if (layer.type === 'group' && !isolatesGroup(layer) && !activeMaskRaster) {
+    await compositeLayers(ctx, layer.children ?? [], width, height, background);
+    return;
+  }
+
+  if (activeMaskRaster) {
+    // Draw the leaf's own content into a scratch canvas, trim it to the mask's alpha, then blit
+    // the trimmed result through this layer's own opacity/blend — same reasoning as
+    // `compositeClipRun`: `destination-in` against the shared canvas would erase everything
+    // already painted below it, not just this layer. Any layer type may carry a mask, so this
+    // check sits above the type-specific branches rather than inside one of them.
+    const scratch = document.createElement('canvas');
+    scratch.width = width;
+    scratch.height = height;
+    const sctx = scratch.getContext('2d');
+    if (!sctx) return;
+    await drawLeafContent(sctx, layer, width, height, background);
+    const maskImg = await loadImage(activeMaskRaster);
+    sctx.globalCompositeOperation = 'destination-in';
+    sctx.drawImage(maskImg, 0, 0, width, height);
+
+    ctx.save();
+    ctx.globalAlpha = layer.opacity;
+    ctx.globalCompositeOperation = BLEND_TO_COMPOSITE[layer.blendMode];
+    ctx.drawImage(scratch, 0, 0);
+    ctx.restore();
+    return;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = layer.opacity;
+  ctx.globalCompositeOperation = BLEND_TO_COMPOSITE[layer.blendMode];
+  await drawLeafContent(ctx, layer, width, height, background);
   ctx.restore();
 }
 
