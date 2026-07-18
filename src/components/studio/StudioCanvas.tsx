@@ -568,7 +568,10 @@ export const StudioCanvas = forwardRef<StudioCanvasHandle, StudioCanvasProps>(fu
     const padding = 32;
     const scaleX = (containerSize.width - padding * 2) / image.width;
     const scaleY = (containerSize.height - padding * 2) / image.height;
-    const next = Math.min(scaleX, scaleY, 1.5);
+    // A container briefly shorter/narrower than the padding (a transient layout state during a
+    // panel/dock animation, say) makes scaleX/scaleY negative — clamp so a bad measurement can
+    // never jump the view to a nonsensical or negative zoom.
+    const next = clampScale(Math.min(scaleX, scaleY, 1.5));
     setScale(next);
     setPos({
       x: (containerSize.width - image.width * next) / 2,
