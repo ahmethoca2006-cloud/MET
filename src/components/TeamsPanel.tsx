@@ -374,7 +374,11 @@ function DashboardSection({ team, myMember, canManage, members, onChanged }: { t
         </GlassCard>
       )}
 
+      <TeamStatsCard team={team} members={members} />
+
       <TopPerformersCard team={team} members={members} />
+
+      <TeamActivityFeed team={team} />
 
       {!myMember && !canManage && (
         <GlassCard className="p-8 text-center md:col-span-2">
@@ -432,6 +436,86 @@ function TopPerformersCard({ team, members }: { team: Team; members: TeamMember[
                 </div>
               ))}
             </div>
+          </div>
+        ))}
+      </div>
+    </GlassCard>
+  );
+}
+
+function TeamStatsCard({ team, members }: { team: Team; members: TeamMember[] }) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    listTeamTasks(team.id).then(setTasks);
+    listTransactions(team.id).then(setTransactions);
+  }, [team.id]);
+
+  const doneTasks = tasks.filter(t => t.status === 'done');
+  const completedThisWeek = doneTasks.filter(t => t.completed_at && Date.now() - new Date(t.completed_at).getTime() < 7 * 24 * 60 * 60 * 1000).length;
+  const durations = doneTasks
+    .filter(t => t.completed_at)
+    .map(t => new Date(t.completed_at as string).getTime() - new Date(t.created_at).getTime())
+    .filter(ms => ms > 0);
+  const avgTurnaroundHrs = durations.length ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length / 3_600_000) : null;
+  const totalPaidOut = transactions.filter(t => t.amount > 0 && t.sender_id !== t.receiver_id).reduce((sum, t) => sum + t.amount, 0);
+  const streakLeader = [...members].filter(m => m.status === 'active').sort((a, b) => b.streak_count - a.streak_count)[0];
+
+  return (
+    <GlassCard className="p-6">
+      <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-1.5"><BarChart3 size={14} className="text-accent" /> Team stats</h3>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div><p className="text-ink-faint text-xs">Tasks done (7d)</p><p className="font-bold text-ink">{completedThisWeek}</p></div>
+        <div><p className="text-ink-faint text-xs">Avg turnaround</p><p className="font-bold text-ink">{avgTurnaroundHrs != null ? `${avgTurnaroundHrs}h` : '—'}</p></div>
+        <div><p className="text-ink-faint text-xs">Paid out (all-time)</p><p className="font-bold text-ink">${totalPaidOut.toFixed(2)}</p></div>
+        <div>
+          <p className="text-ink-faint text-xs">Longest streak</p>
+          <p className="font-bold text-ink truncate flex items-center gap-1">
+            {streakLeader ? <><Flame size={12} className="text-accent shrink-0" /> {streakLeader.profile?.name || streakLeader.invited_email} ({streakLeader.streak_count}d)</> : '—'}
+          </p>
+        </div>
+      </div>
+    </GlassCard>
+  );
+}
+
+function TeamActivityFeed({ team }: { team: Team }) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  useEffect(() => {
+    listTeamTasks(team.id).then(setTasks);
+    listTransactions(team.id).then(setTransactions);
+  }, [team.id]);
+
+  type Event = { id: string; at: string; icon: React.ReactNode; text: string };
+  const events: Event[] = [
+    ...tasks.filter(t => t.completed_at).map(t => ({
+      id: `task-${t.id}`,
+      at: t.completed_at as string,
+      icon: <ListTodo size={13} className="text-success" />,
+      text: `"${t.title}" was marked done${t.assignee?.name ? ` by ${t.assignee.name}` : ''}`,
+    })),
+    ...transactions.slice(0, 20).map(t => ({
+      id: `tx-${t.id}`,
+      at: t.created_at,
+      icon: <Wallet size={13} className="text-accent" />,
+      text: `${t.receiver?.name || 'A member'} ${t.amount >= 0 ? 'received' : 'was charged'} $${Math.abs(t.amount).toFixed(2)}${t.details ? ` — ${t.details}` : ''}`,
+    })),
+  ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()).slice(0, 8);
+
+  if (events.length === 0) return null;
+
+  return (
+    <GlassCard className="p-6 md:col-span-2">
+      <h3 className="text-sm font-semibold text-ink mb-3 flex items-center gap-1.5"><CalendarClock size={14} className="text-accent" /> Recent activity</h3>
+      <div className="space-y-2.5">
+        {events.map(e => (
+          <div key={e.id} className="flex items-start gap-2 text-xs">
+            <span className="mt-0.5 shrink-0">{e.icon}</span>
+            <span className="text-ink-muted flex-1">{e.text}</span>
+            <span className="text-ink-faint shrink-0 text-[10px]">{new Date(e.at).toLocaleDateString()}</span>
           </div>
         ))}
       </div>
@@ -2790,14 +2874,14 @@ function TeamChatThread({ team, members, myMember, canManage, onOpenProfile, cc 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [typingLabel, setTypingLabel] = useState('');
+  const [typingUsers, setTypingUsers] = useState<Record<string, string>>({});
   const [attaching, setAttaching] = useState(false);
   const [showJumpToEnd, setShowJumpToEnd] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const nearBottomRef = useRef(true);
   const typingRef = useRef<ReturnType<typeof subscribeToTyping> | null>(null);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingTimeoutsRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { session } = useTeamAuth();
@@ -2813,9 +2897,11 @@ function TeamChatThread({ team, members, myMember, canManage, onOpenProfile, cc 
     const unsubReactions = subscribeToReactions(team.id, () => listReactions(team.id, 'team_messages').then(setReactions));
     typingRef.current = subscribeToTyping(team.id, (userId, name) => {
       if (userId === myUserId) return;
-      setTypingLabel(`${name} is typing`);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => setTypingLabel(''), 3000);
+      setTypingUsers(prev => ({ ...prev, [userId]: name }));
+      if (typingTimeoutsRef.current[userId]) clearTimeout(typingTimeoutsRef.current[userId]);
+      typingTimeoutsRef.current[userId] = setTimeout(() => {
+        setTypingUsers(prev => { const next = { ...prev }; delete next[userId]; return next; });
+      }, 3000);
     });
     return () => { mounted = false; unsubMsgs(); unsubReactions(); typingRef.current?.unsubscribe(); };
   }, [team.id, members, search]);
@@ -2973,15 +3059,22 @@ function TeamChatThread({ team, members, myMember, canManage, onOpenProfile, cc 
           </button>
         )}
       </div>
-      {typingLabel && (
-        <p className="px-3 text-[11px] text-ink-faint italic shrink-0 flex items-center gap-1">
-          {typingLabel}
-          <span className="inline-flex gap-0.5">
-            <span className="animate-pulse [animation-delay:0ms]">›</span>
-            <span className="animate-pulse [animation-delay:150ms]">›</span>
-            <span className="animate-pulse [animation-delay:300ms]">›</span>
+      {Object.keys(typingUsers).length > 0 && (
+        <div className="px-3 pb-1 shrink-0 flex items-center gap-2 animate-fade-in-up">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-ink/[0.05] border border-hairline text-[11px] text-ink-muted">
+            {(() => {
+              const names = Object.values(typingUsers);
+              if (names.length === 1) return `${names[0]} is typing`;
+              if (names.length === 2) return `${names[0]} and ${names[1]} are typing`;
+              return `${names.length} people are typing`;
+            })()}
+            <span className="inline-flex gap-0.5 ml-0.5">
+              <span className="w-1 h-1 rounded-full bg-ink-faint animate-typing-dot [animation-delay:0ms]" />
+              <span className="w-1 h-1 rounded-full bg-ink-faint animate-typing-dot [animation-delay:150ms]" />
+              <span className="w-1 h-1 rounded-full bg-ink-faint animate-typing-dot [animation-delay:300ms]" />
+            </span>
           </span>
-        </p>
+        </div>
       )}
       {replyTo && (
         <div className="px-3 py-1.5 border-t border-hairline bg-ink/[0.02] flex items-center justify-between gap-2 shrink-0">
