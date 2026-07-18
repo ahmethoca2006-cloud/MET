@@ -103,6 +103,17 @@ export function useTeamAuth() {
     return { error: null, needsConfirmation: !data.session };
   }, []);
 
+  const confirmSignUpCode = useCallback(async (email: string, code: string) => {
+    const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: 'signup' });
+    if (!error && data.session) setSession(data.session);
+    return error ? error.message : null;
+  }, []);
+
+  const resendSignUpCode = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resend({ type: 'signup', email });
+    return error ? error.message : null;
+  }, []);
+
   const updateProfile = useCallback(async (name: string, avatar: string) => {
     const { error } = await supabase.auth.updateUser({ data: { name, avatar } });
     if (!error) {
@@ -122,11 +133,20 @@ export function useTeamAuth() {
     return error ? error.message : null;
   }, []);
 
+  const confirmResetCode = useCallback(async (email: string, code: string) => {
+    const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: 'recovery' });
+    if (!error && data.session) {
+      setSession(data.session);
+      setIsRecovery(true);
+    }
+    return error ? error.message : null;
+  }, []);
+
   const updatePassword = useCallback(async (newPassword: string) => {
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (!error) setIsRecovery(false);
     return error ? error.message : null;
   }, []);
 
-  return { session, loading, isAdmin, isRecovery, signIn, signUp, signOut, updateProfile, resetPasswordForEmail, updatePassword };
+  return { session, loading, isAdmin, isRecovery, signIn, signUp, signOut, updateProfile, resetPasswordForEmail, updatePassword, confirmSignUpCode, resendSignUpCode, confirmResetCode };
 }

@@ -30,7 +30,7 @@ function PasswordChecklist({ password }: { password: string }) {
 }
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
-  const { session, loading, signIn, signUp, isRecovery, resetPasswordForEmail, updatePassword } = useTeamAuth();
+  const { session, loading, signIn, signUp, isRecovery, resetPasswordForEmail, updatePassword, confirmSignUpCode, resendSignUpCode, confirmResetCode } = useTeamAuth();
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signup');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -39,7 +39,9 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const [avatar, setAvatar] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [signUpCode, setSignUpCode] = useState('');
   const [resetSent, setResetSent] = useState(false);
+  const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [captchaVerified, setCaptchaVerified] = useState(false);
@@ -81,10 +83,45 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     const error = await resetPasswordForEmail(email.trim());
     setSubmitting(false);
     if (error) {
-      swal({ icon: 'error', title: 'Could not send reset link', text: error });
+      swal({ icon: 'error', title: 'Could not send reset code', text: error });
       return;
     }
     setResetSent(true);
+  };
+
+  const handleVerifyResetCode = async () => {
+    if (!resetCode.trim()) {
+      swal({ icon: 'error', title: 'Missing code', text: 'Enter the code we emailed you.' });
+      return;
+    }
+    setSubmitting(true);
+    const error = await confirmResetCode(email.trim(), resetCode.trim());
+    setSubmitting(false);
+    if (error) {
+      swal({ icon: 'error', title: 'Invalid or expired code', text: error });
+    }
+  };
+
+  const handleVerifySignUpCode = async () => {
+    if (!signUpCode.trim()) {
+      swal({ icon: 'error', title: 'Missing code', text: 'Enter the code we emailed you.' });
+      return;
+    }
+    setSubmitting(true);
+    const error = await confirmSignUpCode(email.trim(), signUpCode.trim());
+    setSubmitting(false);
+    if (error) {
+      swal({ icon: 'error', title: 'Invalid or expired code', text: error });
+      return;
+    }
+  };
+
+  const handleResendSignUpCode = async () => {
+    setSubmitting(true);
+    const error = await resendSignUpCode(email.trim());
+    setSubmitting(false);
+    if (error) swal({ icon: 'error', title: 'Could not resend code', text: error });
+    else swal({ icon: 'success', title: 'Code resent', text: `Check ${email} for the new code.` });
   };
 
   const handleUpdatePassword = async () => {
@@ -155,13 +192,30 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (resetSent) {
       return (
         <div className="min-h-screen flex items-center justify-center p-4">
-          <GlassCard className="p-8 w-full max-w-sm space-y-4 text-center animate-auth-card">
+          <GlassCard className="p-8 w-full max-w-sm space-y-5 text-center animate-auth-card">
             <div className="w-12 h-12 mx-auto rounded-full bg-accent-soft border border-accent/30 flex items-center justify-center">
               <MailCheck className="text-accent" size={22} />
             </div>
-            <h2 className="text-lg font-display font-bold text-ink">Check your email</h2>
-            <p className="text-sm text-ink-muted">We sent a password reset link to <span className="font-semibold text-ink">{email}</span>. Click it to choose a new password.</p>
-            <Button className="w-full" onClick={() => { setResetSent(false); switchMode('signin'); }}>Back to Sign In</Button>
+            <h2 className="text-lg font-display font-bold text-ink">Enter your code</h2>
+            <p className="text-sm text-ink-muted">We sent a 6-digit code to <span className="font-semibold text-ink">{email}</span>.</p>
+            <div className="space-y-1 text-left">
+              <label className="text-xs text-accent font-semibold flex items-center gap-1"><KeyRound size={12} /> Verification code</label>
+              <Input
+                placeholder="123456"
+                value={resetCode}
+                onChange={(e) => setResetCode(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleVerifyResetCode(); }}
+              />
+            </div>
+            <Button className="w-full" onClick={handleVerifyResetCode} disabled={submitting}>
+              <KeyRound size={14} /> {submitting ? 'Please wait...' : 'Verify Code'}
+            </Button>
+            <button
+              onClick={() => { setResetSent(false); setResetCode(''); }}
+              className="w-full text-center text-xs text-ink-muted hover:text-accent transition-colors"
+            >
+              Back
+            </button>
           </GlassCard>
         </div>
       );
@@ -171,7 +225,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         <GlassCard className="p-8 w-full max-w-sm space-y-5 animate-auth-card">
           <div className="text-center">
             <h2 className="text-lg font-display font-bold text-ink">Reset your password</h2>
-            <p className="text-xs text-ink-muted mt-1">Enter your email and we'll send you a reset link.</p>
+            <p className="text-xs text-ink-muted mt-1">Enter your email and we'll send you a verification code.</p>
           </div>
           <div className="space-y-1">
             <label className="text-xs text-accent font-semibold flex items-center gap-1"><Mail size={12} /> Email</label>
@@ -185,7 +239,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           </div>
           <Captcha onChange={setCaptchaVerified} />
           <Button onClick={handleForgotPassword} disabled={submitting} className="w-full">
-            <Mail size={14} /> {submitting ? 'Please wait...' : 'Send Reset Link'}
+            <Mail size={14} /> {submitting ? 'Please wait...' : 'Send Code'}
           </Button>
           <button
             onClick={() => switchMode('signin')}
@@ -201,13 +255,36 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   if (awaitingConfirmation) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
-        <GlassCard className="p-8 w-full max-w-sm space-y-4 text-center animate-auth-card">
+        <GlassCard className="p-8 w-full max-w-sm space-y-5 text-center animate-auth-card">
           <div className="w-12 h-12 mx-auto rounded-full bg-accent-soft border border-accent/30 flex items-center justify-center">
             <MailCheck className="text-accent" size={22} />
           </div>
           <h2 className="text-lg font-display font-bold text-ink">Confirm your email</h2>
-          <p className="text-sm text-ink-muted">We sent a confirmation link to <span className="font-semibold text-ink">{email}</span>. Click it, then sign in below.</p>
-          <Button className="w-full" onClick={() => { setAwaitingConfirmation(false); switchMode('signin'); }}>Back to Sign In</Button>
+          <p className="text-sm text-ink-muted">We sent a 6-digit code to <span className="font-semibold text-ink">{email}</span>.</p>
+          <div className="space-y-1 text-left">
+            <label className="text-xs text-accent font-semibold flex items-center gap-1"><KeyRound size={12} /> Verification code</label>
+            <Input
+              placeholder="123456"
+              value={signUpCode}
+              onChange={(e) => setSignUpCode(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleVerifySignUpCode(); }}
+            />
+          </div>
+          <Button className="w-full" onClick={handleVerifySignUpCode} disabled={submitting}>
+            <KeyRound size={14} /> {submitting ? 'Please wait...' : 'Verify & Continue'}
+          </Button>
+          <button
+            onClick={handleResendSignUpCode}
+            className="w-full text-center text-xs text-ink-muted hover:text-accent transition-colors"
+          >
+            Resend code
+          </button>
+          <button
+            onClick={() => { setAwaitingConfirmation(false); setSignUpCode(''); switchMode('signin'); }}
+            className="w-full text-center text-xs text-ink-muted hover:text-accent transition-colors"
+          >
+            Back to Sign In
+          </button>
         </GlassCard>
       </div>
     );
