@@ -55,7 +55,9 @@ svg{display:block;flex:none}
    CANVAS VIEWPORT
    ============================================================ */
 #viewport{
-  position:fixed;inset:0;overflow:hidden;
+  /* right:284px reserves real space for #rightDock (264px wide + 10px right margin + 10px gap)
+     instead of letting the docked color/layers panels float over the canvas. */
+  position:fixed;top:0;left:0;right:284px;bottom:0;overflow:hidden;
   background:
     radial-gradient(1200px 800px at 70% -10%,rgba(124,106,245,.06),transparent 60%),
     radial-gradient(900px 700px at 10% 110%,rgba(77,163,255,.04),transparent 60%),
@@ -249,11 +251,25 @@ kbd{font-family:var(--mono);font-size:9.5px;background:rgba(255,255,255,.07);
 #fgbg:hover .swap{color:var(--txt)}
 
 /* ============================================================
+   RIGHT DOCK — persistent Color (top) + Layers/Inspector (bottom)
+   Always on screen in the studio by default; each child collapses to a slim header via its own
+   chevron (.panel-mini), never fully hidden except via #togglePanels for power users. #viewport is
+   narrowed (right:284px, see CANVAS VIEWPORT) so this column genuinely reserves canvas space
+   instead of floating over it.
+   ============================================================ */
+#rightDock{position:fixed;right:10px;top:var(--panels-top);bottom:56px;width:264px;z-index:40;
+  display:flex;flex-direction:column;gap:8px;
+  transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .28s}
+#rightDock.collapsed{transform:translateX(320px);opacity:0;pointer-events:none}
+
+/* ============================================================
    COLOR PANEL — wheel like Photoshop
    ============================================================ */
-#colorPanel{position:fixed;right:14px;top:var(--panels-top);z-index:56;width:214px;padding:12px;
-  border-radius:16px;display:none;flex-direction:column;gap:10px}
-#colorPanel.open{display:flex;animation:pop .2s cubic-bezier(.2,.9,.3,1.15)}
+#colorPanel{width:264px;padding:12px;border-radius:16px;flex:0 0 auto;
+  display:flex;flex-direction:column;gap:10px;overflow:hidden}
+#colorPanel.panel-mini .cp-content{display:none}
+.cp-content{display:flex;flex-direction:column;gap:10px}
+#fgbg{margin:2px auto 4px}
 .wheel-wrap{position:relative;width:176px;height:176px;margin:0 auto}
 #wheel,#svbox{position:absolute;border-radius:50%}
 #wheel{left:0;top:0;cursor:crosshair}
@@ -265,6 +281,7 @@ kbd{font-family:var(--mono);font-size:9.5px;background:rgba(255,255,255,.07);
   background:rgba(0,0,0,.25);border:1px solid var(--stroke-soft);border-radius:8px}
 .cp-field label{font-size:8.5px;font-weight:700;color:var(--txt3)}
 .cp-field input{background:none;border:none;outline:none;width:100%;font-size:10.5px;font-family:var(--mono);text-align:right}
+.cp-sublabel{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--txt3);margin-top:-2px}
 .swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
 .swatch{aspect-ratio:1;border-radius:6px;cursor:pointer;border:1px solid rgba(255,255,255,.12);transition:transform .1s}
 .swatch:hover{transform:scale(1.15)}
@@ -324,16 +341,19 @@ kbd{font-family:var(--mono);font-size:9.5px;background:rgba(255,255,255,.07);
 .pf-track i{display:block;height:100%;width:62%;border-radius:6px;background:linear-gradient(90deg,#31d183,#7c6af5)}
 
 /* ============================================================
-   INSPECTOR
+   INSPECTOR — Layers dock (always visible) + Inspect/Translate/History tabs
    ============================================================ */
-/* anchored bottom-right (not the old full-height right edge) so it sits under the color panel,
-   which now takes the top-right corner instead. Layers lives inside this tabbed panel along with
-   Properties/Translate/History — carving Layers out into its own standalone panel would be a much
-   bigger restructure than "move layers to the bottom right" asked for. */
-#inspector{position:fixed;right:10px;bottom:56px;max-height:56vh;width:264px;z-index:40;
-  display:flex;flex-direction:column;overflow:hidden;
-  transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .28s}
-#inspector.collapsed{transform:translateX(320px);opacity:0;pointer-events:none}
+/* flex child of #rightDock, sitting below the color panel — Layers gets its own always-visible
+   section above the tab bar so switching Inspect/Translate/History can never navigate the Layers
+   list away (the trap the real Studio's dock system has — see CLAUDE.md "Known gaps": selecting a
+   text/adjustment layer there unmounts the Layers panel because all three share one tabbed region).
+   Here Layers simply isn't one of the tab-switched panes at all. */
+#inspector{width:264px;flex:1 1 auto;display:flex;flex-direction:column;overflow:hidden}
+.layers-dock{flex:1 1 55%;min-height:150px;display:flex;flex-direction:column;overflow:hidden;
+  border-bottom:1px solid var(--stroke-soft)}
+.layers-dock.panel-mini .layers-list{display:none}
+.layers-dock.panel-mini{flex:0 0 auto;min-height:0}
+.layers-list{flex:1;overflow-y:auto;padding:2px 8px 8px;display:flex;flex-direction:column;gap:2px}
 .insp-tabs{display:flex;gap:2px;padding:8px 8px 0;flex:none}
 .insp-tab{flex:1;text-align:center;padding:7px 2px;font-size:10.5px;font-weight:600;color:var(--txt3);
   border-radius:9px 9px 0 0;cursor:pointer;transition:all .15s;border-bottom:2px solid transparent}
@@ -394,6 +414,18 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;heigh
 .layer .trash{color:var(--txt3);opacity:0;transition:opacity .12s,color .12s;cursor:pointer;font-size:10px}
 .layer:hover .trash{opacity:.8}
 .layer .trash:hover{color:var(--red);opacity:1}
+.layer .settings-btn{color:var(--txt3);opacity:0;transition:opacity .12s;cursor:pointer;font-size:10px}
+.layer:hover .settings-btn{opacity:.8}
+.layer .settings-btn:hover{color:var(--txt)}
+@media (pointer:coarse){.layer .trash,.layer .lock,.layer .settings-btn{opacity:.6}}
+.txt-item[data-locked="1"]{pointer-events:none}
+.layer-settings{padding:8px 10px 10px;margin:-2px 0 4px;background:rgba(0,0,0,.2);
+  border:1px solid var(--stroke-soft);border-radius:9px}
+.layer-settings input[type=color]{width:26px;height:22px;padding:0;border:none;background:none;cursor:pointer}
+.layer-ctx{position:fixed;z-index:90;padding:5px;border-radius:11px;display:flex;flex-direction:column;gap:1px;
+  min-width:150px;animation:pop .15s cubic-bezier(.2,.9,.3,1.15)}
+.layer-ctx-item{all:unset;padding:7px 10px;font-size:11px;border-radius:7px;cursor:pointer;color:var(--txt2)}
+.layer-ctx-item:hover{background:var(--glass-hover);color:var(--txt)}
 .hist-item{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:8px;font-size:11px;
   color:var(--txt2);cursor:pointer}
 .hist-item:hover{background:var(--glass-hover)}
@@ -1021,7 +1053,7 @@ body.marquee .txt-item,body.marquee .bubble{pointer-events:none}
 #mbBadge.on{display:flex}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
-@media (max-width:980px){#pages,#inspector,#minimap,#scriptDrawer{display:none}}
+@media (max-width:980px){#pages,#rightDock,#minimap,#scriptDrawer{display:none}#viewport{right:0}}
 </style>
 </head>
 <body class="show-rulers ws-translate">
@@ -1232,39 +1264,11 @@ body.marquee .txt-item,body.marquee .bubble{pointer-events:none}
   </div>
   <div class="tool-capsule glass">
     <button class="tool" data-tool="zoom"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4M8 11h6m-3-3v6"/></svg><span class="kbd-hint">Zoom <kbd>Z</kbd></span></button>
-    <!-- Photoshop FG/BG swatches -->
-    <div id="fgbg" title="Foreground / Background — click to open color wheel (X to swap, D to reset)">
-      <div class="sw bg" id="bgSw"></div>
-      <div class="sw fg" id="fgSw"></div>
-      <div class="swap">⇄</div>
-    </div>
   </div>
   <div class="tool-capsule glass">
     <button class="tool" id="origBtn"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg><span class="kbd-hint">Show original page <kbd>O</kbd></span></button>
   </div>
 </aside>
-
-<!-- ══════════ COLOR PANEL — Photoshop-style wheel ══════════ -->
-<div id="colorPanel" class="glass">
-  <div class="cp-head">
-    <span class="panel-title">Color</span>
-    <span class="spacer" style="flex:1"></span>
-    <button class="mini-btn" id="cpClose">✕</button>
-  </div>
-  <div class="wheel-wrap">
-    <canvas id="wheel" width="176" height="176"></canvas>
-    <canvas id="svbox" width="88" height="88"></canvas>
-    <div class="marker" id="hueMark"></div>
-    <div class="marker" id="svMark"></div>
-  </div>
-  <div class="cp-row">
-    <div class="cp-field" style="flex:1.4"><label>HEX</label><input id="hexIn" value="#7C6AF5" spellcheck="false"></div>
-    <div class="cp-field"><label>R</label><input id="rIn" value="124"></div>
-    <div class="cp-field"><label>G</label><input id="gIn" value="106"></div>
-    <div class="cp-field"><label>B</label><input id="bIn" value="245"></div>
-  </div>
-  <div class="swatches" id="swatches"></div>
-</div>
 
 <!-- ══════════ PAGES PANEL ══════════ -->
 <aside id="pages" class="glass">
@@ -1288,12 +1292,54 @@ body.marquee .txt-item,body.marquee .bubble{pointer-events:none}
   </div>
 </aside>
 
-<!-- ══════════ INSPECTOR ══════════ -->
+<!-- ══════════ RIGHT DOCK — always-visible Color (top) + Layers (bottom) ══════════
+     Both panels stay on screen by default in the studio; each collapses to a slim header via its
+     own chevron, and #togglePanels (Window) can still fully hide the whole column for power users
+     who want maximum canvas — see togglePanels() below. -->
+<div id="rightDock">
+<div id="colorPanel" class="glass">
+  <div class="cp-head">
+    <span class="panel-title">Color</span>
+    <span class="spacer" style="flex:1"></span>
+    <button class="mini-btn" id="cpCollapse" title="Collapse"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+  </div>
+  <div class="cp-content">
+    <!-- Photoshop FG/BG swatches, moved in from the left tool rail so color picking has one home -->
+    <div id="fgbg" title="Foreground / Background — click to swap, D to reset">
+      <div class="sw bg" id="bgSw"></div>
+      <div class="sw fg" id="fgSw"></div>
+      <div class="swap">⇄</div>
+    </div>
+    <div class="wheel-wrap">
+      <canvas id="wheel" width="176" height="176"></canvas>
+      <canvas id="svbox" width="88" height="88"></canvas>
+      <div class="marker" id="hueMark"></div>
+      <div class="marker" id="svMark"></div>
+    </div>
+    <div class="cp-row">
+      <div class="cp-field" style="flex:1.4"><label>HEX</label><input id="hexIn" value="#7C6AF5" spellcheck="false"></div>
+      <div class="cp-field"><label>R</label><input id="rIn" value="124"></div>
+      <div class="cp-field"><label>G</label><input id="gIn" value="106"></div>
+      <div class="cp-field"><label>B</label><input id="bIn" value="245"></div>
+    </div>
+    <div class="swatches" id="swatches"></div>
+    <div class="cp-sublabel">Recent</div>
+    <div class="swatches" id="recentSwatches"></div>
+  </div>
+</div>
+
+<!-- ══════════ INSPECTOR — Layers always visible, Inspect/Translate/History still tabbed ══════════ -->
 <aside id="inspector" class="glass">
+  <div id="layersDock" class="layers-dock">
+    <div class="panel-head">
+      <span class="panel-title">Layers</span><span class="spacer"></span>
+      <button class="mini-btn" id="layersCollapse" title="Collapse"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>
+    <div class="layers-list" id="layersList"></div>
+  </div>
   <div class="insp-tabs">
     <div class="insp-tab active" data-pane="props">Inspect</div>
     <div class="insp-tab" data-pane="translate">Translate</div>
-    <div class="insp-tab" data-pane="layers">Layers</div>
     <div class="insp-tab" data-pane="history">History</div>
   </div>
   <div class="insp-body">
@@ -1349,20 +1395,12 @@ body.marquee .txt-item,body.marquee .bubble{pointer-events:none}
       <button class="btn ghost" style="width:100%;justify-content:center;margin-top:4px" id="openScriptFromTab">Open full script ↓</button>
     </div>
 
-    <div class="insp-pane" id="pane-layers">
-      <div class="layer"><span class="eye">👁</span><div class="layer-ico">T</div><div class="layer-name">Typeset — AR text</div><span class="lock">🔒</span><span class="trash">🗑</span></div>
-      <div class="layer sel"><span class="eye">👁</span><div class="layer-ico">◯</div><div class="layer-name">Bubble B-02</div><span class="lock">🔒</span><span class="trash">🗑</span></div>
-      <div class="layer"><span class="eye">👁</span><div class="layer-ico">✦</div><div class="layer-name">AI inpaint mask</div><span class="lock">🔒</span><span class="trash">🗑</span></div>
-      <div class="layer"><span class="eye">👁</span><div class="layer-ico">▦</div><div class="layer-name">Clean plate</div><span class="lock on">🔒</span><span class="trash">🗑</span></div>
-      <div class="layer hidden-l"><span class="eye off">👁</span><div class="layer-ico">🖼</div><div class="layer-name">RAW original</div><span class="lock on">🔒</span></div>
-      <div class="section" style="margin-top:14px">
+    <div class="insp-pane" id="pane-history">
+      <div class="section">
         <div class="sec-head"><span class="sec-title">AI task queue</span></div>
         <div class="queue-item"><span class="q-spin"></span><span class="q-name">Inpainting p.08 — batch</span><span class="q-pct" data-q="1">64%</span></div>
         <div class="queue-item"><span class="q-spin" style="animation-duration:1.6s"></span><span class="q-name">OCR p.10–12</span><span class="q-pct" data-q="2">21%</span></div>
       </div>
-    </div>
-
-    <div class="insp-pane" id="pane-history">
       <div id="histList">
         <div class="hist-item current"><span>✦</span>AI inpaint — bubble B-02<span class="hist-time">now</span></div>
         <div class="hist-item"><span>T</span>Edit translation ①<span class="hist-time">2m</span></div>
@@ -1380,6 +1418,7 @@ body.marquee .txt-item,body.marquee .bubble{pointer-events:none}
     </div>
   </div>
 </aside>
+</div>
 
 <!-- ══════════ SCRIPT DRAWER — translation preview ══════════ -->
 <section id="scriptDrawer" class="glass">
@@ -1867,9 +1906,9 @@ function moveSV(e){const[x,y]=pt(e,sv);S=Math.min(1,Math.max(0,x/88));V=Math.min
 /* hex / rgb inputs */
 $('#hexIn').addEventListener('change',()=>{const m=$('#hexIn').value.trim().replace('#','');
   if(!/^[0-9a-f]{6}$/i.test(m))return;
-  const r=parseInt(m.slice(0,2),16),g=parseInt(m.slice(2,4),16),b=parseInt(m.slice(4,6),16);setRGB(r,g,b);});
+  const r=parseInt(m.slice(0,2),16),g=parseInt(m.slice(2,4),16),b=parseInt(m.slice(4,6),16);setRGB(r,g,b);pushRecentColor('#'+m);});
 ['#rIn','#gIn','#bIn'].forEach(id=>$(id).addEventListener('change',()=>{
-  setRGB(+$('#rIn').value||0,+$('#gIn').value||0,+$('#bIn').value||0);}));
+  setRGB(+$('#rIn').value||0,+$('#gIn').value||0,+$('#bIn').value||0);pushRecentColor($('#hexIn').value);}));
 function setRGB(r,g,b){r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
   V=mx;S=mx?d/mx:0;
   if(d){if(mx===r)H=60*(((g-b)/d)%6);else if(mx===g)H=60*((b-r)/d+2);else H=60*((r-g)/d+4);
@@ -1881,20 +1920,34 @@ const presets=['#FFFFFF','#16151A','#7C6AF5','#4DA3FF','#31D183','#FFA043','#FF5
   '#E8B4F0','#8AE0DC','#C4B7A6','#5E5E76','#B33951','#2E86AB','#F4A259','#6B4E9E'];
 presets.forEach(hex=>{const d=document.createElement('div');d.className='swatch';d.style.background=hex;
   d.title=hex;d.onclick=()=>{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
-    setRGB(r,g,b);};$('#swatches').appendChild(d);});
+    setRGB(r,g,b);pushRecentColor(hex);};$('#swatches').appendChild(d);});
 
 /* FG/BG swatches — Photoshop behavior */
 const colorPanel=$('#colorPanel');
-function toggleColor(force){colorPanel.classList.toggle('open',force);
-  $('#colorToggle').classList.toggle('on',colorPanel.classList.contains('open'));}
-$('#fgbg').onclick=()=>toggleColor(true);
+/* colorPanel is now an always-visible docked panel (top-right of #rightDock), not a floating
+   overlay — toggleColor no longer shows/hides it, it only expands it out of its mini-collapsed
+   state and scrolls it into view, for callers that used to mean "open the color wheel". */
+function toggleColor(force){if(force===false)return;colorPanel.classList.remove('panel-mini');
+  colorPanel.scrollIntoView&&colorPanel.scrollIntoView({block:'nearest'});}
+$('#fgbg').onclick=()=>swapColors();
 $('#obColor').onclick=()=>toggleColor(true);
-$('#colorToggle').onclick=()=>toggleColor(!colorPanel.classList.contains('open'));
-$('#cpClose').onclick=()=>toggleColor(false);
+$('#colorToggle').onclick=()=>colorPanel.classList.toggle('panel-mini');
+$('#cpCollapse').onclick=()=>colorPanel.classList.toggle('panel-mini');
 function swapColors(){const fg=curHex();const tmp=bgColor;bgColor=fg;
   const r=parseInt(tmp.slice(1,3),16),g=parseInt(tmp.slice(3,5),16),b=parseInt(tmp.slice(5,7),16);
   setRGB(r,g,b);$('#bgSw').style.background=bgColor;}
 function resetColors(){bgColor='#FFFFFF';$('#bgSw').style.background=bgColor;setRGB(22,21,26);}
+/* recent colors — in-memory only, pushed on real color commits (hex/rgb change, swatch/recent
+   click), not on every wheel-drag frame */
+let recentColors=[];
+function pushRecentColor(hex){hex=hex.toUpperCase();
+  recentColors=recentColors.filter(h=>h!==hex);recentColors.unshift(hex);
+  if(recentColors.length>10)recentColors.length=10;
+  renderRecentColors();}
+function renderRecentColors(){const box=$('#recentSwatches');box.innerHTML='';
+  recentColors.forEach(hex=>{const d=document.createElement('div');d.className='swatch';d.style.background=hex;
+    d.title=hex;d.onclick=()=>{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+      setRGB(r,g,b);};box.appendChild(d);});}
 
 /* ═════════ TOOLS + OPTIONS BAR ═════════ */
 const toolMeta={select:['▸','Select'],move:['✥','Move'],hand:['✋','Pan'],pin:['📍','Pin'],pen:['✒','Pen'],brush:['🖌','Brush'],erase:['◻','Eraser'],
@@ -1943,9 +1996,9 @@ function setTool(name){if(!toolMeta[name])return;curTool=name;
   /* contextual options bar */
   const vis=OB_CFG[name]||[];
   $$('#optionsbar .ob-item').forEach(it=>{
-    if(it.dataset.ob==='hint'){it.classList.toggle('hide',!OB_HINTS[name]);return;}
+    if(it.dataset.ob==='hint'){it.classList.toggle('hide',!OB_HINTS[name]&&!(hasSelection()&&PAINT_TOOLS.includes(name)));return;}
     it.classList.toggle('hide',!vis.includes(it.dataset.ob));});
-  if(OB_HINTS[name])$('#obHint').textContent=OB_HINTS[name];}
+  refreshObHint();}
 $$('.tool[data-tool]').forEach(t=>t.addEventListener('click',()=>setTool(t.dataset.tool)));
 const toolKeys={v:'select',k:'move',h:'hand',n:'pin',p:'pen',b:'brush',e:'erase',s:'clone',t:'text',u:'bubble',r:'shape',j:'eyedrop',m:'marquee',a:'ai-detect',i:'ai-clean',w:'content-aware',z:'zoom'};
 
@@ -2427,15 +2480,6 @@ $$('input[type=range].live').forEach(r=>r.addEventListener('input',()=>{r.parent
 $('#aiApply').onclick=()=>toast('Suggestion applied','Bubble B-02 → jagged style · 24pt bold');
 $('#aiDismiss').onclick=e=>{e.target.closest('.ai-suggest').style.display='none';};
 
-/* layers: eye + lock + trash */
-$$('.layer').forEach(l=>{
-  l.addEventListener('click',e=>{
-    if(e.target.classList.contains('eye')){e.target.classList.toggle('off');
-      l.classList.toggle('hidden-l');return;}
-    if(e.target.classList.contains('lock')){e.target.classList.toggle('on');return;}
-    if(e.target.classList.contains('trash')){l.remove();return;}
-    $$('.layer').forEach(x=>x.classList.remove('sel'));l.classList.add('sel');});});
-
 /* translate cards select bubble */
 $$('.trans-card').forEach(c=>c.addEventListener('click',()=>{
   const b=document.querySelector(`.bubble[data-key="${c.dataset.key}"]`);if(b)selectBubble(b);
@@ -2500,6 +2544,7 @@ function ensurePageItem(pn){
   const el=makePageItem(pn);
   after?list.insertBefore(el,after):list.appendChild(el);}
 function selectPage(pn){
+  clearMarqueesForPageSwitch();
   /* persist text layers of the page we're leaving */
   if(currentPage&&pageStore[currentPage])pageStore[currentPage].texts=$('#textLayer').innerHTML;
   currentPage=pn;resetPan();
@@ -2509,6 +2554,7 @@ function selectPage(pn){
   const c=paint.getContext('2d');if(paint.width)c.clearRect(0,0,paint.width,paint.height);
   strokes=[];penClearAll&&penClearAll();
   refreshPageImages();updateEmptyState();
+  if(typeof renderLayers==='function')renderLayers();
   requestAnimationFrame(()=>{if(page.offsetHeight>window.innerHeight*0.85)zoomFit();});
   const st=pageStore[pn]||{};
   if(st.orig||st.clean)toast(pn+' مفتوحة',(st.clean?'تبييض ✓ ':'')+(st.orig?'أصل ✓':''));}
@@ -2528,7 +2574,7 @@ function switchChapter(ch){
   {buildRealList();
     const first=Object.keys(pageStore).sort((a,b)=>+a.replace('Page ','')-+b.replace('Page ',''))[0];
     if(first)selectPage(first);
-    else{currentPage='Page 01';document.querySelector('#topbar .breadcrumbs b').textContent='—';
+    else{clearMarqueesForPageSwitch();currentPage='Page 01';document.querySelector('#topbar .breadcrumbs b').textContent='—';
       refreshPageImages();updateEmptyState();}}}
 $('#chapterSel').addEventListener('change',e=>{
   if(e.target.value==='__new'){
@@ -2546,6 +2592,7 @@ function startProject(name,chap){
   document.body.classList.remove('has-image','show-original');
   $('#origBtn').classList.remove('on');
   page.style.backgroundImage='';pageImg=null;
+  clearMarqueesForPageSwitch();
   const c=paint.getContext('2d');if(paint.width)c.clearRect(0,0,paint.width,paint.height);strokes=[];
   currentPage='Page 01';document.querySelector('#topbar .breadcrumbs b').textContent='—';
   renderChapterSel();buildRealList();
@@ -2606,9 +2653,9 @@ $('#viewport').addEventListener('pointerup',()=>{panDrag=null;$('#viewport').sty
   document.body.classList.remove('panning');});
 
 /* ═════════ PANELS TOGGLE ═════════ */
-const pages=$('#pages'),insp=$('#inspector');let hidden=false;
+const pages=$('#pages'),rightDock=$('#rightDock');let hidden=false;
 function togglePanels(){hidden=!hidden;
-  pages.classList.toggle('collapsed',hidden);insp.classList.toggle('collapsed',hidden);
+  pages.classList.toggle('collapsed',hidden);rightDock.classList.toggle('collapsed',hidden);
   document.body.classList.toggle('insp-hidden',hidden);}
 $('#togglePanels').onclick=togglePanels;
 $('#pagesCollapse').onclick=()=>pages.classList.add('collapsed');
@@ -2625,10 +2672,11 @@ $('#viewport').addEventListener('click',e=>{
   if(curTool==='zoom'){setZoom(+slider.value+(e.altKey?-25:25));return;}
   if(e.target.id==='viewport'||e.target.id==='stage'){ctx.classList.remove('show');
     $$('.bubble').forEach(x=>x.classList.remove('selected'));deselectTxt&&deselectTxt();
-    /* clicking empty canvas also cancels the real marquee selection — otherwise every raster tool
-       stays clipped to whatever selection was last made, with no mouse-driven way out (Ctrl+D was
-       the only escape hatch, and it's not discoverable). */
-    if(typeof hasSelection==='function'&&hasSelection()&&!mbMode)deselectAll();}});
+    /* the real marquee selection is deliberately NOT cleared here — a selection must stay stable
+       across an empty-canvas click so a paint tool can be clicked into place inside it (see
+       startMarqDraw's own drag-threshold gate); it only goes away via Ctrl/Cmd+D, Esc with the
+       marquee tool active, a genuine new marquee drag, or Select > None. */
+    if(typeof selectedLayerIds!=='undefined'){selectedLayerIds.clear();if(typeof renderLayers==='function')renderLayers();}}});
 ctx.addEventListener('click',e=>{const a=e.target.closest('[data-act]');if(!a)return;
   const sel=document.querySelector('.txt-item.sel')||document.querySelector('.bubble.selected');
   if(a.dataset.act==='color'){if(sel){sel.style.color=curHex();
@@ -2898,7 +2946,10 @@ document.addEventListener('keydown',e=>{
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){if(inStudio){e.preventDefault();openK();}return;}
   if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'){
     if(inStudio&&!e.target.isContentEditable&&e.target.tagName!=='INPUT'&&e.target.tagName!=='TEXTAREA'){
-      e.preventDefault();$('#undoBtn').click();}return;}
+      e.preventDefault();
+      /* text-item add/move/delete has its own small undo stack, independent of the paint strokes[]
+         stack — try it first since it's usually the more recent edit, fall back to paint undo. */
+      if(!undoTextChange())$('#undoBtn').click();}return;}
   if(e.key==='Escape'){closeK();closeImport();toggleColor(false);
     if(typeof trDisarm==='function')trDisarm();
     if(typeof clearMarquees==='function')clearMarquees();
@@ -2938,9 +2989,13 @@ document.addEventListener('keydown',e=>{
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='c'){e.preventDefault();copySelection(false);return;}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='x'&&hasSelection()){e.preventDefault();copySelection(true);return;}
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'){e.preventDefault();pasteSelection();return;}
-  if((e.key==='Delete'||e.key==='Backspace')){const st=document.querySelector('.txt-item.sel');
-    if(st&&!st.classList.contains('editing')){e.preventDefault();st.remove();
-      if(typeof saveTexts==='function')saveTexts();toast('Text box deleted','');return;}
+  if((e.key==='Delete'||e.key==='Backspace')){
+    const selEls=[...document.querySelectorAll('.txt-item.sel')].filter(t=>!t.classList.contains('editing'));
+    if(selEls.length){e.preventDefault();
+      const ids=selEls.map(t=>t.dataset.layerId).filter(Boolean);
+      if(ids.length)deleteLayerRows(ids);
+      else{pushTextUndo();selEls.forEach(t=>t.remove());saveTexts();toast('Text box deleted','⌘/Ctrl+Z to undo');}
+      return;}
     if(hasSelection()){e.preventDefault();deleteSelection();return;}}
   if(e.key===' '){e.preventDefault();spacePan=true;$('#viewport').style.cursor='grab';return;}
   if(e.key==='Alt'&&curTool==='zoom'){document.body.classList.add('alt-zoom-out');}
@@ -2963,7 +3018,7 @@ setInterval(()=>{
   $('#ramLbl').textContent=(ram/10).toFixed(1)+'G';
   $$('.q-pct').forEach(q=>{let v=parseInt(q.textContent);v=Math.min(99,v+Math.floor(Math.random()*3));q.textContent=v+'%';});
 },1800);
-$('#queueBtn').onclick=()=>{activateTab('layers');if(hidden)togglePanels();};
+$('#queueBtn').onclick=()=>{activateTab('history');if(hidden)togglePanels();};
 
 /* ═════════ PIN TOOL ═════════ */
 let pinCount=0,activePin=null;
@@ -3460,6 +3515,156 @@ $('#teReplAll').onclick=()=>{const f=$('#teFind').value;if(!f)return;
 const textLayer=$('#textLayer');
 function saveTexts(){if(currentPage){(pageStore[currentPage]=pageStore[currentPage]||{}).texts=textLayer.innerHTML;}}
 function deselectTxt(){$$('.txt-item.sel').forEach(t=>t.classList.remove('sel'));}
+
+/* ═════════ LAYERS PANEL — one fixed "Paint" row (covers brush/eraser/clone/pen/content-aware
+   output, since none of those remain as separate objects once committed — see paintCommit/
+   penCommit, which rasterize straight into #paint) + one row per real .txt-item ═════════ */
+let layerIdSeq=1;
+let selectedLayerIds=new Set();
+let textUndoStack=[]; /* independent of the paint strokes[] undo stack — see textUndoStack Ctrl+Z wiring below */
+function pushTextUndo(){textUndoStack.push(textLayer.innerHTML);if(textUndoStack.length>25)textUndoStack.shift();}
+function undoTextChange(){if(!textUndoStack.length)return false;
+  textLayer.innerHTML=textUndoStack.pop();deselectTxt();selectedLayerIds.clear();
+  saveTexts();renderLayers();toast('Undo','Text layer change reverted');return true;}
+function reflectRowSelection(){
+  /* pure selection is reflected by toggling .sel in place, never by rebuilding the row DOM — a
+     full renderLayers() on every click would swap out the clicked element mid-gesture, which
+     silently defeats the browser's native dblclick detection (it tracks successive clicks per
+     target) and drops hover state. renderLayers() stays reserved for actual list changes
+     (add/delete/reorder/rename). */
+  $$('.layer-row').forEach(r=>r.classList.toggle('sel',r.dataset.id!=='__paint'&&selectedLayerIds.has(r.dataset.id)));}
+function highlightLayerRow(id){
+  selectedLayerIds=new Set(id?[id]:[]);
+  reflectRowSelection();
+  const row=id&&$('#layersList').querySelector(`.layer-row[data-id="${id}"]`);
+  if(row)row.scrollIntoView({block:'nearest'});}
+function selectLayerFromRow(id,additive){
+  if(id==='__paint'){if(!additive){selectedLayerIds.clear();deselectTxt();}reflectRowSelection();return;}
+  if(!additive){deselectTxt();selectedLayerIds.clear();}
+  const t=textLayer.querySelector(`[data-layer-id="${id}"]`);
+  if(t){if(additive&&selectedLayerIds.has(id)){t.classList.remove('sel');selectedLayerIds.delete(id);}
+    else{t.classList.add('sel');selectedLayerIds.add(id);placeCtx(t);}}
+  reflectRowSelection();}
+function deleteLayerRows(ids){
+  const targets=[...ids].map(id=>textLayer.querySelector(`[data-layer-id="${id}"]`)).filter(Boolean);
+  if(!targets.length)return;
+  pushTextUndo(); /* one snapshot for the whole batch — one undo restores all of them */
+  targets.forEach(t=>t.remove());
+  selectedLayerIds.clear();closeLayerSettings();
+  saveTexts();renderLayers();
+  toast('Layer'+(targets.length>1?'s':'')+' deleted','⌘/Ctrl+Z to undo');}
+function duplicateLayerRow(id){
+  const t=textLayer.querySelector(`[data-layer-id="${id}"]`);if(!t)return;
+  pushTextUndo();
+  const clone=t.cloneNode(true);clone.classList.remove('sel');
+  clone.dataset.layerId='tl_'+(layerIdSeq++);
+  clone.style.left=(parseFloat(t.style.left)+2)+'%';clone.style.top=(parseFloat(t.style.top)+2)+'%';
+  textLayer.appendChild(clone);
+  saveTexts();renderLayers();toast('Layer duplicated','');}
+function renameLayerRow(id){
+  const t=textLayer.querySelector(`[data-layer-id="${id}"]`);if(!t)return;
+  const cur=t.dataset.layerName||t.textContent.trim()||'';
+  const name=prompt('Rename layer',cur);if(name===null)return;
+  t.dataset.layerName=name;saveTexts();renderLayers();}
+function moveLayerRow(id,dir){
+  const t=textLayer.querySelector(`[data-layer-id="${id}"]`);if(!t)return;
+  /* DOM order is the only z-order mechanism .txt-item has (see renderLayers — topmost DOM node
+     renders topmost visually and is listed first) */
+  if(dir==='up'&&t.nextElementSibling)t.parentNode.insertBefore(t.nextElementSibling,t);
+  else if(dir==='down'&&t.previousElementSibling)t.parentNode.insertBefore(t,t.previousElementSibling);
+  saveTexts();renderLayers();}
+function toggleLayerHidden(id){
+  const t=textLayer.querySelector(`[data-layer-id="${id}"]`);if(!t)return;
+  const hide=t.dataset.hidden!=='1';t.dataset.hidden=hide?'1':'';t.style.display=hide?'none':'';
+  renderLayers();}
+function toggleLayerLocked(id){
+  const t=textLayer.querySelector(`[data-layer-id="${id}"]`);if(!t)return;
+  t.dataset.locked=t.dataset.locked!=='1'?'1':'';renderLayers();}
+
+let layerCtxMenu=null;
+function closeLayerCtxMenu(){if(layerCtxMenu){layerCtxMenu.remove();layerCtxMenu=null;}}
+/* single persistent listener, not re-added per open — a deferred one-shot 'pointerdown' listener
+   here would race the menu item's own click (pointerdown fires first, removing the button from the
+   DOM before its click ever dispatches, silently swallowing whichever action was clicked). A bubble-
+   phase 'click' on document always runs after the item's own onclick already fired. */
+document.addEventListener('click',e=>{if(layerCtxMenu&&!e.target.closest('.layer-ctx'))closeLayerCtxMenu();});
+function openLayerContextMenu(e,id){
+  closeLayerCtxMenu();closeLayerSettings();
+  const m=document.createElement('div');m.className='layer-ctx glass';
+  const items=id==='__paint'?[['Hide/Show',()=>{}]]:[
+    ['Delete',()=>deleteLayerRows(selectedLayerIds.has(id)?selectedLayerIds:[id])],
+    ['Duplicate',()=>duplicateLayerRow(id)],
+    ['Rename',()=>renameLayerRow(id)],
+    ['Hide/Show',()=>toggleLayerHidden(id)],
+    ['Lock',()=>toggleLayerLocked(id)],
+    ['Move Up',()=>moveLayerRow(id,'up')],
+    ['Move Down',()=>moveLayerRow(id,'down')]];
+  items.forEach(([label,fn])=>{const b=document.createElement('button');b.className='layer-ctx-item';b.textContent=label;
+    b.onclick=()=>{fn();closeLayerCtxMenu();};m.appendChild(b);});
+  document.body.appendChild(m);
+  m.style.left=Math.min(window.innerWidth-180,e.clientX)+'px';
+  m.style.top=Math.min(window.innerHeight-items.length*30-16,e.clientY)+'px';
+  layerCtxMenu=m;}
+
+let layerSettingsFor=null;
+function closeLayerSettings(){
+  const el=$('#layersList .layer-settings');if(el)el.remove();layerSettingsFor=null;}
+function openLayerSettings(id,row){
+  if(layerSettingsFor===id){closeLayerSettings();return;} // toggle closed if already open on this row
+  closeLayerSettings();
+  if(id==='__paint')return; // nothing to configure on the fixed raster row
+  const t=textLayer.querySelector(`[data-layer-id="${id}"]`);if(!t)return;
+  layerSettingsFor=id;
+  const box=document.createElement('div');box.className='layer-settings';
+  const fontSize=parseInt(t.style.fontSize)||16;
+  box.innerHTML=`<div class="field-row"><div class="field"><label>Name</label><input class="ls-name" value="${(t.dataset.layerName||t.textContent.trim()||'').replace(/"/g,'&quot;')}"></div></div>
+    <div class="field-row"><div class="field"><label>Size</label><input class="ls-size" type="number" value="${fontSize}"></div>
+    <div class="field"><label>Color</label><input class="ls-color" type="color" value="${t.style.color?rgbToHex(t.style.color):'#ffffff'}"></div></div>`;
+  row.after(box);
+  box.querySelector('.ls-name').addEventListener('change',ev=>{t.dataset.layerName=ev.target.value;saveTexts();renderLayers();});
+  box.querySelector('.ls-size').addEventListener('change',ev=>{t.style.fontSize=(+ev.target.value||16)+'px';saveTexts();});
+  box.querySelector('.ls-color').addEventListener('change',ev=>{t.style.color=ev.target.value;saveTexts();});}
+function rgbToHex(rgb){const m=rgb.match(/\d+/g);if(!m)return'#ffffff';
+  return'#'+m.slice(0,3).map(n=>(+n).toString(16).padStart(2,'0')).join('');}
+
+function makeLayerRow(opts){
+  const row=document.createElement('div');
+  row.className='layer layer-row'+(opts.sel?' sel':'')+(opts.hidden?' hidden-l':'');
+  row.dataset.id=opts.id;
+  const eye=`<span class="eye${opts.hidden?' off':''}">👁</span>`;
+  const ico=`<div class="layer-ico">${opts.icon}</div>`;
+  const name=`<div class="layer-name">${opts.name}</div>`;
+  const lock=opts.fixed?'':`<span class="lock${opts.locked?' on':''}">🔒</span>`;
+  const gear=opts.fixed?'':`<span class="settings-btn" title="Layer settings">⚙</span>`;
+  const trash=opts.fixed?'':`<span class="trash" title="Delete">🗑</span>`;
+  row.innerHTML=eye+ico+name+lock+gear+trash;
+  row.addEventListener('click',e=>{
+    if(e.target.classList.contains('eye')){toggleLayerHidden(opts.id);return;}
+    if(e.target.classList.contains('lock')){toggleLayerLocked(opts.id);return;}
+    if(e.target.classList.contains('settings-btn')){openLayerSettings(opts.id,row);return;}
+    if(e.target.classList.contains('trash')){deleteLayerRows(selectedLayerIds.has(opts.id)?selectedLayerIds:[opts.id]);return;}
+    selectLayerFromRow(opts.id,e.shiftKey||e.ctrlKey||e.metaKey);});
+  row.addEventListener('dblclick',e=>{if(e.target.closest('.eye,.lock,.trash,.settings-btn'))return;openLayerSettings(opts.id,row);});
+  row.addEventListener('contextmenu',e=>{e.preventDefault();openLayerContextMenu(e,opts.id);});
+  return row;}
+function renderLayers(){
+  const list=$('#layersList');if(!list)return;
+  const reopenId=layerSettingsFor;
+  list.innerHTML='';
+  list.appendChild(makeLayerRow({id:'__paint',name:'Paint',icon:'▦',fixed:true}));
+  [...textLayer.querySelectorAll('.txt-item')].reverse().forEach(t=>{
+    if(!t.dataset.layerId)t.dataset.layerId='tl_'+(layerIdSeq++);
+    const row=makeLayerRow({
+      id:t.dataset.layerId,
+      name:t.dataset.layerName||t.textContent.trim()||'(empty text)',
+      icon:'T',el:t,
+      sel:t.classList.contains('sel'),
+      hidden:t.dataset.hidden==='1',
+      locked:t.dataset.locked==='1'});
+    list.appendChild(row);});
+  if(reopenId){const row=list.querySelector(`.layer-row[data-id="${reopenId}"]`);if(row){layerSettingsFor=null;openLayerSettings(reopenId,row);}}}
+$('#layersCollapse')&&$('#layersCollapse').addEventListener('click',()=>$('#layersDock').classList.toggle('panel-mini'));
+renderLayers();
 function startTxtEdit(t){deselectTxt();editingBubble=t;
   t.classList.add('editing');t.contentEditable='true';t.focus();
   /* alignment buttons only mean anything for a box item (point text is always centered by its
@@ -3491,7 +3696,7 @@ function createPointText(x,y,r){
   t.style.left=(x/r.width*100)+'%';t.style.top=(y/r.height*100)+'%';
   styleNewTextItem(t);
   textLayer.appendChild(t);startTxtEdit(t);
-  addHistory('Text box added');markUnsaved();}
+  addHistory('Text box added');markUnsaved();renderLayers();}
 function createBoxText(l,t0,w,h,r){
   if(w<8||h<8){createPointText(l,t0,r);return;} // too small a drag to be intentional — treat as a click
   const t=document.createElement('div');t.className='txt-item box';
@@ -3499,7 +3704,7 @@ function createBoxText(l,t0,w,h,r){
   t.style.width=(w/r.width*100)+'%';t.style.minHeight=(h/r.height*100)+'%';
   styleNewTextItem(t);
   textLayer.appendChild(t);startTxtEdit(t);
-  addHistory('Text box added (drawn)');markUnsaved();}
+  addHistory('Text box added (drawn)');markUnsaved();renderLayers();}
 page.addEventListener('click',e=>{
   /* creation itself lives in the pointerdown/move/up flow below — this only handles the
      click-away-commits-edit behavior, and guards clicking an existing item (unchanged). */
@@ -3546,15 +3751,21 @@ textLayer.addEventListener('pointerdown',e=>{
   if(curTool==='text'){startTxtEdit(t);return;}
   if(curTool!=='select')return;
   deselectTxt();t.classList.add('sel');placeCtx(t);
-  const r=page.getBoundingClientRect();
+  highlightLayerRow(t.dataset.layerId);
   txtDrag={t,dx:e.clientX,dy:e.clientY,
-    lx:parseFloat(t.style.left),ly:parseFloat(t.style.top),r};
+    lx:parseFloat(t.style.left),ly:parseFloat(t.style.top),moved:false};
+  try{t.setPointerCapture(e.pointerId);}catch(_){}
   e.preventDefault();e.stopPropagation();});
 window.addEventListener('pointermove',e=>{if(!txtDrag)return;
-  const{t,dx,dy,lx,ly,r}=txtDrag;
-  t.style.left=(lx+(e.clientX-dx)/r.width*100)+'%';
-  t.style.top=(ly+(e.clientY-dy)/r.height*100)+'%';});
-window.addEventListener('pointerup',()=>{if(txtDrag){saveTexts();txtDrag=null;}});
+  if(!txtDrag.moved){txtDrag.moved=true;pushTextUndo();} // snapshot once, before the first real move
+  const{t,dx,dy,lx,ly}=txtDrag;
+  const r=page.getBoundingClientRect(); // re-measured every frame — #page has a CSS zoom transition,
+  t.style.left=(lx+(e.clientX-dx)/r.width*100)+'%';       // a rect cached once at pointerdown goes
+  t.style.top=(ly+(e.clientY-dy)/r.height*100)+'%';       // stale mid-drag and causes a visual jump
+  e.preventDefault();});
+window.addEventListener('pointerup',e=>{if(txtDrag){
+  try{txtDrag.t.releasePointerCapture(e.pointerId);}catch(_){}
+  saveTexts();txtDrag=null;}});
 textLayer.addEventListener('dblclick',e=>{
   const t=e.target.closest('.txt-item');if(t)startTxtEdit(t);});
 
@@ -3869,6 +4080,15 @@ function cycleMarquee(){const o=['rect','ell','col','row'],i=o.indexOf(marqType)
   setMarquee(o[(i+1)%4]);setTool('marquee');toast('Marquee','↔ '+marqType);}
 
 function hasSelection(){return selOps.length>0;}
+function refreshObHint(){
+  if(curTool==='marquee')return; // marquee's own OB_HINTS text already covers ⌃D deselect
+  if(hasSelection()&&PAINT_TOOLS.includes(curTool)){
+    $('#obHint').closest('.ob-item')&&$('#obHint').closest('.ob-item').classList.remove('hide');
+    $('#obHint').textContent='Editing inside selection — ⌃D to deselect';return;}
+  const base=OB_HINTS[curTool];
+  if(!base)return;
+  $('#obHint').textContent=base;
+}
 function combineModeFromKeys(shift,alt){if(shift&&alt)return'intersect';if(shift)return'add';if(alt)return'subtract';return'replace';}
 
 /* geometry of a selection in page-% (l,t,w,h,ell), given a drag in page-rect px.
@@ -3937,22 +4157,28 @@ function invertSelection(){if(!hasSelection())return;
      fabricated exact contour (real marching-squares contour tracing of an arbitrary mask is out
      of scope here). */
   selOps=[{shape:{l:0,t:0,w:100,h:100,ell:false},mode:'replace',_maskOnly:true}];
-  renderMarquees();markUnsaved();addHistory('Invert selection');toast('Invert','Selection inverted');}
-function deselectAll(){selOps=[];selMaskCtx.clearRect(0,0,selMaskCanvas.width,selMaskCanvas.height);renderMarquees();}
+  renderMarquees();markUnsaved();addHistory('Invert selection');toast('Invert','Selection inverted');refreshObHint();}
+function deselectAll(){selOps=[];selMaskCtx.clearRect(0,0,selMaskCanvas.width,selMaskCanvas.height);renderMarquees();refreshObHint();}
 
 function startMarqDraw(e){
   const r=page.getBoundingClientRect();
-  marqDraw={x0:e.clientX-r.left,y0:e.clientY-r.top,shift:e.shiftKey,alt:e.altKey,r};
-  /* deselectAll() also clears selMaskCtx and re-renders — a bare selOps=[] here used to leave the
-     mask and the marching-ants DOM stale, so a plain click (no real drag follows) looked like it
-     hadn't cancelled anything even though the logical selection was already gone. */
-  if(!mbMode&&!e.shiftKey&&!e.altKey)deselectAll();
+  marqDraw={x0:e.clientX-r.left,y0:e.clientY-r.top,shift:e.shiftKey,alt:e.altKey,r,
+    startClientX:e.clientX,startClientY:e.clientY,moved:false,
+    willReplace:(!mbMode&&!e.shiftKey&&!e.altKey)};
+  /* deselectAll() is deferred until real drag motion is confirmed in the pointermove handler below —
+     a bare click/pointerdown-then-release (no drag) must never touch the existing selection. */
   try{paint.setPointerCapture(e.pointerId);}catch(_){}}
 paint.addEventListener('pointerdown',e=>{
   if(curTool!=='marquee')return;
   startMarqDraw(e);
   e.stopPropagation();},true);
 window.addEventListener('pointermove',e=>{if(!marqDraw)return;
+  if(!marqDraw.moved){
+    const d=Math.hypot(e.clientX-marqDraw.startClientX,e.clientY-marqDraw.startClientY);
+    if(d<4)return; // still within click-vs-drag threshold — no state change yet
+    marqDraw.moved=true;
+    if(marqDraw.willReplace)deselectAll(); // confirmed real drag — now clear the old selection
+  }
   const r=marqDraw.r;let x1=e.clientX-r.left,y1=e.clientY-r.top;
   if(e.shiftKey&&(marqType==='rect'||marqType==='ell')){ /* perfect square/circle */
     const d=Math.max(Math.abs(x1-marqDraw.x0),Math.abs(y1-marqDraw.y0));
@@ -3998,16 +4224,16 @@ function commitMarquee(g,shift,alt){ /* g in px relative to page rect */
   const sel={l:g.l/r.width*100,t:g.t/r.height*100,w:g.w/r.width*100,h:g.h/r.height*100,ell:marqType==='ell'};
   if(mbMode){marqSels.push(sel);renderMarquees();updateMB();
     toast('Multi-Bubble','تحديد '+marqSels.length+' — أضف المزيد ثم "ملء بالتتابع"');
-    return;}
+    refreshObHint();return;}
   const typerOpen=typerPanel.classList.contains('open');
   if(typerOpen){ /* keep the exact original single-shape immediate-fire behavior */
     selOps=[{shape:sel,mode:'replace'}];rebuildSelMask();
-    onMarqueeSelected(sel);return;}
+    onMarqueeSelected(sel);refreshObHint();return;}
   const mode=combineModeFromKeys(shift,alt);
   if(mode==='replace')selOps=[{shape:sel,mode:'replace'}];
   else selOps.push({shape:sel,mode});
   rebuildSelMask();renderMarquees();
-  addHistory('Selection: '+mode);}
+  addHistory('Selection: '+mode);refreshObHint();}
 
 /* ---- rendering: fill/hit-target divs (+ numbering in MB mode, + resize handles on the topmost
    shape otherwise) plus the real animated marching-ants SVG outline — one mechanism for rect,
@@ -4034,7 +4260,7 @@ function renderMarquees(){
     else{shapeEl.setAttribute('x',s.l);shapeEl.setAttribute('y',s.t);
       shapeEl.setAttribute('width',Math.max(.05,s.w));shapeEl.setAttribute('height',Math.max(.05,s.h));}
     marqAnts.appendChild(shapeEl);});}
-function clearMarquees(){marqSels=[];selOps=[];selMaskCtx.clearRect(0,0,selMaskCanvas.width,selMaskCanvas.height);renderMarquees();}
+function clearMarquees(){marqSels=[];selOps=[];selMaskCtx.clearRect(0,0,selMaskCanvas.width,selMaskCanvas.height);renderMarquees();refreshObHint();}
 
 /* ---- Transform Selection: with the marquee tool active, a plain drag starting INSIDE an
    existing (already-committed, non-live) selection moves the whole outline; a Shift/Alt-drag
@@ -4185,6 +4411,13 @@ function commitFloatPiece(){if(!floatPiece)return;
   addHistory('Commit pasted piece');markUnsaved();
   $('#selFloat')&&$('#selFloat').remove();floatPiece=null;}
 function nudgeFloatPiece(dx,dy){if(!floatPiece)return;floatPiece.x+=dx;floatPiece.y+=dy;renderFloatPiece();}
+function clearMarqueesForPageSwitch(){
+  /* marqSels/selOps/selMaskCanvas and floatPiece/clipPiece are single global buffers, not per-page
+     state — leaving a page mid-paste or mid-selection must not silently drop pixels (commit any
+     floating piece first) or leak the selection mask/Multi-Bubble boxes onto the next page. */
+  if(floatPiece)commitFloatPiece();
+  clearMarquees();
+}
 
 /* ---- Move tool: drags the pixel content trapped inside the active selection. Reuses the same
    cut-piece-and-redraw-at-offset machinery the paste flow already built (#selFloat/floatPiece/
