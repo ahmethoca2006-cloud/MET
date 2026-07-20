@@ -753,6 +753,20 @@ export function useCloudClient() {
     swalToast({ icon: 'success', title: 'Saved' });
   };
 
+  const retryCloudSync = async () => {
+    const savedSession = localStorage.getItem('tg_session');
+    if (!apiId || !apiHash || !savedSession) return;
+    try {
+      await saveTelegramCredentials({ apiId, apiHash, phone: phoneNumber, session: savedSession, chatId });
+      setIsSessionSynced(true);
+      swalToast({ icon: 'success', title: 'Session synced to the cloud' });
+    } catch (err) {
+      console.error('Failed to sync Telegram session to the cloud', err);
+      setIsSessionSynced(false);
+      swalToast({ icon: 'warning', title: 'Still failed to sync to the cloud' });
+    }
+  };
+
   const handleDisconnect = async () => {
     localStorage.removeItem('tg_session');
     setIsConnected(false);
@@ -776,6 +790,7 @@ export function useCloudClient() {
     handleLogin,
     handleDisconnect,
     saveConfig,
+    retryCloudSync,
     meName,
     isSessionSynced,
 

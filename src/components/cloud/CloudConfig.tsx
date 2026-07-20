@@ -46,9 +46,12 @@ export function CloudConfig({ cc }: { cc: CloudClient }) {
 
             <div className={`rounded-xl p-3 flex items-center gap-3 border ${cc.isSessionSynced ? 'bg-success/10 border-success/30' : 'bg-warning/10 border-warning/30'}`}>
               {cc.isSessionSynced ? <Cloud className="text-success" size={18} /> : <CloudOff className="text-warning" size={18} />}
-              <p className={`text-xs font-semibold ${cc.isSessionSynced ? 'text-success' : 'text-warning'}`}>
+              <p className={`flex-1 text-xs font-semibold ${cc.isSessionSynced ? 'text-success' : 'text-warning'}`}>
                 {cc.isSessionSynced === null ? 'Checking cloud sync…' : cc.isSessionSynced ? 'Session synced to the cloud — other devices can use it too.' : 'Not synced to the cloud yet — this session only works on this device.'}
               </p>
+              {cc.isSessionSynced === false && (
+                <Button onClick={cc.retryCloudSync} size="sm" variant="secondary">Retry</Button>
+              )}
             </div>
 
             <div className="space-y-1 mt-4">
